@@ -1,0 +1,330 @@
+#include "src/ranker.h"
+
+#include <algorithm>
+#include <cassert>
+#include <cmath>
+#include <exception>
+#include <fstream>
+#include <iostream>
+#include <map>
+#include <memory>
+#include <regex>
+#include <set>
+#include <string>
+#include <vector>
+
+#include "src/core.h"
+#include "src/gcl.h"
+#include "src/hopper.h"
+#include "src/parameters.h"
+#include "src/parse.h"
+#include "src/ranking.h"
+
+namespace cottontail {
+
+namespace {
+class RankingContext {
+public:
+  RankingContext(std::shared_ptr<Warren> warren) : warren_(warren){};
+  RankingContext() = delete;
+  RankingContext(RankingContext &&) = default;
+  RankingContext &operator=(RankingContext &&) = default;
+
+  void clear(const std::string &query) {
+    raw_query_ = query;
+    weighted_query_.clear();
+    parameters_.clear();
+    ranking_.clear();
+    std::string default_container_gcl = warren_->default_container();
+    if (default_container_gcl.size() > 0) {
+      std::string error;
+      container_ = warren_->hopper_from_gcl(default_container_gcl, &error);
+    } else {
+      container_ = nullptr;
+    }
+  };
+
+  std::map<std::string, fval> parameters() { return parameters_; };
+  std::vector<RankingResult> ranking() { return ranking_; };
+
+private:
+  // friend class all RankingContextTransformer;
+  friend class BM25Transformer;
+  friend class ExpansionTransformer;
+  friend class LMDTransformer;
+  friend class ParameterTransformer;
+  friend class RandomParameterTransformer;
+  friend class StemTransformer;
+
+  std::shared_ptr<Warren> warren_;
+  std::string raw_query_;
+  std::map<std::string, fval> weighted_query_;
+  std::map<std::string, fval> parameters_;
+  std::vector<RankingResult> ranking_;
+  std::unique_ptr<Hopper> container_;
+};
+
+class RankingContextTransformer {
+public:
+  void transform(class RankingContext *context) { return transform_(context); };
+
+  virtual ~RankingContextTransformer(){};
+  RankingContextTransformer(const RankingContextTransformer &) = default;
+  RankingContextTransformer &
+  operator=(const RankingContextTransformer &) = default;
+
+  static std::shared_ptr<RankingContextTransformer> from_name(std::string name);
+
+protected:
+  RankingContextTransformer() = default;
+
+private:
+  virtual void transform_(class RankingContext *context) = 0;
+};
+
+class BM25Transformer : public RankingContextTransformer {
+private:
+  void transform_(class RankingContext *context) {
+    if (context->weighted_query_.size() > 0)
+      context->ranking_ = bm25_ranking(
+          context->warren_, context->weighted_query_, context->parameters_);
+    else
+      context->ranking_ = bm25_ranking(context->warren_, context->raw_query_,
+                                       context->parameters_);
+  }
+};
+
+class LMDTransformer : public RankingContextTransformer {
+private:
+  void transform_(class RankingContext *context) {
+    if (context->weighted_query_.size() > 0)
+      context->ranking_ = lmd_ranking(
+          context->warren_, context->weighted_query_, context->parameters_);
+    else
+      context->ranking_ = lmd_ranking(context->warren_, context->raw_query_,
+                                      context->parameters_);
+  }
+};
+
+class ExpansionTransformer : public RankingContextTransformer {
+protected:
+  void expand(std::shared_ptr<Warren> warren,
+              const std::vector<RankingResult> &ranking,
+              const std::map<std::string, fval> &parameters,
+              std::map<std::string, fval> *weighted_query) {
+    expand_(warren, ranking, parameters, weighted_query);
+  };
+
+private:
+  void transform_(class RankingContext *context) {
+    if (context->ranking_.size() == 0)
+      return;
+    if (context->weighted_query_.size() == 0) {
+      std::vector<std::string> terms =
+          context->warren_->tokenizer()->split(context->raw_query_);
+      for (auto &term : terms)
+        context->weighted_query_[term] = 1.0;
+    }
+    expand(context->warren_, context->ranking_, context->parameters_,
+           &context->weighted_query_);
+  };
+  virtual void expand_(std::shared_ptr<Warren> warren,
+                       const std::vector<RankingResult> &ranking,
+                       const std::map<std::string, fval> &parameters,
+                       std::map<std::string, fval> *weighted_query) = 0;
+};
+
+class RSJTransformer : public ExpansionTransformer {
+private:
+  void expand_(std::shared_ptr<Warren> warren,
+               const std::vector<RankingResult> &ranking,
+               const std::map<std::string, fval> &parameters,
+               std::map<std::string, fval> *weighted_query) {
+    rsj_prf(warren, ranking, parameters, weighted_query);
+  };
+};
+
+class KLDTransformer : public ExpansionTransformer {
+private:
+  void expand_(std::shared_ptr<Warren> warren,
+               const std::vector<RankingResult> &ranking,
+               const std::map<std::string, fval> &parameters,
+               std::map<std::string, fval> *weighted_query) {
+    kld_prf(warren, ranking, parameters, weighted_query);
+  };
+};
+
+class StemTransformer : public RankingContextTransformer {
+private:
+  void transform_(class RankingContext *context) {
+    if (context->weighted_query_.size() == 0) {
+      std::vector<std::string> terms =
+          context->warren_->tokenizer()->split(context->raw_query_);
+      for (auto &term : terms)
+        context->weighted_query_[term] = 1.0;
+    }
+    std::map<std::string, fval> stemmed_query;
+    for (auto &term : context->weighted_query_) {
+      std::string stemmed_term = context->warren_->stemmer()->stem(term.first);
+      if (stemmed_query.find(stemmed_term) == stemmed_query.end())
+        stemmed_query[stemmed_term] = term.second;
+      else
+        stemmed_query[stemmed_term] += term.second;
+    }
+    context->weighted_query_ = stemmed_query;
+  };
+};
+
+class ParameterTransformer : public RankingContextTransformer {
+public:
+  ParameterTransformer(const std::string &key, fval value)
+      : key_(key), value_(value){};
+
+private:
+  std::string key_;
+  fval value_;
+  void transform_(class RankingContext *context) {
+    context->parameters_[key_] = value_;
+  };
+};
+
+class RandomParameterTransformer : public RankingContextTransformer {
+public:
+  RandomParameterTransformer(const std::string &ranker_name) {
+    std::shared_ptr<Parameters> generator =
+        Parameters::from_ranker_name(ranker_name);
+    okay_ = (generator != nullptr);
+    if (okay_)
+      random_parameters_ = generator->random();
+  }
+
+  bool okay() { return okay_; };
+
+private:
+  bool okay_;
+  std::map<std::string, fval> random_parameters_;
+  void transform_(class RankingContext *context) {
+    if (okay_) {
+      for (auto &parameter : random_parameters_)
+        context->parameters_[parameter.first] = parameter.second;
+    }
+  }
+};
+
+std::shared_ptr<RankingContextTransformer>
+RankingContextTransformer::from_name(std::string transformation) {
+  if (transformation.find("=") != std::string::npos) {
+    std::string key = transformation.substr(0, transformation.find("="));
+    std::string value_string =
+        transformation.substr(transformation.find("=") + 1);
+    if (key == "" || value_string == "")
+      return nullptr;
+    fval value;
+    try {
+      value = std::stof(value_string);
+    } catch (std::exception &e) {
+      return nullptr;
+    }
+    return std::make_shared<ParameterTransformer>(key, value);
+  }
+  if (transformation.find(":") != std::string::npos) {
+    std::string name = transformation.substr(0, transformation.find(":"));
+    std::string argument = transformation.substr(transformation.find(":") + 1);
+    if (name == "random") {
+      std::shared_ptr<RandomParameterTransformer> transformer =
+          std::make_shared<RandomParameterTransformer>(argument);
+      if (transformer->okay())
+        return transformer;
+      else
+        return nullptr;
+    } else {
+      return nullptr;
+    }
+  }
+  if (transformation == "bm25")
+    return std::make_shared<BM25Transformer>();
+  else if (transformation == "kld")
+    return std::make_shared<KLDTransformer>();
+  else if (transformation == "lmd")
+    return std::make_shared<LMDTransformer>();
+  else if (transformation == "stem")
+    return std::make_shared<StemTransformer>();
+  else if (transformation == "rsj")
+    return std::make_shared<RSJTransformer>();
+  else
+    return nullptr;
+}
+
+class RankingPipeline : public Ranker {
+public:
+  RankingPipeline(std::shared_ptr<Warren> warren)
+#if 1
+      : warren_(warren){};
+#else
+TODO: Remove this dead code
+      : warren_(warren), context_(warren){};
+#endif
+  RankingPipeline() = delete;
+  RankingPipeline(const RankingPipeline &) = delete;
+  RankingPipeline &operator=(const RankingPipeline &) = delete;
+
+  void add_transformer(std::shared_ptr<RankingContextTransformer> transformer) {
+    transformers_.push_back(transformer);
+  };
+
+private:
+  std::shared_ptr<Warren> warren_;
+#if 1
+#else
+TODO: Remove this dead code
+  RankingContext context_;
+#endif
+  std::vector<std::shared_ptr<RankingContextTransformer>> transformers_;
+  std::vector<RankingResult> rank_(const std::string &query,
+                                   std::map<std::string, fval> *parameters) {
+
+#if 1
+    RankingContext context(warren_);
+    context.clear(query);
+    for (auto &transformer : transformers_)
+      transformer->transform(&context);
+    if (parameters != nullptr)
+      *parameters = context.parameters();
+    return context.ranking();
+#else
+TODO: Remove this dead code
+    context_.clear(query);
+    for (auto &transformer : transformers_)
+      transformer->transform(&context_);
+    if (parameters != nullptr)
+      *parameters = context_.parameters();
+    return context_.ranking();
+#endif 
+  }
+};
+
+} // namespace
+
+std::shared_ptr<Ranker> Ranker::from_pipeline(const std::string &pipeline,
+                                              std::shared_ptr<Warren> warren,
+                                              std::string *error) {
+  std::shared_ptr<RankingPipeline> rpp =
+      std::make_shared<RankingPipeline>(warren);
+  std::regex ws_re("\\s+");
+  std::vector<std::string> stages{
+      std::sregex_token_iterator(pipeline.begin(), pipeline.end(), ws_re, -1),
+      {}};
+  for (auto &stage : stages) {
+    std::shared_ptr<RankingContextTransformer> transformer =
+        RankingContextTransformer::from_name(stage);
+    if (transformer != nullptr) {
+      rpp->add_transformer(transformer);
+    } else {
+      safe_set(error) = "invalid ranking stage: " + stage;
+      return nullptr;
+    }
+  }
+  return rpp;
+}
+
+} // namespace cottontail

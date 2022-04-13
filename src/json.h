@@ -1,0 +1,8 @@
+#ifndef COTTONTAIL_SRC_JSON_H_
+#define COTTONTAIL_SRC_JSON_H_
+
+#include "external/nlohmann/file/json.hpp"
+
+using json = nlohmann::json;
+
+#endif // COTTONTAIL_SRC_JSON_H_

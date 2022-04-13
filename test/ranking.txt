@@ -1,0 +1,21 @@
+<DOC>
+<DOCNO> doc-000 </DOCNO>
+hello hello the quick brown fox jumped over the lazy dog lazy dog hello
+</DOC>
+
+not in a document
+
+<DOC>
+<DOCNO> doc-001 </DOCNO>
+hello world hello world world
+</DOC>
+
+<DOC>
+<DOCNO> doc-002 </DOCNO>
+the cat in the hat the dog in the hat came back hello
+</DOC>
+
+<DOC>
+<DOCNO> doc-003 </DOCNO>
+world hat hat world world one two three
+</DOC>

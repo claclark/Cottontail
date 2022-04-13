@@ -1,0 +1,8 @@
+<DOC>
+<DOCNO> 0000 </DOCNO>
+
+<TITLE> Hello world </TITLE>
+
+Hello world hello world world hello
+
+</DOC>
