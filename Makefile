@@ -1,4 +1,4 @@
-SRC = src test apps external WORKSPACE Makefile
+SRC = src test apps external WORKSPACE Makefile LICENSE README.md
 
 building: FORCE
 	bazel build -c dbg --cxxopt="-Og" ...

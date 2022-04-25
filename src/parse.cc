@@ -33,7 +33,9 @@ static std::map<std::string, enum Operator> gcl_operator_forward = {
     {"!<", NOT_CONTAINED_IN},
     {"not_contained_in", NOT_CONTAINED_IN},
     {"!>", NOT_CONTAINING},
-    {"not_containing", NOT_CONTAINING}};
+    {"not_containing", NOT_CONTAINING},
+    {"@", LINK},
+    {"link", LINK}};
 
 static std::map<enum Operator, std::string> gcl_operator_reverse = {
     {TERM, ""},
@@ -44,14 +46,15 @@ static std::map<enum Operator, std::string> gcl_operator_reverse = {
     {CONTAINED_IN, "<<"},
     {CONTAINING, ">>"},
     {NOT_CONTAINED_IN, "!<"},
-    {NOT_CONTAINING, "!>"}};
+    {NOT_CONTAINING, "!>"},
+    {LINK, "@"}};
 
 static std::map<enum Operator, unsigned> gcl_operator_min_operands = {
-    {TERM, 0},          {FIXED, 0},
-    {ONE_OF, 1},        {ALL_OF, 1},
-    {FOLLOWED_BY, 2},   {CONTAINED_IN, 2},
-    {CONTAINING, 2},    {NOT_CONTAINED_IN, 2},
-    {NOT_CONTAINING, 2}};
+    {TERM, 0},           {FIXED, 0},
+    {ONE_OF, 1},         {ALL_OF, 1},
+    {FOLLOWED_BY, 2},    {CONTAINED_IN, 2},
+    {CONTAINING, 2},     {NOT_CONTAINED_IN, 2},
+    {NOT_CONTAINING, 2}, {LINK, 1}};
 
 static std::map<enum Operator, unsigned> gcl_operator_max_operands = {
     {TERM, 0},
@@ -62,7 +65,8 @@ static std::map<enum Operator, unsigned> gcl_operator_max_operands = {
     {CONTAINED_IN, maxfinity},
     {CONTAINING, maxfinity},
     {NOT_CONTAINED_IN, maxfinity},
-    {NOT_CONTAINING, maxfinity}};
+    {NOT_CONTAINING, maxfinity},
+    {LINK, 1}};
 
 inline bool is_whitespace(char c) { return c == ' ' || c == '\t'; }
 
@@ -173,7 +177,8 @@ std::shared_ptr<SExpression> SExpression::from_string(std::string s,
   const char *where = parse_expr(s.c_str(), expr, &okay);
   if (okay)
     return expr;
-  safe_set(error) = "parse error at offset " + std::to_string(where - s.c_str()) + ":" + s;
+  safe_set(error) =
+      "parse error at offset " + std::to_string(where - s.c_str()) + ":" + s;
   return nullptr;
 }
 
@@ -254,6 +259,13 @@ SExpression::to_hopper(std::shared_ptr<Featurizer> featurizer,
   }
   if (kind_ == FIXED) {
     return std::make_unique<FixedWidthHopper>(width_);
+  }
+  if (kind_ == LINK) {
+    if (subx_.size() != 1)
+      return nullptr;
+    std::unique_ptr<cottontail::Hopper> expr =
+        subx_[0]->to_hopper(featurizer, idx);
+    return std::make_unique<cottontail::gcl::Link>(std::move(expr));
   }
   if (subx_.size() > 2) {
     std::shared_ptr<SExpression> binary_expr = to_binary();

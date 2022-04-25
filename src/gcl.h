@@ -10,6 +10,16 @@ namespace cottontail {
 
 namespace gcl {
 
+class Unary : public Hopper {
+public:
+  Unary(std::unique_ptr<Hopper> expr) : expr_(std::move(expr)){};
+  Unary(Unary const &) = delete;
+  Unary &operator=(Unary const &) = delete;
+
+protected:
+  std::unique_ptr<Hopper> expr_;
+};
+
 class Binary : public Hopper {
 public:
   Binary(std::unique_ptr<Hopper> left, std::unique_ptr<Hopper> right)
@@ -112,6 +122,18 @@ private:
   void ohr_(addr k, addr *p, addr *q, fval *v) final;
 };
 
-}
-}
+class Link : public Unary {
+public:
+  Link(std::unique_ptr<Hopper> expr) : Unary(std::move(expr)){};
+
+private:
+  bool linked_ = false;
+  void tau_(addr k, addr *p, addr *q, fval *v) final;
+  void rho_(addr k, addr *p, addr *q, fval *v) final;
+  void uat_(addr k, addr *p, addr *q, fval *v) final;
+  void ohr_(addr k, addr *p, addr *q, fval *v) final;
+};
+
+} // namespace gcl
+} // namespace cottontail
 #endif // COTTONTAIL_SRC_GCL_H_

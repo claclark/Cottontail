@@ -2,6 +2,9 @@
 
 #include <algorithm>
 #include <iostream>
+#include <set>
+
+#include "src/array_hopper.h"
 
 namespace cottontail {
 
@@ -224,5 +227,78 @@ void NotContaining::ohr_(addr k, addr *p, addr *q, fval *v) {
       return;
   }
 }
+
+namespace {
+std::unique_ptr<Hopper> make_link_hopper(const std::set<addr> &s) {
+  if (s.size() == 0)
+    return std::make_unique<EmptyHopper>();
+  std::shared_ptr<addr> postings =
+      cottontail::shared_array<cottontail::addr>(s.size());
+  addr *p = postings.get();
+  for (auto &a : s)
+    *p++ = a;
+  if (s.size() == 1)
+    return std::make_unique<SingletonHopper>(*postings, *postings, 0.0);
+  else
+    return ArrayHopper::make(s.size(), postings, postings, nullptr);
+}
+} // namespace
+
+void Link::tau_(addr k, addr *p, addr *q, fval *v) {
+  if (!linked_) {
+    addr p0, q0, v0;
+    std::set<addr> s;
+    for (expr_->tau(minfinity + 1, &p0, &q0, &v0); p0 < maxfinity;
+         expr_->tau(p0 + 1, &p0, &q0, &v0))
+      if (v0 > minfinity && v0 < maxfinity)
+        s.insert(v0);
+    expr_ = make_link_hopper(s);
+    linked_ = true;
+  }
+  return expr_->tau(k, p, q, v);
+}
+
+void Link::rho_(addr k, addr *p, addr *q, fval *v) {
+  if (!linked_) {
+    addr p0, q0, v0;
+    std::set<addr> s;
+    for (expr_->rho(minfinity + 1, &p0, &q0, &v0); q0 < maxfinity;
+         expr_->rho(q0 + 1, &p0, &q0, &v0))
+      if (v0 > minfinity && v0 < maxfinity)
+        s.insert(v0);
+    expr_ = make_link_hopper(s);
+    linked_ = true;
+  }
+  return expr_->rho(k, p, q, v);
+}
+
+void Link::uat_(addr k, addr *p, addr *q, fval *v) {
+  if (!linked_) {
+    addr p0, q0, v0;
+    std::set<addr> s;
+    for (expr_->uat(maxfinity - 1, &p0, &q0, &v0); q0 > minfinity;
+         expr_->uat(q0 - 1, &p0, &q0, &v0))
+      if (v0 > minfinity && v0 < maxfinity)
+        s.insert(v0);
+    expr_ = make_link_hopper(s);
+    linked_ = true;
+  }
+  return expr_->uat(k, p, q, v);
+}
+
+void Link::ohr_(addr k, addr *p, addr *q, fval *v) {
+  if (!linked_) {
+    addr p0, q0, v0;
+    std::set<addr> s;
+    for (expr_->ohr(maxfinity - 1, &p0, &q0, &v0); p0 > minfinity;
+         expr_->ohr(p0 - 1, &p0, &q0, &v0))
+      if (v0 > minfinity && v0 < maxfinity)
+        s.insert(v0);
+    expr_ = make_link_hopper(s);
+    linked_ = true;
+  }
+  return expr_->ohr(k, p, q, v);
+}
+
 } // namespace gcl
 } // namespace cottontail
