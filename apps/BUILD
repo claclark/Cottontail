@@ -279,6 +279,6 @@ cc_binary(
       "'-std=c++14'",
     ],
     linkopts = [
-      "-pthread",
+      "-lreadline -pthread",
     ],
 )
