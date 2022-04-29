@@ -1,4 +1,4 @@
-// Based on legacy code from the 90's
+// Legacy parser from the 90's
 
 #include <ctype.h>
 #include <iostream>
@@ -318,7 +318,7 @@ std::string to_s_expression(gcl_q q) {
     if (GCL_Q_N(q) == 1)
       return "(+" + to_s_expression(GCL_Q_ELEMENTS(q)) + ")";
     unsigned i = 0;
-    for (gcl_q q0 = GCL_Q_ELEMENTS(q); q0 != GCL_NULL_Q; q0 = GCL_Q_NEXT(q))
+    for (gcl_q q0 = GCL_Q_ELEMENTS(q); q0 != GCL_NULL_Q; q0 = GCL_Q_NEXT(q0))
       i++;
     if (GCL_Q_N(q) == i)
       return "(^" + to_s_expression(GCL_Q_ELEMENTS(q)) + ")";
@@ -511,7 +511,7 @@ gcl_q parseQTerm(gcl_env *env, int topCall) {
       }
     } else if (look("words")) {
       scan();
-      if (n == 0) {
+      if (n == 0 && !all) {
         gcl_syntaxError =
             std::string("The expression \"0 words\" is not valid.");
         return GCL_SYNTAX_ERROR;
@@ -716,7 +716,7 @@ gcl_q gcl_createQFromString(char *s, gcl_env *env) {
   else {
     repair();
     gcl_freeQ(q);
-    gcl_syntaxError = std::string("Extra characters at end of line.");
+    gcl_syntaxError = std::string("Extra characters at the end.");
     return GCL_SYNTAX_ERROR;
   }
 }

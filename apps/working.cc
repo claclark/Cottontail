@@ -44,7 +44,6 @@ void usage(std::string program_name) {
 }
 
 int main(int argc, char **argv) {
-  cottontail::Mt mt;
   char *line;
   std::string error;
   while ((line = readline(">> ")) != nullptr) {
