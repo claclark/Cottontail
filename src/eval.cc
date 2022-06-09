@@ -129,7 +129,7 @@ void trec_eval(const std::map<addr, fval> &qrels,
                const std::vector<RankingResult> &results,
                std::map<std::string, fval> *metrics) {
   fval rels_possible = count_binary_rels(qrels);
-  fval rels_seen = 0.0, ap = 0.0, p05 = 0.0, p10 = 0.0, p20 = 0.0;
+  fval rels_seen = 0.0, ap = 0.0, p05 = 0.0, p10 = 0.0, p20 = 0.0, rr = 0.0;
   if (rels_possible > 0.0 && results.size() > 0) {
     size_t rank;
     for (rank = 1; rank <= results.size(); rank++) {
@@ -142,6 +142,8 @@ void trec_eval(const std::map<addr, fval> &qrels,
       if (rval > 0.0) {
         rels_seen++;
         ap += rels_seen / rank;
+        if (rr == 0.0)
+          rr = 1.0 / rank;
       }
       if (rank == 5)
         p05 = rels_seen / 5.0;
@@ -159,6 +161,7 @@ void trec_eval(const std::map<addr, fval> &qrels,
     ap /= rels_possible;
   }
   (*metrics)["ap"] = ap;
+  (*metrics)["rr"] = ap;
   (*metrics)["p05"] = p05;
   (*metrics)["p10"] = p10;
   (*metrics)["p20"] = p20;
