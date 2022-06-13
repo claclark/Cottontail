@@ -192,19 +192,15 @@ build_tiers(std::shared_ptr<Warren> warren, const std::string &query,
   return tiers;
 }
 
-// Ranking with auto-generated tiered Boolean queries, somewhat based on:
-// Deriving Very Short Queries for High Precision and Recall.
-// G.V. Cormack, C.R. Palmer, M. Van Biesbrouck, and C.L.A. Clarke
-// TREC-7. 1998. https://trec.nist.gov/pubs/trec7/t7_proceedings.html
-// and
-// G. V. Cormack, C. L. A. Clarke, C. R. Palmer, and D. I. E. Kisman.
-// Fast Automatic Passage Ranking.
-// TREC-8. 1999. https://trec.nist.gov/pubs/trec8/t8_proceedings.html
+// Ranking with tiered Boolean queries, based on:
+// C. L. A. Clarke, G. V. Cormack, F. J. Burkowski. 1995.
+// Shortest Substring Ranking (MultiText Experiments for TREC-4).
+// https://trec.nist.gov/pubs/trec4/papers/uwaterloo.ps.gz
 std::vector<RankingResult>
-tiered_ranking(std::shared_ptr<Warren> warren, const std::string &query,
+tiered_ranking(std::shared_ptr<Warren> warren,
+               const std::vector<std::string> &tiers,
                const std::string &container,
                const std::map<std::string, fval> &parameters, size_t depth) {
-  std::vector<std::string> tiers = build_tiers(warren, query, parameters);
   std::vector<RankingResult> top;
   if (tiers.size() == 0)
     return top;
@@ -223,6 +219,22 @@ tiered_ranking(std::shared_ptr<Warren> warren, const std::string &query,
       break;
   }
   return top;
+}
+
+// Ranking with auto-generated tiered Boolean queries, somewhat based on:
+// Deriving Very Short Queries for High Precision and Recall.
+// G.V. Cormack, C.R. Palmer, M. Van Biesbrouck, and C.L.A. Clarke
+// TREC-7. 1998. https://trec.nist.gov/pubs/trec7/t7_proceedings.html
+// and
+// G. V. Cormack, C. L. A. Clarke, C. R. Palmer, and D. I. E. Kisman.
+// Fast Automatic Passage Ranking.
+// TREC-8. 1999. https://trec.nist.gov/pubs/trec8/t8_proceedings.html
+std::vector<RankingResult>
+tiered_ranking(std::shared_ptr<Warren> warren, const std::string &query,
+               const std::string &container,
+               const std::map<std::string, fval> &parameters, size_t depth) {
+  std::vector<std::string> tiers = build_tiers(warren, query, parameters);
+  return tiered_ranking(warren, tiers, container, parameters, depth);
 }
 
 namespace {

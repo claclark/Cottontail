@@ -65,6 +65,19 @@ cc_binary(
 )
 
 cc_binary(
+    name = "mt",
+    srcs = [
+      "mt.cc",
+    ],
+    deps = [
+      "//src:cottontail",
+    ],
+    linkopts = [
+      "-lreadline -pthread"
+    ],
+)
+
+cc_binary(
     name = "parameters",
     srcs = [
       "parameters.cc",

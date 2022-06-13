@@ -40,6 +40,23 @@ private:
 std::vector<RankingResult>
 rrf_fusion(const std::vector<std::vector<RankingResult>> &rankings);
 
+// Ranking with tiered Boolean queries, based on:
+// C. L. A. Clarke, G. V. Cormack, F. J. Burkowski. 1995.
+// Shortest Substring Ranking (MultiText Experiments for TREC-4).
+// https://trec.nist.gov/pubs/trec4/papers/uwaterloo.ps.gz
+std::vector<RankingResult> tiered_ranking(
+    std::shared_ptr<Warren> warren, const std::vector<std::string> &tiers,
+    const std::string &container, const std::map<std::string, fval> &parameters,
+    size_t depth = 1000);
+
+inline std::vector<RankingResult>
+tiered_ranking(std::shared_ptr<Warren> warren,
+               const std::vector<std::string> &tiers,
+               const std::string &container, size_t depth = 1000) {
+  std::map<std::string, fval> parameters;
+  return tiered_ranking(warren, tiers, container, parameters, depth);
+}
+
 // Ranking with auto-generated tiered Boolean queries, vaguely based on:
 // Deriving Very Short Queries for High Precision and Recall.
 // G.V. Cormack, C.R. Palmer, M. Van Biesbrouck, and C.L.A. Clarke
