@@ -8,6 +8,7 @@
 TEST(Eval, Trim) {
   ASSERT_EQ(cottontail::trec_docno(" <DOCNO> hello </DOCNO> "), "hello");
   ASSERT_EQ(cottontail::trec_docno("MARCO_100  ))) "), "MARCO_100");
+  ASSERT_EQ(cottontail::trec_docno("MARCO_2222  ))) \n\n\n"), "MARCO_2222");
 }
 
 TEST(Eval, Metrics) {
