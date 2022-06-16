@@ -4,10 +4,11 @@
 #include "src/core.h"
 #include "src/tokenizer.h"
 #include "src/working.h"
+#include "src/committable.h"
 
 namespace cottontail {
 
-class Txt {
+class Txt : public Committable {
 public:
   static std::shared_ptr<Txt>
   make(const std::string &name, const std::string &recipe,

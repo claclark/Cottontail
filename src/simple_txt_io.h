@@ -7,12 +7,13 @@
 #include <string>
 #include <vector>
 
+#include "src/committable.h"
 #include "src/compressor.h"
 #include "src/core.h"
 
 namespace cottontail {
 
-class SimpleTxtIO final {
+class SimpleTxtIO final : public Committable {
 public:
   static std::shared_ptr<SimpleTxtIO>
   make(const std::string &nameof_contents, const std::string &nameof_chunk_map,
