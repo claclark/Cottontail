@@ -108,6 +108,7 @@ void test_update(std::string compressor_name, std::streamsize chunk_size) {
   char test2[] =
       "Mauris pellentesque pulvinar pellentesque habitant morbi. A diam "
       "maecenas sed enim ut. Dignissim diam quis enim lobortis. ";
+  cottontail::addr n;
   cottontail::addr expected_size = 0;
   for (size_t i = 0; i < 100; i++) {
     {
@@ -125,6 +126,11 @@ void test_update(std::string compressor_name, std::streamsize chunk_size) {
       io->append(test1, sizeof(test1) - 1);
       expected_size += (sizeof(test1) - 1);
       EXPECT_EQ(expected_size, io->size());
+      std::unique_ptr<char[]> x = io->read(10, 20, &n);
+      EXPECT_EQ(n, 20);
+      EXPECT_STREQ(x.get(), "m dolor sit amet, co");
+      std::unique_ptr<char[]> y = io->read(1000000000, 20, &n);
+      EXPECT_EQ(n, 0);
     }
     {
       std::shared_ptr<cottontail::SimpleTxtIO> io =
@@ -137,7 +143,6 @@ void test_update(std::string compressor_name, std::streamsize chunk_size) {
   }
   std::shared_ptr<cottontail::SimpleTxtIO> io = cottontail::SimpleTxtIO::make(
       nameof_contents, nameof_chunk_map, chunk_size, compressor, &error);
-  cottontail::addr n;
   size_t a = (sizeof(test0) - 1) + (sizeof(test1) - 1) + (sizeof(test2) - 1);
   size_t b = sizeof(test0) - 9;
   for (size_t i = 0; i < 99; i++) {
