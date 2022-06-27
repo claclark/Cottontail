@@ -19,8 +19,13 @@ public:
   make(const std::string &nameof_contents, const std::string &nameof_chunk_map,
        addr chunk_size, std::shared_ptr<Compressor> compressor,
        std::string *error = nullptr);
+  static void recover(const std::string &nameof_contents,
+                      const std::string &nameof_chunk_map, addr chunk_size,
+                      std::shared_ptr<Compressor> compressor, bool commit);
   void append(char *text, addr length);
   void flush() {
+    if (read_only_)
+      return;
     if (!flushed_) {
       sync_last_chunk();
       contents_.flush();
@@ -43,6 +48,10 @@ private:
               std::shared_ptr<Compressor> compressor)
       : nameof_contents_(nameof_contents), nameof_chunk_map_(nameof_chunk_map),
         chunk_size_(chunk_size), compressor_(compressor){};
+  bool transaction_(std::string *error = nullptr) final;
+  bool ready_() final;
+  void commit_() final;
+  void abort_() final;
   void fetch_chunk(size_t chunk_index_);
   void fetch_last_chunk();
   void append_last_chunk(char *text, addr length);
@@ -64,6 +73,11 @@ private:
   std::streamsize chunk_end_;
   addr buffer_size_;
   std::unique_ptr<char[]> buffer_;
+  bool read_only_ = false;
+  bool limited_;
+  addr chunk_map_limit_;
+  addr last_chunk_end_;
+  std::unique_ptr<char[]> last_chunk_;
 };
 } // namespace cottontail
 

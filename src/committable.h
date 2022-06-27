@@ -3,6 +3,8 @@
 
 #include <cassert>
 
+#include "src/core.h"
+
 namespace cottontail {
 
 class Committable {
@@ -13,10 +15,10 @@ public:
   Committable(Committable &&) = delete;
   Committable &operator=(Committable &&) = delete;
 
-  inline void transaction() {
+  inline bool transaction(std::string *error = nullptr) {
     assert(!started_ && !vote_);
-    transaction_();
-    started_ = true;
+    started_ = transaction_(error);
+    return started_;
   }
   inline bool ready() {
     assert(started_);
@@ -40,7 +42,10 @@ protected:
 private:
   bool started_ = false;
   bool vote_ = false;
-  virtual void transaction_(){};
+  virtual bool transaction_(std::string *error = nullptr) {
+    safe_set(error) = "Committable does not support transactions";
+    return false;
+  };
   virtual bool ready_() { return true; };
   virtual void commit_() { return; };
   virtual void abort_() { return; }
