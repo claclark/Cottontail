@@ -2,6 +2,8 @@
 #define COTTONTAIL_SRC_COMMITTABLE_H_
 
 #include <cassert>
+#include <mutex>
+#include <string>
 
 #include "src/core.h"
 
@@ -16,30 +18,39 @@ public:
   Committable &operator=(Committable &&) = delete;
 
   inline bool transaction(std::string *error = nullptr) {
+    lock_.lock();
     assert(!started_ && !vote_);
     started_ = transaction_(error);
+    lock_.unlock();
     return started_;
   }
   inline bool ready() {
+    lock_.lock();
     assert(started_);
     vote_ = ready_();
+    lock_.unlock();
     return vote_;
   }
   inline void commit() {
+    lock_.lock();
     assert(started_ && vote_);
     commit_();
     started_ = vote_ = false;
+    lock_.unlock();
   }
   inline void abort() {
+    lock_.lock();
     assert(started_);
     abort_();
     started_ = vote_ = false;
+    lock_.unlock();
   }
 
 protected:
   Committable(){};
 
 private:
+  std::mutex lock_;
   bool started_ = false;
   bool vote_ = false;
   virtual bool transaction_(std::string *error = nullptr) {

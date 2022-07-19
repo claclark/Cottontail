@@ -185,8 +185,12 @@ addr SimpleTxt::tokens_() {
     full_blocks = map_blocking_ * (map_size_ - 2);
   std::string tail_string = translate(full_blocks, maxfinity);
   std::vector<std::string> tail_tokens = tokenizer_->split(tail_string);
-  computed_tokens_ = full_blocks + tail_tokens.size();
-  computed_tokens_valid_ = true;
+  io_lock_.lock();
+  if (!computed_tokens_valid_) {
+    computed_tokens_ = full_blocks + tail_tokens.size();
+    computed_tokens_valid_ = true;
+  }
+  io_lock_.unlock();
   return computed_tokens_;
 }
 
