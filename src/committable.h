@@ -21,15 +21,17 @@ public:
     lock_.lock();
     assert(!started_ && !vote_);
     started_ = transaction_(error);
+    bool result = started_;
     lock_.unlock();
-    return started_;
+    return result;
   }
   inline bool ready() {
     lock_.lock();
     assert(started_);
     vote_ = ready_();
+    bool result = vote_;
     lock_.unlock();
-    return vote_;
+    return result;
   }
   inline void commit() {
     lock_.lock();
