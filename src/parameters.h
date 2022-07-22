@@ -37,6 +37,11 @@ private:
 class NotRandomParameter final : public RandomParameter {
 public:
   NotRandomParameter(fval value) : value_(value){};
+  virtual ~NotRandomParameter(){};
+  NotRandomParameter(const NotRandomParameter &) = delete;
+  NotRandomParameter &operator=(const NotRandomParameter &) = delete;
+  NotRandomParameter(NotRandomParameter &&) = delete;
+  NotRandomParameter &operator=(NotRandomParameter &&) = delete;
 
 private:
   fval value_;
@@ -49,6 +54,11 @@ public:
     f_ = std::bind(distribution_, generator_);
   };
   UniformRandomParameter() : UniformRandomParameter(0.0, 1.0){};
+  virtual ~UniformRandomParameter(){};
+  UniformRandomParameter(const UniformRandomParameter &) = delete;
+  UniformRandomParameter &operator=(const UniformRandomParameter &) = delete;
+  UniformRandomParameter(UniformRandomParameter &&) = delete;
+  UniformRandomParameter &operator=(UniformRandomParameter &&) = delete;
 
 private:
   fval random_parameter_() final { return f_(); };
@@ -62,6 +72,12 @@ public:
       : distribution_(std::log(a), std::log(b)) {
     f_ = std::bind(distribution_, generator_);
   };
+  virtual ~LogUniformRandomParameter(){};
+  LogUniformRandomParameter(const LogUniformRandomParameter &) = delete;
+  LogUniformRandomParameter &
+  operator=(const LogUniformRandomParameter &) = delete;
+  LogUniformRandomParameter(LogUniformRandomParameter &&) = delete;
+  LogUniformRandomParameter &operator=(LogUniformRandomParameter &&) = delete;
 
 private:
   fval random_parameter_() final { return std::exp(f_()); };

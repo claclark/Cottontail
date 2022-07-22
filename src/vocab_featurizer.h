@@ -17,7 +17,12 @@ public:
                                           std::shared_ptr<Working> working,
                                           std::string *error = nullptr);
   static bool check(const std::string &recipe, std::string *error = nullptr);
+
   ~VocabFeaturizer() final;
+  VocabFeaturizer(const VocabFeaturizer &) = delete;
+  VocabFeaturizer &operator=(const VocabFeaturizer &) = delete;
+  VocabFeaturizer(VocabFeaturizer &&) = delete;
+  VocabFeaturizer &operator=(VocabFeaturizer &&) = delete;
 
 private:
   VocabFeaturizer(){};

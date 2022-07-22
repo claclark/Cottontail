@@ -21,6 +21,12 @@ public:
     return make(empty, &error);
   }
 
+  virtual ~HashingFeaturizer(){};
+  HashingFeaturizer(const HashingFeaturizer &) = delete;
+  HashingFeaturizer &operator=(const HashingFeaturizer &) = delete;
+  HashingFeaturizer(HashingFeaturizer &&) = delete;
+  HashingFeaturizer &operator=(HashingFeaturizer &&) = delete;
+
 private:
   std::string recipe_() final;
   addr featurize_(const char *key, addr length) final;

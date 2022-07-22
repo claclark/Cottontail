@@ -7,6 +7,12 @@ namespace cottontail {
 
 class Hopper {
 public:
+  virtual ~Hopper(){};
+  Hopper(const Hopper &) = delete;
+  Hopper &operator=(const Hopper &) = delete;
+  Hopper(Hopper &&) = delete;
+  Hopper &operator=(Hopper &&) = delete;
+
   inline addr L(addr k) { return L_(k); }
   inline addr R(addr k) { return R_(k); }
 
@@ -56,16 +62,16 @@ public:
   };
 
   inline void tau(addr k, addr *p, addr *q, addr *n) {
-    tau(k, p, q, (fval *) n);
+    tau(k, p, q, (fval *)n);
   };
   inline void rho(addr k, addr *p, addr *q, addr *n) {
-    rho(k, p, q, (fval *) n);
+    rho(k, p, q, (fval *)n);
   };
   inline void uat(addr k, addr *p, addr *q, addr *n) {
-    uat(k, p, q, (fval *) n);
+    uat(k, p, q, (fval *)n);
   };
   inline void ohr(addr k, addr *p, addr *q, addr *n) {
-    ohr(k, p, q, (fval *) n);
+    ohr(k, p, q, (fval *)n);
   };
 
   inline void tau(addr k, addr *p, addr *q) {
@@ -85,7 +91,8 @@ public:
     ohr(k, p, q, &v);
   };
 
-  virtual ~Hopper(){};
+protected:
+  Hopper(){};
 
 private:
   virtual addr L_(addr k);
@@ -117,6 +124,14 @@ private:
 };
 
 class EmptyHopper final : public Hopper {
+public:
+  EmptyHopper() {};
+  virtual ~EmptyHopper(){};
+  EmptyHopper(const EmptyHopper &) = delete;
+  EmptyHopper &operator=(const EmptyHopper &) = delete;
+  EmptyHopper(EmptyHopper &&) = delete;
+  EmptyHopper &operator=(EmptyHopper &&) = delete;
+
 private:
   void tau_(addr k, addr *p, addr *q, fval *v) final;
   void rho_(addr k, addr *p, addr *q, fval *v) final;
@@ -127,6 +142,11 @@ private:
 class SingletonHopper final : public Hopper {
 public:
   SingletonHopper(addr p, addr q, fval v) : p_(p), q_(q), v_(v){};
+  virtual ~SingletonHopper(){};
+  SingletonHopper(const SingletonHopper &) = delete;
+  SingletonHopper &operator=(const SingletonHopper &) = delete;
+  SingletonHopper(SingletonHopper &&) = delete;
+  SingletonHopper &operator=(SingletonHopper &&) = delete;
 
 private:
   void tau_(addr k, addr *p, addr *q, fval *v) final;
@@ -142,6 +162,11 @@ private:
 class FixedWidthHopper final : public Hopper {
 public:
   FixedWidthHopper(addr width) : width_(width){};
+  virtual ~FixedWidthHopper(){};
+  FixedWidthHopper(const FixedWidthHopper &) = delete;
+  FixedWidthHopper &operator=(const FixedWidthHopper &) = delete;
+  FixedWidthHopper(FixedWidthHopper &&) = delete;
+  FixedWidthHopper &operator=(FixedWidthHopper &&) = delete;
 
 private:
   void tau_(addr k, addr *p, addr *q, fval *v) final;

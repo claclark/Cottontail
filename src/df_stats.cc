@@ -139,35 +139,39 @@ public:
            std::unique_ptr<Hopper> container_hopper)
       : tf_hopper_(std::move(tf_hopper)),
         container_hopper_(std::move(container_hopper)){};
-  TfHopper(TfHopper const &) = delete;
-  TfHopper &operator=(TfHopper const &) = delete;
+
+  virtual ~TfHopper(){};
+  TfHopper(const TfHopper &) = delete;
+  TfHopper &operator=(const TfHopper &) = delete;
+  TfHopper(TfHopper &&) = delete;
+  TfHopper &operator=(TfHopper &&) = delete;
 
 private:
   void tau_(addr k, addr *p, addr *q, fval *v) final {
     addr p0, q0, df;
     tf_hopper_->tau(k, &p0, &q0, &df);
     container_hopper_->tau(p0, p, q);
-    *v = (fval) df;
+    *v = (fval)df;
   };
   void rho_(addr k, addr *p, addr *q, fval *v) final {
     addr p0, q0, df;
     container_hopper_->rho(k, &p0, &q0);
     tf_hopper_->tau(p0, &p0, &q0, &df);
     container_hopper_->tau(p0, p, q);
-    *v = (fval) df;
+    *v = (fval)df;
   };
   void uat_(addr k, addr *p, addr *q, fval *v) final {
     addr p0, q0, df;
     container_hopper_->uat(k, &p0, &q0);
     tf_hopper_->ohr(p0, &p0, &q0, &df);
     container_hopper_->ohr(p0, p, q);
-    *v = (fval) df;
+    *v = (fval)df;
   };
   void ohr_(addr k, addr *p, addr *q, fval *v) final {
     addr p0, q0, df;
     tf_hopper_->ohr(k, &p0, &q0, &df);
     container_hopper_->ohr(p0, p, q);
-    *v = (fval) df;
+    *v = (fval)df;
   };
   std::unique_ptr<Hopper> tf_hopper_;
   std::unique_ptr<Hopper> container_hopper_;

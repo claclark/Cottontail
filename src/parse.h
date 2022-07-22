@@ -29,7 +29,7 @@ enum Operator {
   LINK
 };
 
-class SExpression {
+class SExpression final {
 public:
   static std::shared_ptr<SExpression> from_string(std::string s,
                                                   std::string *error);

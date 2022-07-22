@@ -188,6 +188,8 @@ std::string SimpleIdx::recipe_() {
 
 namespace {
 IdxRecord *locate(addr feature, IdxRecord *map, addr n) {
+  if (map == nullptr)
+    return nullptr;
   if (feature < map[0].feature || feature > map[n - 1].feature)
     return nullptr;
   IdxRecord *l = map;

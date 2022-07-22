@@ -2,8 +2,8 @@
 #define COTTONTAIL_SRC_PORTER_H_
 
 #include <iostream>
-#include <string>
 #include <mutex>
+#include <string>
 
 #include <ctype.h>
 #include <string.h>
@@ -25,7 +25,11 @@ public:
     b[HUGE_ENGLISH_WORD] = '\0';
   }
 
-  ~Porter() final { delete[] b; }
+  virtual ~Porter() final { delete[] b; }
+  Porter(const Porter &) = default;
+  Porter &operator=(const Porter &) = default;
+  Porter(Porter &&) = delete;
+  Porter &operator=(Porter &&) = delete;
 
 private:
   std::string stem_(const std::string &word, bool *stemmed) final {
@@ -52,9 +56,7 @@ private:
     lock_.unlock();
     return stem;
   };
-  std::string recipe_() final {
-    return "";
-  };
+  std::string recipe_() final { return ""; };
 
   const size_t HUGE_ENGLISH_WORD = 32;
   char *b;      /* buffer for word to be stemmed */
@@ -76,5 +78,5 @@ private:
   void step4();
   void step5();
 };
-}
+} // namespace cottontail
 #endif // COTTONTAIL_SRC_PORTER_H_

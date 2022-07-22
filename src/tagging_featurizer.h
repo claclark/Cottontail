@@ -13,13 +13,19 @@ public:
   static std::shared_ptr<Featurizer>
   make(const std::string &recipe, std::string *error = nullptr,
        std::shared_ptr<Working> working = nullptr);
-  static std::shared_ptr<Featurizer>
-  make(std::shared_ptr<Featurizer> base, std::string tag,
-       std::string *error = nullptr);
+  static std::shared_ptr<Featurizer> make(std::shared_ptr<Featurizer> base,
+                                          std::string tag,
+                                          std::string *error = nullptr);
   static bool check(const std::string &recipe, std::string *error = nullptr);
 
   TaggingFeaturizer(std::shared_ptr<Featurizer> base, std::string tag)
       : base_(base), tag_(tag + ":"){};
+
+  virtual ~TaggingFeaturizer(){};
+  TaggingFeaturizer(const TaggingFeaturizer &) = delete;
+  TaggingFeaturizer &operator=(const TaggingFeaturizer &) = delete;
+  TaggingFeaturizer(TaggingFeaturizer &&) = delete;
+  TaggingFeaturizer &operator=(TaggingFeaturizer &&) = delete;
 
 private:
   std::string recipe_() final;

@@ -27,8 +27,10 @@ class RankingContext {
 public:
   RankingContext(std::shared_ptr<Warren> warren) : warren_(warren){};
   RankingContext() = delete;
-  RankingContext(RankingContext &&) = default;
-  RankingContext &operator=(RankingContext &&) = default;
+  RankingContext(const RankingContext &) = delete;
+  RankingContext &operator=(const RankingContext &) = delete;
+  RankingContext(RankingContext &&) = delete;
+  RankingContext &operator=(RankingContext &&) = delete;
 
   void clear(const std::string &query) {
     raw_query_ = query;
@@ -83,6 +85,9 @@ private:
 };
 
 class BM25Transformer : public RankingContextTransformer {
+public:
+  virtual ~BM25Transformer(){};
+
 private:
   void transform_(class RankingContext *context) {
     if (context->weighted_query_.size() > 0)
@@ -95,6 +100,9 @@ private:
 };
 
 class LMDTransformer : public RankingContextTransformer {
+public:
+  virtual ~LMDTransformer(){};
+
 private:
   void transform_(class RankingContext *context) {
     if (context->weighted_query_.size() > 0)
@@ -107,6 +115,9 @@ private:
 };
 
 class ExpansionTransformer : public RankingContextTransformer {
+public:
+  virtual ~ExpansionTransformer(){};
+
 protected:
   void expand(std::shared_ptr<Warren> warren,
               const std::vector<RankingResult> &ranking,
@@ -135,6 +146,9 @@ private:
 };
 
 class RSJTransformer : public ExpansionTransformer {
+public:
+  virtual ~RSJTransformer(){};
+
 private:
   void expand_(std::shared_ptr<Warren> warren,
                const std::vector<RankingResult> &ranking,
@@ -145,6 +159,9 @@ private:
 };
 
 class KLDTransformer : public ExpansionTransformer {
+public:
+  virtual ~KLDTransformer(){};
+
 private:
   void expand_(std::shared_ptr<Warren> warren,
                const std::vector<RankingResult> &ranking,
@@ -155,6 +172,9 @@ private:
 };
 
 class StemTransformer : public RankingContextTransformer {
+public:
+  virtual ~StemTransformer(){};
+
 private:
   void transform_(class RankingContext *context) {
     if (context->weighted_query_.size() == 0) {
@@ -179,6 +199,7 @@ class ParameterTransformer : public RankingContextTransformer {
 public:
   ParameterTransformer(const std::string &key, fval value)
       : key_(key), value_(value){};
+  virtual ~ParameterTransformer(){};
 
 private:
   std::string key_;
@@ -197,6 +218,7 @@ public:
     if (okay_)
       random_parameters_ = generator->random();
   }
+  virtual ~RandomParameterTransformer(){};
 
   bool okay() { return okay_; };
 
@@ -257,16 +279,12 @@ RankingContextTransformer::from_name(std::string transformation) {
 
 class RankingPipeline : public Ranker {
 public:
-  RankingPipeline(std::shared_ptr<Warren> warren)
-#if 1
-      : warren_(warren){};
-#else
-TODO: Remove this dead code
-      : warren_(warren), context_(warren){};
-#endif
-  RankingPipeline() = delete;
+  RankingPipeline(std::shared_ptr<Warren> warren) : warren_(warren){};
+  virtual ~RankingPipeline() {};
   RankingPipeline(const RankingPipeline &) = delete;
   RankingPipeline &operator=(const RankingPipeline &) = delete;
+  RankingPipeline(RankingPipeline &&) = delete;
+  RankingPipeline &operator=(RankingPipeline &&) = delete;
 
   void add_transformer(std::shared_ptr<RankingContextTransformer> transformer) {
     transformers_.push_back(transformer);
@@ -274,16 +292,10 @@ TODO: Remove this dead code
 
 private:
   std::shared_ptr<Warren> warren_;
-#if 1
-#else
-TODO: Remove this dead code
-  RankingContext context_;
-#endif
   std::vector<std::shared_ptr<RankingContextTransformer>> transformers_;
-  std::vector<RankingResult> rank_(const std::string &query,
-                                   std::map<std::string, fval> *parameters) {
-
-#if 1
+  virtual std::vector<RankingResult>
+  rank_(const std::string &query,
+        std::map<std::string, fval> *parameters) final {
     RankingContext context(warren_);
     context.clear(query);
     for (auto &transformer : transformers_)
@@ -291,15 +303,6 @@ TODO: Remove this dead code
     if (parameters != nullptr)
       *parameters = context.parameters();
     return context.ranking();
-#else
-TODO: Remove this dead code
-    context_.clear(query);
-    for (auto &transformer : transformers_)
-      transformer->transform(&context_);
-    if (parameters != nullptr)
-      *parameters = context_.parameters();
-    return context_.ranking();
-#endif 
   }
 };
 

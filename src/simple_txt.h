@@ -21,6 +21,12 @@ public:
                                    std::string *error = nullptr);
   static bool check(const std::string &recipe, std::string *error = nullptr);
 
+  virtual ~SimpleTxt(){};
+  SimpleTxt(const SimpleTxt &) = delete;
+  SimpleTxt &operator=(const SimpleTxt &) = delete;
+  SimpleTxt(SimpleTxt &&) = delete;
+  SimpleTxt &operator=(SimpleTxt &&) = delete;
+
 private:
   SimpleTxt(){};
   std::string recipe_() final;

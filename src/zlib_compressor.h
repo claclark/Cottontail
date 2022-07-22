@@ -29,6 +29,12 @@ public:
     }
   }
 
+  virtual ~ZlibCompressor(){};
+  ZlibCompressor(const ZlibCompressor &) = delete;
+  ZlibCompressor &operator=(const ZlibCompressor &) = delete;
+  ZlibCompressor(ZlibCompressor &&) = delete;
+  ZlibCompressor &operator=(ZlibCompressor &&) = delete;
+
 private:
   size_t crush_(char *in, size_t length, char *out, size_t available) final;
   size_t tang_(char *in, size_t length, char *out, size_t available) final;

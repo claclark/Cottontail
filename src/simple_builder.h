@@ -39,6 +39,12 @@ public:
        std::string text_compressor_name = TEXT_COMPRESSOR_NAME,
        std::string text_compressor_recipe = TEXT_COMPRESSOR_RECIPE);
 
+  virtual ~SimpleBuilder(){};
+  SimpleBuilder(const SimpleBuilder &) = delete;
+  SimpleBuilder &operator=(const SimpleBuilder &) = delete;
+  SimpleBuilder(SimpleBuilder &&) = delete;
+  SimpleBuilder &operator=(SimpleBuilder &&) = delete;
+
 private:
   SimpleBuilder(){};
   bool add_text_(const std::string &text, addr *p, addr *q,

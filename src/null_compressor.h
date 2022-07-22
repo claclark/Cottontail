@@ -29,6 +29,12 @@ public:
     }
   }
 
+  virtual ~NullCompressor(){};
+  NullCompressor(const NullCompressor &) = delete;
+  NullCompressor &operator=(const NullCompressor &) = delete;
+  NullCompressor(NullCompressor &&) = delete;
+  NullCompressor &operator=(NullCompressor &&) = delete;
+
 private:
   size_t crush_(char *in, size_t length, char *out, size_t available) final {
     memcpy(out, in, std::min(length, available));

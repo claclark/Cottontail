@@ -20,9 +20,13 @@ public:
   }
   inline std::string recipe() { return recipe_(); }
   inline std::string name() { return name_; }
+
   virtual ~Stemmer(){};
   Stemmer(const Stemmer &) = default;
   Stemmer &operator=(const Stemmer &) = default;
+  Stemmer(Stemmer &&) = delete;
+  Stemmer &operator=(Stemmer &&) = delete;
+
 
 protected:
   Stemmer(){};

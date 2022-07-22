@@ -22,6 +22,12 @@ public:
                                    std::string *error = nullptr);
   static bool check(const std::string &recipe, std::string *error = nullptr);
 
+  virtual ~FastidTxt(){};
+  FastidTxt(const FastidTxt &) = delete;
+  FastidTxt &operator=(const FastidTxt &) = delete;
+  FastidTxt(FastidTxt &&) = delete;
+  FastidTxt &operator=(FastidTxt &&) = delete;
+
 private:
   FastidTxt(){};
   std::string recipe_() final;

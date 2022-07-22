@@ -18,6 +18,12 @@ public:
                                      std::string *error = nullptr);
   static bool check(const std::string &recipe, std::string *error = nullptr);
 
+  virtual ~IdfStats(){};
+  IdfStats(const IdfStats &) = delete;
+  IdfStats &operator=(const IdfStats &) = delete;
+  IdfStats(IdfStats &&) = delete;
+  IdfStats &operator=(IdfStats &&) = delete;
+
 protected:
   IdfStats(std::shared_ptr<Warren> warren) : Stats(warren){};
 

@@ -22,6 +22,11 @@ public:
   bool operator==(const SimplePosting &other);
   inline size_t size() { return postings_.size(); }
 
+  SimplePosting(const SimplePosting &) = delete;
+  SimplePosting &operator=(const SimplePosting &) = delete;
+  SimplePosting(SimplePosting &&) = delete;
+  SimplePosting &operator=(SimplePosting &&) = delete;
+
 private:
   SimplePosting(std::shared_ptr<Compressor> posting_compressor,
                 std::shared_ptr<Compressor> fvalue_compressor)
@@ -59,6 +64,11 @@ public:
   std::shared_ptr<SimplePosting> posting_from_file(std::fstream *f);
   std::shared_ptr<SimplePosting> posting_from_merge(
       const std::vector<std::shared_ptr<SimplePosting>> &postings);
+
+  SimplePostingFactory(const SimplePostingFactory &) = delete;
+  SimplePostingFactory &operator=(const SimplePostingFactory &) = delete;
+  SimplePostingFactory(SimplePostingFactory &&) = delete;
+  SimplePostingFactory &operator=(SimplePostingFactory &&) = delete;
 
 private:
   std::shared_ptr<Compressor> posting_compressor_;

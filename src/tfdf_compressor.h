@@ -35,6 +35,12 @@ public:
     }
   }
 
+  virtual ~TfdfCompressor(){};
+  TfdfCompressor(const TfdfCompressor &) = delete;
+  TfdfCompressor &operator=(const TfdfCompressor &) = delete;
+  TfdfCompressor(TfdfCompressor &&) = delete;
+  TfdfCompressor &operator=(TfdfCompressor &&) = delete;
+
 private:
   bool component_ = false;
   size_t crush_(char *in, size_t length, char *out, size_t available) final;

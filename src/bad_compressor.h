@@ -27,6 +27,12 @@ public:
     return true;
   }
 
+  virtual ~BadCompressor(){};
+  BadCompressor(const BadCompressor &) = delete;
+  BadCompressor &operator=(const BadCompressor &) = delete;
+  BadCompressor(BadCompressor &&) = delete;
+  BadCompressor &operator=(BadCompressor &&) = delete;
+
 private:
   size_t crush_(char *in, size_t length, char *out, size_t available) final {
     assert(available >= 2 * length);

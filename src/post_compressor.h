@@ -29,6 +29,12 @@ public:
     }
   }
 
+  virtual ~PostCompressor(){};
+  PostCompressor(const PostCompressor &) = delete;
+  PostCompressor &operator=(const PostCompressor &) = delete;
+  PostCompressor(PostCompressor &&) = delete;
+  PostCompressor &operator=(PostCompressor &&) = delete;
+
 private:
   size_t crush_(char *in, size_t length, char *out, size_t available) final;
   size_t tang_(char *in, size_t length, char *out, size_t available) final;

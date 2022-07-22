@@ -27,6 +27,12 @@ public:
   static bool check(const std::string &recipe, std::string *error = nullptr);
   std::map<fval, addr> feature_histogram();
 
+  virtual ~SimpleIdx(){};
+  SimpleIdx(const SimpleIdx &) = delete;
+  SimpleIdx &operator=(const SimpleIdx &) = delete;
+  SimpleIdx(SimpleIdx &&) = delete;
+  SimpleIdx &operator=(SimpleIdx &&) = delete;
+
 private:
   SimpleIdx(){};
   std::string recipe_() final;

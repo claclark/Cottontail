@@ -31,6 +31,12 @@ public:
     return std::make_unique<ArrayHopper>(n, postings, qostings, fostings);
   }
 
+  virtual ~ArrayHopper(){};
+  ArrayHopper(const ArrayHopper &) = delete;
+  ArrayHopper &operator=(const ArrayHopper &) = delete;
+  ArrayHopper(ArrayHopper &&) = delete;
+  ArrayHopper &operator=(ArrayHopper &&) = delete;
+
 private:
   addr L_(addr k) final;
   addr R_(addr k) final;

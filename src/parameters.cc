@@ -11,6 +11,11 @@ fval Parameters::default_depth() { return 1000.0; }
 class TieredParameters final : public Parameters {
 public:
   TieredParameters() : delta_(0.0, 10.0), default_delta_(1.0){};
+  virtual ~TieredParameters(){};
+  TieredParameters(const TieredParameters &) = delete;
+  TieredParameters &operator=(const TieredParameters &) = delete;
+  TieredParameters(TieredParameters &&) = delete;
+  TieredParameters &operator=(TieredParameters &&) = delete;
 
 private:
   std::map<std::string, fval> random_() {
@@ -30,6 +35,11 @@ private:
 class SSRParameters final : public Parameters {
 public:
   SSRParameters() : K_(1.0, 1000.0), default_K_(42.0){};
+  virtual ~SSRParameters(){};
+  SSRParameters(const SSRParameters &) = delete;
+  SSRParameters &operator=(const SSRParameters &) = delete;
+  SSRParameters(SSRParameters &&) = delete;
+  SSRParameters &operator=(SSRParameters &&) = delete;
 
 private:
   std::map<std::string, fval> random_() {
@@ -50,6 +60,11 @@ class BM25Parameters final : public Parameters {
 public:
   BM25Parameters()
       : b_(0.0, 1.0), default_b_(0.25), k1_(0.01, 1000.0), default_k1_(0.5){};
+  virtual ~BM25Parameters(){};
+  BM25Parameters(const BM25Parameters &) = delete;
+  BM25Parameters &operator=(const BM25Parameters &) = delete;
+  BM25Parameters(BM25Parameters &&) = delete;
+  BM25Parameters &operator=(BM25Parameters &&) = delete;
 
 private:
   std::map<std::string, fval> random_() {
@@ -73,6 +88,11 @@ private:
 class LMDParameters final : public Parameters {
 public:
   LMDParameters() : mu_(100.0, 10000.0), default_mu_(2000.0){};
+  virtual ~LMDParameters(){};
+  LMDParameters(const LMDParameters &) = delete;
+  LMDParameters &operator=(const LMDParameters &) = delete;
+  LMDParameters(LMDParameters &&) = delete;
+  LMDParameters &operator=(LMDParameters &&) = delete;
 
 private:
   std::map<std::string, fval> random_() {
@@ -94,6 +114,11 @@ public:
   RSJParameters()
       : expansions_(4, 32), default_expansions_(25), depth_(8, 32),
         default_depth_(10), gamma_(0.0, 1.0), default_gamma_(0.2){};
+  virtual ~RSJParameters(){};
+  RSJParameters(const RSJParameters &) = delete;
+  RSJParameters &operator=(const RSJParameters &) = delete;
+  RSJParameters(RSJParameters &&) = delete;
+  RSJParameters &operator=(RSJParameters &&) = delete;
 
 private:
   std::map<std::string, fval> random_() {
@@ -124,6 +149,11 @@ public:
       : expansions_(4, 32), default_expansions_(8), depth_(8, 32),
         default_depth_(16), window_(32, 256), default_window_(64),
         gamma_(0.0, 1.0), default_gamma_(1.0 / 3.0){};
+  virtual ~KLDParameters(){};
+  KLDParameters(const KLDParameters &) = delete;
+  KLDParameters &operator=(const KLDParameters &) = delete;
+  KLDParameters(KLDParameters &&) = delete;
+  KLDParameters &operator=(KLDParameters &&) = delete;
 
 private:
   std::map<std::string, fval> random_() {
@@ -157,6 +187,11 @@ public:
   QAPParameters()
       : default_depth_(5), default_length_(64), passages_(16, 256),
         default_passages_(32), window_(16, 256), default_window_(64){};
+  virtual ~QAPParameters(){};
+  QAPParameters(const QAPParameters &) = delete;
+  QAPParameters &operator=(const QAPParameters &) = delete;
+  QAPParameters(QAPParameters &&) = delete;
+  QAPParameters &operator=(QAPParameters &&) = delete;
 
 private:
   std::map<std::string, fval> random_() {

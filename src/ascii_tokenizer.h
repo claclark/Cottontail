@@ -31,6 +31,12 @@ public:
   };
   static bool check(const std::string &recipe, std::string *error = nullptr);
 
+  virtual ~AsciiTokenizer(){};
+  AsciiTokenizer(const AsciiTokenizer &) = delete;
+  AsciiTokenizer &operator=(const AsciiTokenizer &) = delete;
+  AsciiTokenizer(AsciiTokenizer &&) = delete;
+  AsciiTokenizer &operator=(AsciiTokenizer &&) = delete;
+
 private:
   bool xml_;
   std::string recipe_() final;

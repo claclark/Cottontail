@@ -18,6 +18,12 @@ public:
   static std::shared_ptr<Warren> make(const std::string &burrow,
                                       std::string *error = nullptr);
 
+  virtual ~SimpleWarren(){};
+  SimpleWarren(const SimpleWarren &) = delete;
+  SimpleWarren &operator=(const SimpleWarren &) = delete;
+  SimpleWarren(SimpleWarren &&) = delete;
+  SimpleWarren &operator=(SimpleWarren &&) = delete;
+
 private:
   SimpleWarren(std::shared_ptr<Working> working,
                std::shared_ptr<Featurizer> featurizer,

@@ -30,6 +30,12 @@ public:
     }
   };
 
+  virtual ~FileReader() {};
+  FileReader(const FileReader &) = delete;
+  FileReader &operator=(const FileReader &) = delete;
+  FileReader(FileReader &&) = delete;
+  FileReader &operator=(FileReader &&) = delete;
+
 private:
   FileReader(){};
   size_t read_(char *buffer, size_t where, size_t amount) final {
@@ -87,6 +93,12 @@ public:
     return fullreader;
   }
 
+  virtual ~FullReader() {};
+  FullReader(const FullReader &) = delete;
+  FullReader &operator=(const FullReader &) = delete;
+  FullReader(FullReader &&) = delete;
+  FullReader &operator=(FullReader &&) = delete;
+
 private:
   FullReader(){};
   size_t read_(char *buffer, size_t where, size_t amount) final {
@@ -135,6 +147,12 @@ public:
       return nullptr;
     return reader;
   };
+
+  virtual ~CompressReader() {};
+  CompressReader(const CompressReader &) = delete;
+  CompressReader &operator=(const CompressReader &) = delete;
+  CompressReader(CompressReader &&) = delete;
+  CompressReader &operator=(CompressReader &&) = delete;
 
 private:
   CompressReader(){};
@@ -213,6 +231,12 @@ public:
     }
   };
 
+  virtual ~FileWriter() {};
+  FileWriter(const FileWriter &) = delete;
+  FileWriter &operator=(const FileWriter &) = delete;
+  FileWriter(FileWriter &&) = delete;
+  FileWriter &operator=(FileWriter &&) = delete;
+
 private:
   FileWriter(){};
   void append_(const char *buffer, size_t amount) final {
@@ -254,7 +278,12 @@ public:
       return nullptr;
     return writer;
   };
-  ~CompressWriter() { flush(); };
+
+  virtual ~CompressWriter() { flush(); };
+  CompressWriter(const CompressWriter &) = delete;
+  CompressWriter &operator=(const CompressWriter &) = delete;
+  CompressWriter(CompressWriter &&) = delete;
+  CompressWriter &operator=(CompressWriter &&) = delete;
 
 private:
   CompressWriter(){};
