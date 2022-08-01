@@ -59,10 +59,10 @@ bool SimpleTxt::load_map(const std::string &txt_filename, std::string *error) {
   return true;
 }
 
-namespace {
-bool interpret_recipe(const std::string &recipe, std::string *compressor_name,
-                      std::string *compressor_recipe,
-                      std::string *error = nullptr) {
+bool interpret_simple_txt_recipe(const std::string &recipe,
+                                 std::string *compressor_name,
+                                 std::string *compressor_recipe,
+                                 std::string *error) {
 
   if (recipe == "") {
     *compressor_name = TEXT_COMPRESSOR_NAME;
@@ -85,14 +85,14 @@ bool interpret_recipe(const std::string &recipe, std::string *compressor_name,
   }
   return true;
 }
-} // namespace
 
 std::shared_ptr<Txt> SimpleTxt::make(const std::string &recipe,
                                      std::shared_ptr<Tokenizer> tokenizer,
                                      std::shared_ptr<Working> working,
                                      std::string *error) {
   std::string compressor_name, compressor_recipe;
-  if (!interpret_recipe(recipe, &compressor_name, &compressor_recipe, error))
+  if (!interpret_simple_txt_recipe(recipe, &compressor_name, &compressor_recipe,
+                                   error))
     return nullptr;
   if (!Compressor::check(compressor_name, compressor_recipe, error))
     return nullptr;
@@ -128,7 +128,8 @@ bool SimpleTxt::check(const std::string &recipe, std::string *error) {
   if (recipe == "")
     return true;
   std::string compressor_name, compressor_recipe;
-  if (!interpret_recipe(recipe, &compressor_name, &compressor_recipe, error))
+  if (!interpret_simple_txt_recipe(recipe, &compressor_name, &compressor_recipe,
+                                   error))
     return false;
   return Compressor::check(compressor_name, compressor_recipe, error);
 }

@@ -36,7 +36,7 @@ public:
   addr size() { return size_; }
   void dump(std::ostream &output = std::cout);
 
-  ~SimpleTxtIO() { flush(); }
+  virtual ~SimpleTxtIO() { flush(); }
   SimpleTxtIO(const SimpleTxtIO &) = delete;
   SimpleTxtIO &operator=(const SimpleTxtIO &) = delete;
   SimpleTxtIO(SimpleTxtIO &&) = delete;

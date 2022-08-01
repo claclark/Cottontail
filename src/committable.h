@@ -59,7 +59,7 @@ private:
     safe_set(error) = "Committable does not support transactions";
     return false;
   };
-  virtual bool ready_() { return true; };
+  virtual bool ready_() { return false; };
   virtual void commit_() { return; };
   virtual void abort_() { return; }
 };

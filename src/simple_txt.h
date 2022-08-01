@@ -46,5 +46,10 @@ private:
   std::string compressor_recipe_;
 };
 
+bool interpret_simple_txt_recipe(const std::string &recipe,
+                                 std::string *compressor_name,
+                                 std::string *compressor_recipe,
+                                 std::string *error = nullptr);
+
 } // namespace cottontail
 #endif // COTTONTAIL_SRC_SIMPLE_TXT_H_

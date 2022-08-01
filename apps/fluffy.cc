@@ -22,7 +22,7 @@ int main(int argc, char **argv) {
   bool report_addr = true;
   std::string burrow = cottontail::DEFAULT_BURROW;
   if (argc == 2) {
-    std::string burrow = argv[1];
+    burrow = argv[1];
   } else if (argc > 1) {
     if (argc > 2 &&
         (argv[1] == std::string("-b") || argv[1] == std::string("--burrow"))) {

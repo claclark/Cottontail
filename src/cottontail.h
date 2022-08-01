@@ -1,6 +1,8 @@
 #ifndef COTTONTAIL_SRC_COTTONTAIL_H_
 #define COTTONTAIL_SRC_COTTONTAIL_H_
 
+#include "src/annotator.h"
+#include "src/appender.h"
 #include "src/builder.h"
 #include "src/compressor.h"
 #include "src/core.h"

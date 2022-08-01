@@ -6,6 +6,7 @@
 
 #include "src/core.h"
 #include "src/hashing_featurizer.h"
+#include "src/null_featurizer.h"
 #include "src/tagging_featurizer.h"
 #include "src/vocab_featurizer.h"
 
@@ -30,6 +31,11 @@ std::shared_ptr<Featurizer> Featurizer::make(const std::string &name,
     featurizer = VocabFeaturizer::make(recipe, working, error);
     if (featurizer != nullptr)
       featurizer->name_ = "vocab";
+    return featurizer;
+  } else if (name == "null") {
+    featurizer = NullFeaturizer::make(recipe, error);
+    if (featurizer != nullptr)
+      featurizer->name_ = "null";
     return featurizer;
   } else {
     safe_set(error) = "No Featurizer named: " + name;
