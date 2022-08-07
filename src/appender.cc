@@ -45,4 +45,17 @@ bool Appender::check(const std::string &name, const std::string &recipe,
   }
 }
 
+bool Appender::recover(const std::string &name, const std::string &recipe,
+                       bool commit, std::string *error,
+                       std::shared_ptr<Working> working) {
+  if (name == "" || name == "null") {
+    return NullAppender::recover(recipe, commit, error, working);
+  } else if (name == "simple") {
+    return SimpleAppender::recover(recipe, commit, error, working);
+  } else {
+    safe_set(error) = "No Appender named: " + name;
+    return false;
+  }
+}
+
 } // namespace cottontail

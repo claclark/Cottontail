@@ -71,7 +71,26 @@ bool SimpleAppender::check(const std::string &recipe, std::string *error) {
 
 std::string SimpleAppender::recipe_() { return recipe_string_; }
 
-void SimpleAppender::recover(std::shared_ptr<Working> working, bool commit) {
+bool SimpleAppender::recover(const std::string &recipe, bool commit,
+                             std::string *error,
+                             std::shared_ptr<Working> working) {
+  if (working == nullptr) {
+    safe_set(error) =
+        "SimpleAppender recovery requires a working directory (got nullptr)";
+    return false;
+  }
+  std::string raw_filename = working->make_name(RAW_NAME);
+  std::string map_filename = working->make_name(MAP_NAME);
+  std::string compressor_name, compressor_recipe;
+  if (!interpret_simple_txt_recipe(recipe, &compressor_name, &compressor_recipe,
+                                   error))
+    return false;
+  std::shared_ptr<Compressor> text_compressor =
+      Compressor::make(compressor_name, compressor_recipe, error);
+  if (text_compressor == nullptr)
+    return false;
+  SimpleTxtIO::recover(raw_filename, map_filename, TEXT_COMPRESSOR_CHUNK_SIZE,
+                       text_compressor, commit);
   std::string txt_filename = working->make_name(TXT_NAME);
   std::string new_filename = txt_filename + ".new";
   if (commit)
@@ -80,6 +99,7 @@ void SimpleAppender::recover(std::shared_ptr<Working> working, bool commit) {
     std::remove(new_filename.c_str());
   std::string lock_filename = txt_filename + ".lock";
   std::remove(lock_filename.c_str());
+  return true;
 }
 
 bool SimpleAppender::append_(const std::string &text, addr *p, addr *q,
@@ -272,7 +292,7 @@ bool SimpleAppender::transaction_(std::string *error) {
       lock_.unlock();
       return false;
     }
-    address_ = txtr.pq + tail_tokens.size() - 1;
+    address_ = txtr.pq + tail_tokens.size();
   }
   adding_ = true;
   lock_.unlock();

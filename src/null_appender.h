@@ -33,6 +33,11 @@ public:
       return false;
     }
   }
+  static bool recover(const std::string &recipe, bool commit = false,
+                      std::string *error = nullptr,
+                      std::shared_ptr<Working> working = nullptr) {
+    return true;
+  };
 
   virtual ~NullAppender(){};
   NullAppender(const NullAppender &) = delete;

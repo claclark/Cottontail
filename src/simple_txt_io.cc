@@ -42,8 +42,8 @@ void unlock(const std::string &nameof_contents) {
 }
 
 void restore(const std::string &nameof_contents,
-                          const std::string &nameof_chunk_map, addr chunk_size,
-                          std::shared_ptr<Compressor> compressor) {
+             const std::string &nameof_chunk_map, addr chunk_size,
+             std::shared_ptr<Compressor> compressor) {
   addr chunk_map_limit;
   addr last_chunk_end;
   std::unique_ptr<char[]> last_chunk =
@@ -97,7 +97,7 @@ void SimpleTxtIO::recover(const std::string &nameof_contents,
                           const std::string &nameof_chunk_map, addr chunk_size,
                           std::shared_ptr<Compressor> compressor, bool commit) {
   if (!commit)
-    restore(nameof_contents, nameof_chunk_map, chunk_size, compressor); 
+    restore(nameof_contents, nameof_chunk_map, chunk_size, compressor);
   unlock(nameof_contents);
 }
 

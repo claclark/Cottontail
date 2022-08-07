@@ -24,7 +24,9 @@ public:
        std::shared_ptr<Tokenizer> tokenizer = nullptr,
        std::shared_ptr<Annotator> annotator = nullptr);
   static bool check(const std::string &recipe, std::string *error = nullptr);
-  static void recover(std::shared_ptr<Working> working, bool commit);
+  static bool recover(const std::string &recipe, bool commit,
+                      std::string *error = nullptr,
+                      std::shared_ptr<Working> working = nullptr);
 
   bool append(const std::string &text, addr *p, addr *q,
               std::string *error = nullptr);
