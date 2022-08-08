@@ -1,20 +1,8 @@
-#define ASSERT_EQ(a, b) (assert((a) == (b)))
-#define ASSERT_NE(a, b) (assert((a) != (b)))
-#define ASSERT_TRUE(a) (assert((a)))
-#define ASSERT_FALSE(a) (assert(!(a)))
-#define EXPECT_EQ(a, b) (assert((a) == (b)))
-#define EXPECT_NE(a, b) (assert((a) != (b)))
-#define EXPECT_TRUE(a) (assert((a)))
-#define EXPECT_FALSE(a) (assert(!(a)))
-
-#include <cstring>
-#define EXPECT_STREQ(a, b) (assert(strcmp((a), (b)) == 0))
-
-#include <unistd.h>
-
 #include <fstream>
 #include <memory>
 #include <string>
+
+#include "gtest/gtest.h"
 
 #include "src/cottontail.h"
 
@@ -84,7 +72,7 @@ make_appender(const std::string &burrow, const std::string &appender_name,
   return appender;
 }
 
-void test0() {
+TEST(SimpleAppender, FromEmpty) {
   FakeText fake;
   std::string error;
   std::string burrow = cottontail::DEFAULT_BURROW;
@@ -340,7 +328,7 @@ void test0() {
   }
 }
 
-void test1() {
+TEST(SimpleAppender, Appending) {
   FakeText fake;
   std::string error;
   std::string burrow = cottontail::DEFAULT_BURROW;
@@ -392,9 +380,4 @@ void test1() {
     EXPECT_TRUE(FakeText::check(warren, 1999990, 1999999));
     warren->end();
   }
-}
-
-int main(int argc, char **argv) {
-  test1();
-  return 0;
 }
