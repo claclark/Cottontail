@@ -27,5 +27,8 @@ bool collection_c4(const std::string &location,
 bool collection_MSMARCO_V2(const std::string &location,
                            std::shared_ptr<cottontail::Builder> builder,
                            std::string *error);
+bool collection_CAsT2022_preprocessed(
+    const std::string &location, std::shared_ptr<cottontail::Builder> builder,
+    std::string *error);
 } // namespace cottontail
 #endif // COTTONTAIL_APPS_COLLECTION_H_

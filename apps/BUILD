@@ -264,6 +264,37 @@ cc_binary(
 )
 
 cc_binary(
+    name = "treccast22",
+    srcs = [
+      "treccast22.cc",
+    ],
+    deps = [
+      "//src:cottontail",
+      "collection",
+    ],
+    copts = [
+      "'-std=c++14'",
+    ],
+    linkopts = [
+      "-pthread",
+    ],
+)
+
+cc_binary(
+    name = "treccast22-build",
+    srcs = [
+      "treccast22-build.cc",
+    ],
+    deps = [
+      "//src:cottontail",
+      "collection",
+    ],
+    linkopts = [
+      "-pthread",
+    ],
+)
+
+cc_binary(
     name = "trecdl21",
     srcs = [
       "trecdl21.cc",

@@ -518,4 +518,44 @@ bool collection_MSMARCO_V2(const std::string &location,
   }
   return true;
 }
+
+bool collection_CAsT2022_preprocessed(
+    const std::string &location, std::shared_ptr<cottontail::Builder> builder,
+    std::string *error) {
+  std::shared_ptr<std::string> everything = cottontail::inhale(location, error);
+  if (everything == nullptr) {
+    safe_set(error) = "Cannot open: " + location;
+    return false;
+  }
+  std::string::size_type pos;
+  std::string::size_type prev;
+  std::string newline = "\n";
+  for (prev = 0; (pos = everything->find(newline, prev)) != std::string::npos;
+       prev = pos + 1) {
+    json j;
+    try {
+      j = json::parse(everything->substr(prev, pos - prev));
+    } catch (json::parse_error &e) {
+      safe_set(error) = "Non-json in: " + location;
+      return false;
+    }
+    std::string id = j["id"];
+    std::string title = j["title"];
+    std::string contents = j["contents"];
+    cottontail::addr p_id, q_id;
+    if (!builder->add_text(id, &p_id, &q_id, error))
+      return false;
+    if (!builder->add_annotation(":pid", p_id, q_id, 0.0, error))
+      return false;
+    cottontail::addr p_title, q_title;
+    if (!builder->add_text(title, &p_title, &q_title, error))
+      return false;
+    cottontail::addr p_contents, q_contents;
+    if (!builder->add_text(contents, &p_contents, &q_contents, error))
+      return false;
+    if (!builder->add_annotation(":paragraph", p_id, q_contents, 0.0, error))
+      return false;
+  }
+  return true;
+}
 } // namespace cottontail
