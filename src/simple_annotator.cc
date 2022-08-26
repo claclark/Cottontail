@@ -25,7 +25,7 @@ SimpleAnnotator::make(const std::string &recipe,
                       std::shared_ptr<Working> working, std::string *error) {
   if (working == nullptr) {
     safe_set(error) =
-        "SimpleAnnotator requires a working director (got nullptr)";
+        "SimpleAnnotator requires a working directory (got nullptr)";
     return nullptr;
   }
   std::string fvalue_compressor_name, fvalue_compressor_recipe;
@@ -86,7 +86,7 @@ bool SimpleAnnotator::recover(const std::string &recipe, bool commit,
                               std::string *error) {
   if (working == nullptr) {
     safe_set(error) =
-        "SimpleAnnotator requires a working director (got nullptr)";
+        "SimpleAnnotator requires a working directory (got nullptr)";
     return false;
   }
   std::string idx_filename_ = working->make_name(IDX_NAME);

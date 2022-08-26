@@ -26,8 +26,12 @@ public:
   inline bool annotate(addr feature, addr p, addr q, fval v,
                        std::string *error = nullptr) {
     return annotate_(feature, p, q, v, error);
-  }
-  bool annotate(addr feature, addr p, addr q, addr v,
+  };
+  inline bool annotate(addr feature, addr p, addr q,
+                       std::string *error = nullptr) {
+    return annotate_(feature, p, q, 0.0, error);
+  };
+  inline bool annotate(addr feature, addr p, addr q, addr v,
                 std::string *error = nullptr) {
     return annotate(feature, p, q, addr2fval(v), error);
   };

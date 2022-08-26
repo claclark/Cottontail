@@ -18,6 +18,10 @@
 
 #include "src/cottontail.h"
 
+void test0() {
+}
+
 int main(int argc, char **argv) {
+  test0();
   return 0;
 }

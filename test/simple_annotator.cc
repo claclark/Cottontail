@@ -1,4 +1,4 @@
-#include<fstream>
+#include <fstream>
 #include <memory>
 #include <string>
 
@@ -194,5 +194,97 @@ TEST(SimpleAnnotator, FromEmpty) {
       EXPECT_EQ(q, i + 99);
       EXPECT_EQ(f, 12345.00);
     }
+  }
+}
+
+TEST(SimpleAnnotator, Annotating) {
+  const char *genesis[] = {
+      "In the beginning God created the heaven and the earth.",
+      "And the earth was without form, and void; and darkness was upon the "
+      "face of the deep. And the Spirit of God moved upon the face of the "
+      "waters.",
+      "And God said, Let there be light: and there was light.",
+      "And God saw the light, that it was good: and God divided the light from "
+      "the darkness.",
+      "And God called the light Day, and the darkness he called Night. And the "
+      "evening and the morning were the first day.",
+      "And God said, Let there be a firmament in the midst of the waters, and "
+      "let it divide the waters from the waters.",
+      "And God made the firmament, and divided the waters which were under the "
+      "firmament from the waters which were above the firmament: and it was "
+      "so.",
+      "And God called the firmament Heaven. And the evening and the morning "
+      "were the second day.",
+      "And God said, Let the waters under the heaven be gathered together unto "
+      "one place, and let the dry land appear: and it was so.",
+      "And God called the dry land Earth; and the gathering together of the "
+      "waters called he Seas: and God saw that it was good."};
+  std::string error;
+  std::string burrow = cottontail::DEFAULT_BURROW;
+  std::string appender_name = "simple";
+  {
+    std::shared_ptr<cottontail::Working> working =
+        cottontail::Working::mkdir(burrow, &error);
+    EXPECT_NE(working, nullptr);
+    std::string options = "tokenizer:noxml txt:compressor:zlib";
+    std::shared_ptr<cottontail::Builder> builder =
+        cottontail::SimpleBuilder::make(working, options, &error);
+    EXPECT_NE(builder, nullptr);
+    for (size_t i = 0; i < sizeof(genesis) / sizeof(char *); i++) {
+      std::string verse = std::string(genesis[i]);
+      cottontail::addr p, q;
+      builder->add_text(verse, &p, &q);
+      builder->add_annotation(":verse", p, q);
+    }
+    EXPECT_TRUE(builder->finalize(&error));
+  }
+  {
+    std::shared_ptr<cottontail::Warren> warren =
+        cottontail::Warren::make("simple", burrow);
+    warren->start();
+    EXPECT_NE(warren, nullptr);
+    std::string recipe;
+    recipe = warren->idx()->recipe();
+    std::shared_ptr<cottontail::Annotator> ann = cottontail::Annotator::make(
+        "simple", recipe, &error, warren->working());
+    EXPECT_NE(ann, nullptr);
+    EXPECT_TRUE(ann->transaction());
+    cottontail::addr p, q;
+    std::unique_ptr<cottontail::Hopper> said =
+        warren->hopper_from_gcl("\"and god said\"", &error);
+    EXPECT_NE(said, nullptr);
+    for (said->tau(0, &p, &q); p < cottontail::maxfinity;
+         said->tau(p + 1, &p, &q))
+      ann->annotate(warren->featurizer()->featurize(":said"), p, q);
+    std::unique_ptr<cottontail::Hopper> called =
+        warren->hopper_from_gcl("\"and god called\"", &error);
+    EXPECT_NE(called, nullptr);
+    for (called->tau(0, &p, &q); p < cottontail::maxfinity;
+         called->tau(p + 1, &p, &q))
+      ann->annotate(warren->featurizer()->featurize(":called"), p, q);
+    EXPECT_TRUE(ann->ready());
+    ann->commit();
+    warren->end();
+  }
+  {
+    std::shared_ptr<cottontail::Warren> warren =
+        cottontail::Warren::make("simple", burrow);
+    warren->start();
+    cottontail::addr p, q;
+    std::unique_ptr<cottontail::Hopper> said =
+        warren->hopper_from_gcl(":said", &error);
+    EXPECT_NE(said, nullptr);
+    for (said->tau(0, &p, &q); p < cottontail::maxfinity;
+         said->tau(p + 1, &p, &q))
+      EXPECT_TRUE(warren->txt()->translate(p, q) ==
+                  std::string("And God said, "));
+    std::unique_ptr<cottontail::Hopper> called =
+        warren->hopper_from_gcl(":called", &error);
+    EXPECT_NE(called, nullptr);
+    for (called->tau(0, &p, &q); p < cottontail::maxfinity;
+         called->tau(p + 1, &p, &q))
+      EXPECT_TRUE(warren->txt()->translate(p, q) ==
+                  std::string("And God called "));
+    warren->end();
   }
 }

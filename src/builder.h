@@ -46,9 +46,13 @@ public:
       return !failed_;
     }
   }
+  bool add_annotation(const std::string &tag, addr p, addr q,
+                      std::string *error = nullptr) {
+    return (add_annotation(tag, p, q, 0.0, error));
+  };
   bool add_annotation(const std::string &tag, addr p, addr q, addr v,
                       std::string *error = nullptr) {
-    return(add_annotation(tag, p, q, addr2fval(v), error));
+    return (add_annotation(tag, p, q, addr2fval(v), error));
   };
   bool finalize(std::string *error = nullptr) {
     if (failed_) {

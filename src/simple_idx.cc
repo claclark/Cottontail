@@ -86,7 +86,7 @@ std::shared_ptr<Idx> SimpleIdx::make(const std::string &recipe,
     return nullptr;
 
   if (working == nullptr) {
-    safe_set(error) = "SimpleIdx requires a working director (got nullptr)";
+    safe_set(error) = "SimpleIdx requires a working directory (got nullptr)";
     return nullptr;
   }
   std::shared_ptr<SimpleIdx> idx = std::shared_ptr<SimpleIdx>(new SimpleIdx());
