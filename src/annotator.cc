@@ -6,6 +6,7 @@
 
 #include "src/core.h"
 #include "src/null_annotator.h"
+#include "src/simple_annotator.h"
 #include "src/working.h"
 
 namespace cottontail {
@@ -19,6 +20,10 @@ std::shared_ptr<Annotator> Annotator::make(const std::string &name,
     annotator = NullAnnotator::make(recipe, error);
     if (annotator != nullptr)
       annotator->name_ = "null";
+  } else if (name == "simple") {
+    annotator = SimpleAnnotator::make(recipe, working, error);
+    if (annotator != nullptr)
+      annotator->name_ = "simple";
   } else {
     safe_set(error) = "No Annotator named: " + name;
   }
@@ -29,6 +34,21 @@ bool Annotator::check(const std::string &name, const std::string &recipe,
                       std::string *error) {
   if (name == "" || name == "null") {
     return NullAnnotator::check(recipe, error);
+  } else if (name == "simple") {
+    return SimpleAnnotator::check(recipe, error);
+  } else {
+    safe_set(error) = "No Annotator named: " + name;
+    return false;
+  }
+}
+
+bool Annotator::recover(const std::string &name, const std::string &recipe,
+                        bool commit, std::string *error,
+                        std::shared_ptr<Working> working) {
+  if (name == "" || name == "null") {
+    return true;
+  } else if (name == "simple") {
+    return SimpleAnnotator::recover(recipe, commit, working, error);
   } else {
     safe_set(error) = "No Annotator named: " + name;
     return false;

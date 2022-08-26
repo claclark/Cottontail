@@ -18,6 +18,9 @@ public:
        std::shared_ptr<Working> working = nullptr);
   static bool check(const std::string &name, const std::string &recipe,
                     std::string *error = nullptr);
+  static bool recover(const std::string &name, const std::string &recipe,
+                      bool commit, std::string *error = nullptr,
+                      std::shared_ptr<Working> working = nullptr);
   inline std::string recipe() { return recipe_(); }
   inline std::string name() { return name_; }
   inline bool annotate(addr feature, addr p, addr q, fval v,

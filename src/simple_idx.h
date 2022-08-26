@@ -82,5 +82,13 @@ private:
   std::unique_ptr<std::vector<Annotation>> added_;
   std::vector<std::thread> workers_;
 };
+
+bool interpret_simple_idx_recipe(const std::string &recipe,
+                                 std::string *fvalue_compressor_name,
+                                 std::string *fvalue_compressor_recipe,
+                                 std::string *posting_compressor_name,
+                                 std::string *posting_compressor_recipe,
+                                 std::string *error = nullptr,
+                                 size_t *add_file_size = nullptr);
 } // namespace cottontail
 #endif // COTTONTAIL_SRC_SIMPLE_IDX_H_

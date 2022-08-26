@@ -19,7 +19,11 @@ public:
 
   inline bool transaction(std::string *error = nullptr) {
     lock_.lock();
-    assert(!started_ && !vote_);
+    if (started_) {
+      lock_.unlock();
+      safe_set(error) = "Commitable does not support concurrent transactions.";
+      return false;
+    }
     started_ = transaction_(error);
     bool result = started_;
     lock_.unlock();
@@ -61,7 +65,7 @@ private:
   };
   virtual bool ready_() { return false; };
   virtual void commit_() { return; };
-  virtual void abort_() { return; }
+  virtual void abort_() { return; };
 };
 
 } // namespace cottontail

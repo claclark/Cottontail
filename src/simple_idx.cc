@@ -4,6 +4,7 @@
 #include <cassert>
 #include <fstream>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -18,13 +19,12 @@
 #include "src/working.h"
 
 namespace cottontail {
-namespace {
-bool interpret_recipe(const std::string &recipe,
-                      std::string *fvalue_compressor_name,
-                      std::string *fvalue_compressor_recipe,
-                      std::string *posting_compressor_name,
-                      std::string *posting_compressor_recipe,
-                      std::string *error = nullptr) {
+bool interpret_simple_idx_recipe(const std::string &recipe,
+                                 std::string *fvalue_compressor_name,
+                                 std::string *fvalue_compressor_recipe,
+                                 std::string *posting_compressor_name,
+                                 std::string *posting_compressor_recipe,
+                                 std::string *error, size_t *add_file_size) {
 
   if (recipe == "") {
     *fvalue_compressor_name = FVALUE_COMPRESSOR_NAME;
@@ -56,19 +56,27 @@ bool interpret_recipe(const std::string &recipe,
       *posting_compressor_recipe = item->second;
     else
       *posting_compressor_recipe = POSTING_COMPRESSOR_RECIPE;
+    if (add_file_size != nullptr) {
+      item = parameters.find("add_file_size");
+      if (item != parameters.end()) {
+        try {
+          *add_file_size = std::stoi(item->second);
+        } catch (const std::invalid_argument &e) {
+        }
+      }
+    }
   }
   return true;
 }
-} // namespace
 
 std::shared_ptr<Idx> SimpleIdx::make(const std::string &recipe,
                                      std::shared_ptr<Working> working,
                                      std::string *error) {
   std::string fvalue_compressor_name, fvalue_compressor_recipe;
   std::string posting_compressor_name, posting_compressor_recipe;
-  if (!interpret_recipe(recipe, &fvalue_compressor_name,
-                        &fvalue_compressor_recipe, &posting_compressor_name,
-                        &posting_compressor_recipe, error))
+  if (!interpret_simple_idx_recipe(
+          recipe, &fvalue_compressor_name, &fvalue_compressor_recipe,
+          &posting_compressor_name, &posting_compressor_recipe, error))
     return nullptr;
   if (!Compressor::check(fvalue_compressor_name, fvalue_compressor_recipe,
                          error))
@@ -166,9 +174,9 @@ bool SimpleIdx::check(const std::string &recipe, std::string *error) {
     return true;
   std::string fvalue_compressor_name, fvalue_compressor_recipe;
   std::string posting_compressor_name, posting_compressor_recipe;
-  if (!interpret_recipe(recipe, &fvalue_compressor_name,
-                        &fvalue_compressor_recipe, &posting_compressor_name,
-                        &posting_compressor_recipe, error))
+  if (!interpret_simple_idx_recipe(
+          recipe, &fvalue_compressor_name, &fvalue_compressor_recipe,
+          &posting_compressor_name, &posting_compressor_recipe, error))
     return false;
   if (!Compressor::check(fvalue_compressor_name, fvalue_compressor_recipe,
                          error))
