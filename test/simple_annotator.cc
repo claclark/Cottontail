@@ -288,3 +288,129 @@ TEST(SimpleAnnotator, Annotating) {
     warren->end();
   }
 }
+
+TEST(SimpleAnnotator, Multiple) {
+  std::string burrow = cottontail::DEFAULT_BURROW;
+  std::shared_ptr<cottontail::Working> working =
+      cottontail::Working::mkdir(burrow);
+  EXPECT_NE(working, nullptr);
+  std::string recipe;
+  {
+    std::string options = "tokenizer:noxml";
+    std::shared_ptr<cottontail::Builder> builder =
+        cottontail::SimpleBuilder::make(working, options);
+    EXPECT_NE(builder, nullptr);
+    EXPECT_TRUE(builder->finalize());
+    std::shared_ptr<cottontail::Warren> warren =
+        cottontail::Warren::make("simple", burrow);
+    warren->start();
+    EXPECT_NE(warren, nullptr);
+    recipe = warren->idx()->recipe();
+    warren->end();
+    std::map<std::string, std::string> parameters;
+    EXPECT_TRUE(cottontail::cook(recipe, &parameters));
+    parameters["add_file_size"] = "173";
+    recipe = cottontail::freeze(parameters);
+  }
+  {
+    std::shared_ptr<cottontail::Annotator> ann =
+        cottontail::Annotator::make("simple", recipe, nullptr, working);
+    EXPECT_NE(ann, nullptr);
+    EXPECT_TRUE(ann->transaction());
+    for (cottontail::addr i = 1823; i < 3331; i++)
+      ann->annotate(1, i, i + 73, (cottontail::addr)6);
+    EXPECT_TRUE(ann->ready());
+    ann->commit();
+    {
+      std::shared_ptr<cottontail::Idx> idx =
+          cottontail::Idx::make("simple", recipe, nullptr, working);
+      EXPECT_NE(idx, nullptr);
+      std::unique_ptr<cottontail::Hopper> one = idx->hopper(1);
+      EXPECT_NE(one, nullptr);
+      cottontail::addr p = 0;
+      for (cottontail::addr i = 1823; i < 3331; i++) {
+        cottontail::addr q, v;
+        one->tau(p + 1, &p, &q, &v);
+        EXPECT_EQ(i, p);
+        EXPECT_EQ(i + 73, q);
+        EXPECT_EQ(6, v);
+      }
+    }
+    EXPECT_TRUE(ann->transaction());
+    for (cottontail::addr i = 1231; i < 3331; i++)
+      ann->annotate(2, i, i + 97, (cottontail::addr)12);
+    for (cottontail::addr i = 1231; i < 1823; i++)
+      ann->annotate(1, i, i + 73, (cottontail::addr)6);
+    EXPECT_TRUE(ann->ready());
+    ann->commit();
+    {
+      std::shared_ptr<cottontail::Idx> idx =
+          cottontail::Idx::make("simple", recipe, nullptr, working);
+      EXPECT_NE(idx, nullptr);
+      std::unique_ptr<cottontail::Hopper> one = idx->hopper(1);
+      EXPECT_NE(one, nullptr);
+      std::unique_ptr<cottontail::Hopper> two = idx->hopper(2);
+      EXPECT_NE(two, nullptr);
+      cottontail::addr p = 0;
+      for (cottontail::addr i = 1231; i < 3331; i++) {
+        cottontail::addr q, v;
+        one->tau(p + 1, &p, &q, &v);
+        EXPECT_EQ(i, p);
+        EXPECT_EQ(i + 73, q);
+        EXPECT_EQ(6, v);
+      }
+      p = 0;
+      for (cottontail::addr i = 1231; i < 3331; i++) {
+        cottontail::addr q, v;
+        two->tau(p + 1, &p, &q, &v);
+        EXPECT_EQ(i, p);
+        EXPECT_EQ(i + 97, q);
+        EXPECT_EQ(12, v);
+      }
+    }
+    EXPECT_TRUE(ann->transaction());
+    for (cottontail::addr i = 857; i < 3331; i++)
+      ann->annotate(3, i, i + 127, (cottontail::addr)18);
+    for (cottontail::addr i = 857; i < 1231; i++)
+      ann->annotate(2, i, i + 97, (cottontail::addr)12);
+    for (cottontail::addr i = 857; i < 1231; i++)
+      ann->annotate(1, i, i + 73, (cottontail::addr)6);
+    EXPECT_TRUE(ann->ready());
+    ann->commit();
+    {
+      std::shared_ptr<cottontail::Idx> idx =
+          cottontail::Idx::make("simple", recipe, nullptr, working);
+      EXPECT_NE(idx, nullptr);
+      std::unique_ptr<cottontail::Hopper> one = idx->hopper(1);
+      EXPECT_NE(one, nullptr);
+      std::unique_ptr<cottontail::Hopper> two = idx->hopper(2);
+      EXPECT_NE(two, nullptr);
+      std::unique_ptr<cottontail::Hopper> three = idx->hopper(3);
+      EXPECT_NE(three, nullptr);
+      cottontail::addr p = 0;
+      for (cottontail::addr i = 857; i < 3331; i++) {
+        cottontail::addr q, v;
+        one->tau(p + 1, &p, &q, &v);
+        EXPECT_EQ(i, p);
+        EXPECT_EQ(i + 73, q);
+        EXPECT_EQ(6, v);
+      }
+      p = 0;
+      for (cottontail::addr i = 857; i < 3331; i++) {
+        cottontail::addr q, v;
+        two->tau(p + 1, &p, &q, &v);
+        EXPECT_EQ(i, p);
+        EXPECT_EQ(i + 97, q);
+        EXPECT_EQ(12, v);
+      }
+      p = 0;
+      for (cottontail::addr i = 857; i < 3331; i++) {
+        cottontail::addr q, v;
+        three->tau(p + 1, &p, &q, &v);
+        EXPECT_EQ(i, p);
+        EXPECT_EQ(i + 127, q);
+        EXPECT_EQ(18, v);
+      }
+    }
+  }
+}
