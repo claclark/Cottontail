@@ -369,6 +369,14 @@ TEST(SimpleAnnotator, Multiple) {
       }
     }
     EXPECT_TRUE(ann->transaction());
+    ann->annotate(1, 2, 3, 999.0);
+    EXPECT_TRUE(ann->ready());
+    ann->abort();
+    EXPECT_TRUE(ann->transaction());
+    EXPECT_FALSE(ann->transaction());
+    ann->annotate(3, 1, 2, 999.0);
+    ann->abort();
+    EXPECT_TRUE(ann->transaction());
     for (cottontail::addr i = 857; i < 3331; i++)
       ann->annotate(3, i, i + 127, (cottontail::addr)18);
     for (cottontail::addr i = 857; i < 1231; i++)
