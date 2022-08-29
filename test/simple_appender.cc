@@ -381,3 +381,88 @@ TEST(SimpleAppender, Appending) {
     warren->end();
   }
 }
+
+TEST(SimpleAppender, Abort) {
+  const char *wasteland[] = {
+      "April is the cruellest month, breeding",
+      "Lilacs out of the dead land, mixing",
+      "Memory and desire, stirring",
+      "Dull roots with spring rain.",
+      "Winter kept us warm, covering",
+      "Earth in forgetful snow, feeding",
+      "A little life with dried tubers.",
+      "Summer surprised us, coming over the Starnbergersee",
+      "With a shower of rain; we stopped in the colonnade,",
+      "And went on in sunlight, into the Hofgarten,",
+      "And drank coffee, and talked for an hour.",
+      "Bin gar keine Russin, stamm’ aus Litauen, echt deutsch.",
+      "And when we were children, staying at the archduke’s,",
+      "My cousin’s, he took me out on a sled,",
+      "And I was frightened. He said, Marie,",
+      "Marie, hold on tight. And down we went.",
+      "In the mountains, there you feel free.",
+      "I read, much of the night, and go south in the winter."};
+  std::string spam =
+      "Spam, sausage, Spam, Spam, Spam, bacon, Spam, tomato and Spam";
+  std::string error;
+  std::string burrow = cottontail::DEFAULT_BURROW;
+  {
+    std::shared_ptr<cottontail::Working> working =
+        cottontail::Working::mkdir(burrow, &error);
+    EXPECT_NE(working, nullptr);
+    std::string options = "tokenizer:noxml txt:compressor:zlib";
+    std::shared_ptr<cottontail::Builder> builder =
+        cottontail::SimpleBuilder::make(working, options, &error);
+    EXPECT_NE(builder, nullptr);
+    EXPECT_TRUE(builder->finalize(&error));
+  }
+  cottontail::addr p, q;
+  std::shared_ptr<cottontail::Working> working =
+      cottontail::Working::mkdir(burrow, &error);
+  EXPECT_NE(working, nullptr);
+  std::shared_ptr<cottontail::Featurizer> featurizer =
+      cottontail::Featurizer::make("null", "", &error, working);
+  EXPECT_NE(featurizer, nullptr);
+  std::shared_ptr<cottontail::Tokenizer> tokenizer =
+      cottontail::Tokenizer::make("ascii", "noxml", &error);
+  EXPECT_NE(tokenizer, nullptr);
+  std::shared_ptr<cottontail::Annotator> annotator =
+      cottontail::Annotator::make("null", "", &error, working);
+  EXPECT_NE(annotator, nullptr);
+  std::string appender_name = "simple";
+  std::string appender_recipe = "["
+                                "  compressor:\"zlib\","
+                                "  compressor_recipe:\"\","
+                                "]";
+  EXPECT_TRUE(cottontail::Appender::check(appender_name, appender_recipe));
+  std::shared_ptr<cottontail::Appender> appender =
+      cottontail::Appender::make(appender_name, appender_recipe, &error,
+                                 working, featurizer, tokenizer, annotator);
+  EXPECT_NE(appender, nullptr);
+  for (size_t i = 0; i < sizeof(wasteland) / sizeof(char *); i++) {
+    std::string line = std::string(wasteland[i]);
+    EXPECT_TRUE(appender->transaction());
+    EXPECT_TRUE(appender->append(line, &p, &q));
+    EXPECT_TRUE(appender->ready());
+    appender->commit();
+    EXPECT_TRUE(appender->transaction());
+    EXPECT_TRUE(appender->append(spam, &p, &q));
+    if ((i % 3) == 0) {
+      EXPECT_TRUE(appender->ready());
+    }
+    appender->abort();
+  }
+  std::shared_ptr<cottontail::Txt> txt = cottontail::Txt::make(
+      appender_name, appender_recipe, &error, tokenizer, working);
+  EXPECT_NE(txt, nullptr);
+  std::string t0 = txt->translate(0, 4);
+  EXPECT_TRUE(t0 == "April is the cruellest month, ");
+  std::string t1 = txt->translate(25, 27);
+  EXPECT_TRUE(t1 == "warm, covering\nEarth ");
+  std::string t2 = txt->translate(41, 46);
+  EXPECT_TRUE(t2 == "coming over the Starnbergersee\nWith a ");
+  std::string t3 = txt->translate(67, 72);
+  EXPECT_TRUE(t3 == "talked for an hour.\nBin gar ");
+  std::string t4 = txt->translate(86, 92);
+  EXPECT_TRUE(t4 == "at the archduke’s,\nMy cousin’s, ");
+}
