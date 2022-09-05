@@ -37,31 +37,43 @@ bool interpret_simple_idx_recipe(const std::string &recipe,
       return false;
     std::map<std::string, std::string>::iterator item;
     item = parameters.find("fvalue_compressor");
-    if (item != parameters.end())
+    if (item != parameters.end()) {
       *fvalue_compressor_name = item->second;
-    else
-      *fvalue_compressor_name = FVALUE_COMPRESSOR_NAME;
+    } else {
+      safe_set(error) = "interpret_simple_idx_recipe missing fvalue_compressor";
+      return false;
+    }
     item = parameters.find("fvalue_compressor_recipe");
-    if (item != parameters.end())
+    if (item != parameters.end()) {
       *fvalue_compressor_recipe = item->second;
-    else
-      *fvalue_compressor_recipe = FVALUE_COMPRESSOR_RECIPE;
+    } else {
+      safe_set(error) =
+          "interpret_simple_idx_recipe missing fvalue_compressor_recipe";
+      return false;
+    }
     item = parameters.find("posting_compressor");
-    if (item != parameters.end())
+    if (item != parameters.end()) {
       *posting_compressor_name = item->second;
-    else
-      *posting_compressor_name = POSTING_COMPRESSOR_NAME;
+    } else {
+      safe_set(error) =
+          "interpret_simple_idx_recipe missing posting_compressor";
+      return false;
+    }
     item = parameters.find("posting_compressor_recipe");
-    if (item != parameters.end())
+    if (item != parameters.end()) {
       *posting_compressor_recipe = item->second;
-    else
-      *posting_compressor_recipe = POSTING_COMPRESSOR_RECIPE;
+    } else {
+      safe_set(error) =
+          "interpret_simple_idx_recipe missing posting_compressor_recipe";
+      return false;
+    }
     if (add_file_size != nullptr) {
       item = parameters.find("add_file_size");
       if (item != parameters.end()) {
         try {
           *add_file_size = std::stoi(item->second);
         } catch (const std::invalid_argument &e) {
+          safe_set(error) = "interpret_simple_idx_recipe has bad add_file_size";
         }
       }
     }

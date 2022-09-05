@@ -729,6 +729,8 @@ bool tf_df_annotations(std::shared_ptr<Warren> warren, std::string *error) {
       TaggingFeaturizer::make(warren->featurizer(), "total", error);
   if (total_featurizer == nullptr)
     return false;
+  if (!warren->annotator()->transaction(error))
+    return false;
   std::map<addr, addr> df;
   addr HUGE = 1014 * 1024;
   std::vector<addr> ps, qs;
@@ -756,7 +758,7 @@ bool tf_df_annotations(std::shared_ptr<Warren> warren, std::string *error) {
         }
         for (auto &token : tf) {
           addr tf_feature = tf_featurizer->featurize(token.first);
-          if (!warren->idx()->add_annotation(tf_feature, ps[i], ps[i],
+          if (!warren->annotator()->annotate(tf_feature, ps[i], ps[i],
                                              token.second, error))
             return false;
           addr df_feature = df_featurizer->featurize(token.first);
@@ -775,17 +777,21 @@ bool tf_df_annotations(std::shared_ptr<Warren> warren, std::string *error) {
     return false;
   }
   for (auto &feature : df)
-    if (!warren->idx()->add_annotation(feature.first, 0, 0, feature.second,
+    if (!warren->annotator()->annotate(feature.first, 0, 0, feature.second,
                                        error))
       return false;
-  if (!warren->idx()->add_annotation(total_featurizer->featurize("items"), 0, 0,
+  if (!warren->annotator()->annotate(total_featurizer->featurize("items"), 0, 0,
                                      total_items, error))
     return false;
-  if (!warren->idx()->add_annotation(total_featurizer->featurize("length"), 0,
+  if (!warren->annotator()->annotate(total_featurizer->featurize("length"), 0,
                                      0, total_length, error))
     return false;
-  if (!warren->idx()->finalize(error))
+  if (!warren->annotator()->ready()) {
+    warren->annotator()->abort();
+    safe_set(error) = "tf_df_annotations can't commit changes";
     return false;
+  }
+  warren->annotator()->commit();
   std::string stats_key = "statistics";
   std::string stats_name = "df";
   if (!warren->set_parameter(stats_key, stats_name, error))

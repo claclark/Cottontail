@@ -3,6 +3,8 @@
 #include <iostream>
 #include <map>
 
+#include "src/annotator.h"
+#include "src/appender.h"
 #include "src/core.h"
 #include "src/fastid_txt.h"
 #include "src/featurizer.h"
@@ -77,7 +79,7 @@ std::shared_ptr<Warren> SimpleWarren::make(const std::string &burrow,
     }
     auto preload_element = extra_parameters.find("preload");
     if (preload_element != extra_parameters.end()) {
-      std::string preload_value = preload_element->second; 
+      std::string preload_value = preload_element->second;
       preload = okay(preload_value);
     }
   }
@@ -89,6 +91,15 @@ std::shared_ptr<Warren> SimpleWarren::make(const std::string &burrow,
     return nullptr;
   std::shared_ptr<SimpleWarren> warren = std::shared_ptr<SimpleWarren>(
       new SimpleWarren(working, featurizer, tokenizer, idx, txt));
+  warren->annotator_ = Annotator::make(
+      idx_parameters["name"], idx_parameters["recipe"], error, working);
+  if (warren->annotator_ == nullptr)
+    return nullptr;
+  warren->appender_ =
+      Appender::make(txt_parameters["name"], txt_parameters["recipe"], error,
+                     working, featurizer, tokenizer, warren->annotator_);
+  if (warren->appender_ == nullptr)
+    return nullptr;
   if (container_query != "")
     warren->default_container_ = container_query;
   if (stemmer_name != "") {

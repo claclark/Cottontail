@@ -5,6 +5,8 @@
 #include <memory>
 #include <string>
 
+#include "src/annotator.h"
+#include "src/appender.h"
 #include "src/core.h"
 #include "src/featurizer.h"
 #include "src/gcl.h"
@@ -73,6 +75,14 @@ public:
     assert(started_);
     return stats_;
   }
+  inline std::shared_ptr<Annotator> annotator() {
+    assert(started_);
+    return annotator_;
+  }
+  inline std::shared_ptr<Appender> appender() {
+    assert(started_);
+    return appender_;
+  }
   inline std::string default_container() {
     assert(started_);
     return default_container_;
@@ -124,6 +134,8 @@ public:
 protected:
   std::string default_container_;
   std::shared_ptr<Stemmer> stemmer_ = nullptr;
+  std::shared_ptr<Annotator> annotator_ = nullptr;
+  std::shared_ptr<Appender> appender_ = nullptr;
 
 private:
   virtual bool set_parameter_(const std::string &key, const std::string &value,

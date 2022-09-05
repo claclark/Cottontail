@@ -113,8 +113,11 @@ bool SimpleAnnotator::transaction_(std::string *error) {
     return false;
   }
   lock_.lock();
-  if (adding_)
-    return true;
+  if (adding_) {
+    safe_set(error) = "SimpleAnnotator alreay in transaction";
+    lock_.unlock();
+    return false;
+  }
   std::string lock_filename = idx_filename_ + std::string(".lock");
   if (link(idx_filename_.c_str(), lock_filename.c_str()) != 0) {
     safe_set(error) = "SimpleAnnotator can't obtain transaction lock";
@@ -322,9 +325,9 @@ bool SimpleAnnotator::ready_() {
     lock_.unlock();
     return false;
   }
-  lock_.unlock();
   adding_ = false;
   isready_ = true;
+  lock_.unlock();
   return true;
 }
 

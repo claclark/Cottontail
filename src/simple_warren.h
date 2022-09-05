@@ -3,6 +3,8 @@
 
 #include <string>
 
+#include "src/annotator.h"
+#include "src/appender.h"
 #include "src/core.h"
 #include "src/featurizer.h"
 #include "src/idx.h"
