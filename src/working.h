@@ -104,7 +104,7 @@ public:
   std::string make_name(const std::string &name) {
     return working_ + "/" + name;
   }
-  std::string make_temp() {
+  std::string make_temp(const std::string &extension = "") {
     lock_.lock();
     std::stringstream ss;
     ss << "temp.";
@@ -112,6 +112,10 @@ public:
     ss.width(8);
     ss << temp_counter_;
     temp_counter_++;
+    if (extension != "") {
+      ss << ".";
+      ss << extension;
+    }
     lock_.unlock();
     return make_name(ss.str());
   };

@@ -67,7 +67,7 @@ bool Annotator::annotate_(const std::string &annotations_filename,
   for (annf.read(reinterpret_cast<char *>(&current), sizeof(Annotation));
        !annf.fail();
        annf.read(reinterpret_cast<char *>(&current), sizeof(Annotation)))
-    if (!annotate(current.feature, current.p, current.v, current.v))
+    if (!annotate(current.feature, current.p, current.q, current.v))
       return false;
   annf.close();
   return true;

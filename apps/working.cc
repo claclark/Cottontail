@@ -7,6 +7,9 @@
 #define EXPECT_TRUE(a) (assert((a)))
 #define EXPECT_FALSE(a) (assert(!(a)))
 
+#include <cmath>
+#define EXPECT_FLOAT_EQ(a, b) assert(fabs((a) - (b)) < 0.00000001)
+
 #include <cstring>
 #define EXPECT_STREQ(a, b) (assert(strcmp((a), (b)) == 0))
 

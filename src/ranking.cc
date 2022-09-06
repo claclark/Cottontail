@@ -805,7 +805,9 @@ bool tf_idf_annotations(std::shared_ptr<Warren> warren, std::string *error,
                         bool include_rsj) {
   if (!(include_idf || include_rsj))
     return true; // weird, but whatever
-  std::string working_filename = warren->working()->make_temp();
+  if (!warren->annotator()->transaction(error))
+    return false;
+  std::string working_filename = warren->working()->make_temp("idf");
   std::ofstream anf(working_filename, std::ios::binary);
   if (anf.fail()) {
     safe_set(error) =
@@ -904,8 +906,15 @@ bool tf_idf_annotations(std::shared_ptr<Warren> warren, std::string *error,
     }
   }
   anf.close();
-  if (!warren->idx()->add_annotations(working_filename, error))
+  if (!warren->annotator()->annotate(working_filename, error))
     return false;
+  std::remove(working_filename.c_str());
+  if (!warren->annotator()->ready()) {
+    warren->annotator()->abort();
+    safe_set(error) = "tf_idf_annotations can't commit changes";
+    return false;
+  }
+  warren->annotator()->commit();
   std::string key, value;
   key = "unstemmed";
   value = okay(include_unstemmed);

@@ -114,7 +114,7 @@ bool SimpleAnnotator::transaction_(std::string *error) {
   }
   lock_.lock();
   if (adding_) {
-    safe_set(error) = "SimpleAnnotator alreay in transaction";
+    safe_set(error) = "SimpleAnnotator already in transaction";
     lock_.unlock();
     return false;
   }
@@ -227,7 +227,7 @@ void SimpleAnnotator::maybe_flush_additions(bool force) {
         posting->write(&addf);
       }
     };
-    std::string add_filename = working_->make_temp();
+    std::string add_filename = working_->make_temp("ann");
     added_files_.push_back(add_filename);
     if (multithreaded_)
       workers_.emplace_back(std::thread(sorter, add_filename, std::move(added_),
@@ -262,8 +262,8 @@ bool SimpleAnnotator::annotate_(addr feature, addr p, addr q, fval v,
       added_->emplace_back(feature, p, q, v);
       maybe_flush_additions(false);
     }
-    lock_.unlock();
   }
+  lock_.unlock();
   return outcome;
 }
 
@@ -300,8 +300,8 @@ bool SimpleAnnotator::ready_() {
     lock_.unlock();
     return false;
   }
-  std::string tmp_idx_filename = working_->make_temp();
-  std::string tmp_pst_filename = working_->make_temp();
+  std::string tmp_idx_filename = working_->make_temp("idx");
+  std::string tmp_pst_filename = working_->make_temp("pst");
   if (!merge_updates(added_files_, tmp_idx_filename, tmp_pst_filename,
                      posting_factory_)) {
     cleanup_temporary_files();

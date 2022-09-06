@@ -21,29 +21,25 @@ int main(int argc, char **argv) {
   }
   bool report_addr = true;
   std::string burrow = cottontail::DEFAULT_BURROW;
+  if (argc > 2 &&
+      (argv[1] == std::string("-b") || argv[1] == std::string("--burrow"))) {
+    burrow = argv[2];
+    argc -= 2;
+    argv += 2;
+  }
   if (argc == 2) {
-    burrow = argv[1];
-  } else if (argc > 1) {
-    if (argc > 2 &&
-        (argv[1] == std::string("-b") || argv[1] == std::string("--burrow"))) {
-      burrow = argv[2];
-      argc -= 2;
-      argv += 2;
-    }
-    if (argc == 2) {
-      if (argv[1] == std::string("-a") || argv[1] == std::string("--addr")) {
-        report_addr = true;
-      } else if (argv[1] == std::string("-f") ||
-                 argv[1] == std::string("--fval")) {
-        report_addr = false;
-      } else {
-        usage(program_name);
-        return 1;
-      }
-    } else if (argc != 1) {
+    if (argv[1] == std::string("-a") || argv[1] == std::string("--addr")) {
+      report_addr = true;
+    } else if (argv[1] == std::string("-f") ||
+               argv[1] == std::string("--fval")) {
+      report_addr = false;
+    } else {
       usage(program_name);
       return 1;
     }
+  } else if (argc != 1) {
+    usage(program_name);
+    return 1;
   }
   std::string error;
   std::string simple = "simple";
