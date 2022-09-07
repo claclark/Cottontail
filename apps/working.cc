@@ -20,6 +20,13 @@
 #include <string>
 
 #include "src/cottontail.h"
+#include <cassert>
+#include <fstream>
+#include <iostream>
+#include <memory>
+#include <string>
+#include <thread>
+#include <vector>
 
 void test0() {
 }

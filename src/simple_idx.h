@@ -39,22 +39,14 @@ private:
   std::unique_ptr<Hopper> hopper_(addr feature) final;
   addr count_(addr feature) final;
   addr vocab_() final;
-  bool add_annotations_(const std::string &annotations_filename,
-                        std::string *error) final;
-  bool add_annotation_(addr feature, addr p, addr q, fval v,
-                       std::string *error) final;
-  bool finalize_(std::string *error) final;
+  void reset_();
   struct CacheRecord {
     addr n;
     std::shared_ptr<addr> postings;
     std::shared_ptr<addr> qostings;
     std::shared_ptr<fval> fostings;
   };
-  void reset();
   CacheRecord load_cache(addr feature);
-  bool add_annotations_locked(const std::string &annotations_filename,
-                              std::string *error);
-  void maybe_flush_additions(bool force);
   bool multithreaded_ = true;
   std::string posting_compressor_name_;
   std::string posting_compressor_recipe_;

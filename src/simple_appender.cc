@@ -126,7 +126,7 @@ bool SimpleAppender::append_(const std::string &text, addr *p, addr *q,
       tokenizer_->tokenize(featurizer_, buffer.get(), length);
   if (tokens.size() == 0) {
     // There are no actual tokens in this text, but we still want
-    // add_annotation to work correctly with the returned values.
+    // annotation to work correctly with the returned values.
     *p = address_ + 1;
     *q = address_;
     offset_ += length;

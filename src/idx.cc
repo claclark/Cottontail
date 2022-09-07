@@ -50,20 +50,4 @@ addr Idx::count_(addr feature) {
   return n;
 }
 
-bool Idx::add_annotations_(const std::string &annotations_filename,
-                           std::string *error) {
-  safe_set(error) = "Adding annotations is not implemented in this Idx";
-  return false;
-}
-
-bool Idx::add_annotation_(addr feature, addr p, addr q, fval v,
-                          std::string *error) {
-  safe_set(error) = "Adding annotations is not implemented in this Idx";
-  return false;
-}
-
-bool Idx::finalize_(std::string *error) {
-  safe_set(error) = "Adding annotations is not implemented in this Idx";
-  return false;
-}
 } // namespace cottontail

@@ -19,6 +19,7 @@
 #include "src/featurizer.h"
 #include "src/hopper.h"
 #include "src/idx.h"
+#include "src/simple_annotator.h"
 #include "src/simple_builder.h"
 #include "src/simple_idx.h"
 #include "src/simple_posting.h"
@@ -219,9 +220,9 @@ TEST(Simple, E2E) {
       annf.write(reinterpret_cast<char *>(&annr0), sizeof(annr0));
       cottontail::Annotation annr1 = {junk, 64, 72, 2.0};
       annf.write(reinterpret_cast<char *>(&annr1), sizeof(annr1));
-      cottontail::Annotation annr2 = {cat, 1002, 1005, 2.0};
+      cottontail::Annotation annr2 = {cat, 1003, 1009, 2.0};
       annf.write(reinterpret_cast<char *>(&annr2), sizeof(annr2));
-      cottontail::Annotation annr3 = {cat, 2008, 2015, 2.0};
+      cottontail::Annotation annr3 = {cat, 2000, 2014, 2.0};
       annf.write(reinterpret_cast<char *>(&annr3), sizeof(annr3));
       cottontail::Annotation annr4 = {junk, 12, 32, 3.0};
       annf.write(reinterpret_cast<char *>(&annr4), sizeof(annr4));
@@ -236,7 +237,16 @@ TEST(Simple, E2E) {
     ASSERT_TRUE(cottontail::sort_annotations(working, ann_filename,
                                              &sorted_ann_filename, &error));
     ASSERT_TRUE(cottontail::check_annotations(sorted_ann_filename, &error));
-    ASSERT_TRUE(idx->add_annotations(sorted_ann_filename, &error));
+    {
+      std::shared_ptr<cottontail::Annotator> ann =
+          cottontail::SimpleAnnotator::make(idx->recipe(), working, &error);
+      ASSERT_NE(ann, nullptr);
+      ASSERT_TRUE(ann->transaction());
+      ASSERT_TRUE(ann->annotate(sorted_ann_filename, &error));
+      ASSERT_TRUE(ann->ready());
+      ann->commit();
+    }
+    std::remove(sorted_ann_filename.c_str());
   }
   {
     std::shared_ptr<cottontail::Idx> idx =
@@ -262,14 +272,14 @@ TEST(Simple, E2E) {
     EXPECT_EQ(q, 32);
     EXPECT_EQ(v, 3.0);
     ASSERT_NE((hopper = idx->hopper(featurizer->featurize(cat_tag))), nullptr);
-    hopper->tau(1000, &p, &q, &v);
-    EXPECT_EQ(p, 1002);
-    EXPECT_EQ(q, 1005);
+    hopper->tau(1002, &p, &q, &v);
+    EXPECT_EQ(p, 1003);
+    EXPECT_EQ(q, 1009);
     EXPECT_EQ(v, 2.0);
-    hopper->tau(2000, &p, &q, &v);
-    EXPECT_EQ(p, 2009);
-    EXPECT_EQ(q, 2015);
-    EXPECT_EQ(v, 0.0);
+    hopper->tau(1999, &p, &q, &v);
+    EXPECT_EQ(p, 2000);
+    EXPECT_EQ(q, 2014);
+    EXPECT_EQ(v, 2.0);
     std::string lazy = "lazy";
     ASSERT_NE((hopper = idx->hopper(featurizer->featurize(lazy))), nullptr);
     hopper->tau(2000, &p, &q, &v);
@@ -326,29 +336,32 @@ TEST(Simple, E2E) {
     ASSERT_NE((hopper = warren->idx()->hopper(featurizer->featurize(quick))),
               nullptr);
     cottontail::addr p, q;
+    ASSERT_TRUE(warren->annotator()->transaction());
     for (hopper->tau(cottontail::minfinity + 1, &p, &q);
          p < cottontail::maxfinity; hopper->tau(p + 1, &p, &q)) {
-      ASSERT_TRUE(warren->idx()->add_annotation(featurizer->featurize(qbf_tag),
+      ASSERT_TRUE(warren->annotator()->annotate(featurizer->featurize(qbf_tag),
                                                 p, p + 2, 1.0 * p));
       p_quick.push_back(p);
     }
     cottontail::addr extra = warren->featurizer()->featurize(extra_tag);
     ASSERT_TRUE(
-        warren->idx()->add_annotation(extra, 10000000, 20000000, -11.0));
+        warren->annotator()->annotate(extra, 10000000, 20000000, -11.0));
     std::string jumped = "jumped";
     ASSERT_NE((hopper = warren->idx()->hopper(featurizer->featurize(jumped))),
               nullptr);
     for (hopper->uat(cottontail::maxfinity - 1, &p, &q);
          q > cottontail::minfinity; hopper->uat(q - 1, &p, &q)) {
-      ASSERT_TRUE(warren->idx()->add_annotation(featurizer->featurize(bfj_tag),
+      ASSERT_TRUE(warren->annotator()->annotate(featurizer->featurize(bfj_tag),
                                                 q - 2, q, -1.0 * q));
       q_jumped.push_back(q);
       ASSERT_EQ(warren->txt()->translate(q - 2, q), bfj);
     }
     ASSERT_EQ(q_jumped.size(), (size_t)NUMBER);
-    ASSERT_TRUE(warren->idx()->add_annotation(extra, 1, 1, 12.0));
-    ASSERT_TRUE(warren->idx()->add_annotation(extra, 9999, 99999, -12.0));
-    ASSERT_TRUE(warren->idx()->finalize());
+    ASSERT_TRUE(warren->annotator()->annotate(extra, 1, 1, 12.0));
+    ASSERT_TRUE(warren->annotator()->annotate(extra, 9999, 99999, -12.0));
+    ASSERT_TRUE(warren->annotator()->ready());
+    warren->annotator()->commit();
+    warren->idx()->reset();
     ASSERT_NE((hopper = warren->idx()->hopper(featurizer->featurize(qbf_tag))),
               nullptr);
     cottontail::fval v;
@@ -399,8 +412,11 @@ TEST(Simple, E2E) {
       EXPECT_EQ(v, -1.0 * k);
     }
     cottontail::addr extra = warren->featurizer()->featurize(extra_tag);
-    ASSERT_TRUE(warren->idx()->add_annotation(extra, 100, 200, -99.0));
-    ASSERT_TRUE(warren->idx()->finalize());
+    ASSERT_TRUE(warren->annotator()->transaction());
+    ASSERT_TRUE(warren->annotator()->annotate(extra, 100, 200, -99.0));
+    ASSERT_TRUE(warren->annotator()->ready());
+    warren->annotator()->commit();
+    warren->idx()->reset();
     {
       ASSERT_NE((hopper = warren->idx()->hopper(extra)), nullptr);
       cottontail::addr p, q;
