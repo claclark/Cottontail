@@ -30,7 +30,7 @@ SimpleAnnotator::make(const std::string &recipe,
   }
   std::string fvalue_compressor_name, fvalue_compressor_recipe;
   std::string posting_compressor_name, posting_compressor_recipe;
-  size_t add_file_size = -1;
+  size_t add_file_size = 0;
   if (!interpret_simple_idx_recipe(
           recipe, &fvalue_compressor_name, &fvalue_compressor_recipe,
           &posting_compressor_name, &posting_compressor_recipe, error,
