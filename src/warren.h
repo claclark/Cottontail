@@ -13,6 +13,7 @@
 #include "src/hopper.h"
 #include "src/idx.h"
 #include "src/parse.h"
+#include "src/scribe.h"
 #include "src/stemmer.h"
 #include "src/tokenizer.h"
 #include "src/txt.h"
@@ -38,7 +39,9 @@ public:
          std::shared_ptr<Txt> txt)
       : default_container_(std::string("")),
         stemmer_(std::make_shared<NullStemmer>()), working_(working),
-        featurizer_(featurizer), tokenizer_(tokenizer), idx_(idx), txt_(txt){};
+        featurizer_(featurizer), tokenizer_(tokenizer), idx_(idx), txt_(txt) {
+    scribe_ = Scribe::null();
+  };
   inline std::string name() { return name_; }
   inline void start() {
     // Aspirational stub for update synchronization
@@ -124,6 +127,7 @@ public:
                             std::string *error = nullptr) {
     return get_parameter_(key, value, error);
   }
+  inline std::shared_ptr<Scribe> scribe() { return scribe_; }
 
   virtual ~Warren(){};
   Warren(const Warren &) = delete;
@@ -150,6 +154,7 @@ private:
   std::shared_ptr<Idx> idx_ = nullptr;
   std::shared_ptr<Txt> txt_ = nullptr;
   std::shared_ptr<Stats> stats_ = nullptr;
+  std::shared_ptr<Scribe> scribe_ = nullptr;
 };
 } // namespace cottontail
 
