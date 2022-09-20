@@ -47,6 +47,7 @@ template <typename T> std::shared_ptr<T> shared_array(addr size) {
 bool okay(const std::string &value);
 std::string okay(bool yes);
 void stamp(std::string label = "");
+addr now();
 
 struct Token {
   Token() = default;

@@ -88,7 +88,8 @@ int main(int argc, char **argv) {
   }
   std::ifstream queriesf(queries_filename);
   if (queriesf.fail()) {
-    std::cerr << program_name << ": can't open file: " + queries_filename << "\n";
+    std::cerr << program_name << ": can't open file: " + queries_filename
+              << "\n";
     return 1;
   }
   std::string line;
