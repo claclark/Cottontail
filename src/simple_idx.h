@@ -46,7 +46,7 @@ private:
     std::shared_ptr<addr> qostings;
     std::shared_ptr<fval> fostings;
   };
-  CacheRecord load_cache(addr feature);
+  std::shared_ptr<CacheRecord> load_cache(addr feature);
   bool multithreaded_ = true;
   std::string posting_compressor_name_;
   std::string posting_compressor_recipe_;
@@ -59,20 +59,13 @@ private:
   std::vector<IdxRecord> pst_map_;
   std::shared_ptr<Reader> pst_;
   std::mutex cache_lock_;
-  std::map<addr, CacheRecord> cache_;
+  std::map<addr, std::shared_ptr<CacheRecord>> cache_;
   std::map<addr, addr> counts_;
   addr stamp_ = 0;
   std::map<addr, addr> ages_;
   addr large_threshold_ = 1024;
   addr large_limit_ = 1024 * 1024 * 1024;
   addr large_total_ = 0;
-  std::mutex update_lock_;
-  std::shared_ptr<bool> cannot_create_temp_files_;
-  static const size_t ADD_FILE_SIZE = 256 * 1024 * 1024;
-  std::shared_ptr<SimplePostingFactory> posting_factory_;
-  std::vector<std::string> added_files_;
-  std::unique_ptr<std::vector<Annotation>> added_;
-  std::vector<std::thread> workers_;
 };
 
 bool interpret_simple_idx_recipe(const std::string &recipe,
