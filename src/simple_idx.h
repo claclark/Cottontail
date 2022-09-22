@@ -1,6 +1,7 @@
 #ifndef COTTONTAIL_SRC_SIMPLE_IDX_H_
 #define COTTONTAIL_SRC_SIMPLE_IDX_H_
 
+#include <condition_variable>
 #include <fstream>
 #include <map>
 #include <memory>
@@ -40,12 +41,6 @@ private:
   addr count_(addr feature) final;
   addr vocab_() final;
   void reset_();
-  struct CacheRecord {
-    addr n;
-    std::shared_ptr<addr> postings;
-    std::shared_ptr<addr> qostings;
-    std::shared_ptr<fval> fostings;
-  };
   std::shared_ptr<CacheRecord> load_cache(addr feature);
   bool multithreaded_ = true;
   std::string posting_compressor_name_;

@@ -3,8 +3,10 @@
 
 // Fundamental definitions and structures.
 
+#include <condition_variable>
 #include <cstdint>
 #include <memory>
+#include <mutex>
 #include <string>
 
 namespace cottontail {
@@ -56,12 +58,23 @@ struct Token {
   addr feature, address;
   size_t offset, length;
 };
+
 struct Annotation {
   Annotation() = default;
   Annotation(addr feature, addr p, addr q, fval v)
       : feature(feature), p(p), q(q), v(v){};
   addr feature, p, q;
   fval v;
+};
+
+struct CacheRecord {
+  addr n;
+  std::shared_ptr<addr> postings;
+  std::shared_ptr<addr> qostings;
+  std::shared_ptr<fval> fostings;
+  bool ready;
+  std::mutex lock;
+  std::condition_variable condition;
 };
 } // namespace cottontail
 

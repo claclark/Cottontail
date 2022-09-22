@@ -6,6 +6,7 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "src/array_hopper.h"
@@ -251,13 +252,49 @@ void SimpleIdx::reset_() {
   cache_lock_.unlock();
 }
 
-std::shared_ptr<SimpleIdx::CacheRecord> SimpleIdx::load_cache(addr feature) {
-  std::shared_ptr<CacheRecord> c =
-      std::shared_ptr<CacheRecord>(new CacheRecord);
+namespace {
+void decompress_postings(std::unique_ptr<char[]> storage,
+                         std::shared_ptr<Compressor> posting_compressor,
+                         std::shared_ptr<Compressor> fvalue_compressor,
+                         std::shared_ptr<CacheRecord> c) {
+
+  char *buffer = storage.get();
+  PstRecord *pstp = reinterpret_cast<PstRecord *>(buffer);
+  buffer += sizeof(PstRecord);
+  c->postings = cottontail::shared_array<cottontail::addr>(c->n);
+  posting_compressor->tang(buffer, pstp->pst,
+                           reinterpret_cast<char *>(c->postings.get()),
+                           c->n * sizeof(addr));
+  buffer += pstp->pst;
+  if (pstp->qst == 0) {
+    c->qostings = c->postings;
+  } else {
+    c->qostings = cottontail::shared_array<cottontail::addr>(c->n);
+    posting_compressor->tang(buffer, pstp->qst,
+                             reinterpret_cast<char *>(c->qostings.get()),
+                             c->n * sizeof(addr));
+  }
+  buffer += pstp->qst;
+  if (pstp->fst == 0) {
+    c->fostings = nullptr;
+  } else {
+    c->fostings = cottontail::shared_array<cottontail::fval>(c->n);
+    fvalue_compressor->tang(buffer, pstp->fst,
+                            reinterpret_cast<char *>(c->fostings.get()),
+                            c->n * sizeof(fval));
+  }
+  c->lock.lock();
+  c->ready = true;
+  c->lock.unlock();
+  c->condition.notify_all();
+}
+} // namespace
+
+std::shared_ptr<CacheRecord> SimpleIdx::load_cache(addr feature) {
   cache_lock_.lock();
   std::map<addr, std::shared_ptr<CacheRecord>>::iterator cached;
   if ((cached = cache_.find(feature)) != cache_.end()) {
-    c = cached->second;
+    std::shared_ptr<CacheRecord> c = cached->second;
     if (c->n > large_threshold_)
       ages_[feature] = stamp_++;
     cache_lock_.unlock();
@@ -266,10 +303,11 @@ std::shared_ptr<SimpleIdx::CacheRecord> SimpleIdx::load_cache(addr feature) {
   IdxRecord *map = pst_map_.data();
   IdxRecord *irp = locate(feature, map, pst_map_.size());
   if (irp == nullptr) {
-    c->n = 0;
     cache_lock_.unlock();
-    return c;
+    return nullptr;
   }
+  std::shared_ptr<CacheRecord> c =
+      std::shared_ptr<CacheRecord>(new CacheRecord);
   addr where, amount;
   if (irp == map)
     where = 0;
@@ -281,29 +319,10 @@ std::shared_ptr<SimpleIdx::CacheRecord> SimpleIdx::load_cache(addr feature) {
   pst_->read(buffer, where, amount);
   PstRecord *pstp = reinterpret_cast<PstRecord *>(buffer);
   c->n = pstp->n;
-  buffer += sizeof(PstRecord);
-  c->postings = cottontail::shared_array<cottontail::addr>(c->n);
-  posting_compressor_->tang(buffer, pstp->pst,
-                            reinterpret_cast<char *>(c->postings.get()),
-                            c->n * sizeof(addr));
-  buffer += pstp->pst;
-  if (pstp->qst == 0) {
-    c->qostings = c->postings;
-  } else {
-    c->qostings = cottontail::shared_array<cottontail::addr>(c->n);
-    posting_compressor_->tang(buffer, pstp->qst,
-                              reinterpret_cast<char *>(c->qostings.get()),
-                              c->n * sizeof(addr));
-    buffer += pstp->qst;
-  }
-  if (pstp->fst == 0) {
-    c->fostings = nullptr;
-  } else {
-    c->fostings = cottontail::shared_array<cottontail::fval>(c->n);
-    fvalue_compressor_->tang(buffer, pstp->fst,
-                             reinterpret_cast<char *>(c->fostings.get()),
-                             c->n * sizeof(fval));
-  }
+  c->ready = false;
+  std::thread t(decompress_postings, std::move(storage), posting_compressor_,
+                fvalue_compressor_, c);
+  t.detach();
   if (c->n > large_threshold_) {
     if (large_total_ > large_limit_) {
       std::vector<addr> old;
@@ -330,7 +349,16 @@ std::shared_ptr<SimpleIdx::CacheRecord> SimpleIdx::load_cache(addr feature) {
 
 std::unique_ptr<Hopper> SimpleIdx::hopper_(addr feature) {
   std::shared_ptr<CacheRecord> c = load_cache(feature);
-  if (c->n == 0) {
+  if (c != nullptr) {
+    if (!c->ready) {
+      std::unique_lock<std::mutex> l(c->lock);
+      do {
+        c->condition.wait(l, [&] { return c->ready; });
+      } while (!c->ready);
+    }
+    c->condition.notify_all();
+  }
+  if (c == nullptr || c->n == 0) {
     return std::make_unique<EmptyHopper>();
   } else if (c->n == 1) {
     if (c->fostings == nullptr) {
@@ -341,7 +369,7 @@ std::unique_ptr<Hopper> SimpleIdx::hopper_(addr feature) {
                                                *(c->fostings));
     }
   } else {
-    return ArrayHopper::make(c->n, c->postings, c->qostings, c->fostings);
+    return ArrayHopper::make(c);
   }
 }
 
@@ -356,6 +384,7 @@ addr SimpleIdx::count_(addr feature) {
   std::map<addr, std::shared_ptr<CacheRecord>>::iterator cached;
   if ((cached = cache_.find(feature)) != cache_.end()) {
     std::shared_ptr<CacheRecord> c = cached->second;
+    counts_[feature] = c->n;
     cache_lock_.unlock();
     return c->n;
   }
@@ -388,7 +417,16 @@ std::map<fval, addr> SimpleIdx::feature_histogram() {
   std::map<fval, addr> histogram;
   for (auto &ir : pst_map_) {
     std::shared_ptr<CacheRecord> c = load_cache(ir.feature);
-    if (c->fostings != nullptr) {
+    if (c != nullptr) {
+      if (!c->ready) {
+        std::unique_lock<std::mutex> l(c->lock);
+        do {
+          c->condition.wait(l, [&] { return c->ready; });
+        } while (!c->ready);
+      }
+      c->condition.notify_all();
+    }
+    if (c != nullptr && c->fostings != nullptr) {
       fval *start = c->fostings.get();
       fval *end = start + c->n;
       for (fval *v = start; v < end; v++) {
