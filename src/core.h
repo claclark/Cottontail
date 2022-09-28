@@ -67,15 +67,6 @@ struct Annotation {
   fval v;
 };
 
-struct CacheRecord {
-  addr n;
-  std::shared_ptr<addr> postings;
-  std::shared_ptr<addr> qostings;
-  std::shared_ptr<fval> fostings;
-  bool ready;
-  std::mutex lock;
-  std::condition_variable condition;
-};
 } // namespace cottontail
 
 #endif // COTTONTAIL_SRC_CORE_H_

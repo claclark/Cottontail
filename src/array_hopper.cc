@@ -108,6 +108,7 @@ inline addr gnippoh(const addr *addrs, addr n, addr *current, addr k) {
 } // namespace
 
 addr ArrayHopper::L_(addr k) {
+  wait();
   switch (gnippoh(qostings_, n_, &current_, k)) {
   case maxfinity:
     return maxfinity;
@@ -119,6 +120,7 @@ addr ArrayHopper::L_(addr k) {
 }
 
 addr ArrayHopper::R_(addr k) {
+  wait();
   switch (hopping(postings_, n_, &current_, k)) {
   case maxfinity:
     return maxfinity;
@@ -130,6 +132,7 @@ addr ArrayHopper::R_(addr k) {
 }
 
 void ArrayHopper::tau_(addr k, addr *p, addr *q, fval *v) {
+  wait();
   switch (*p = hopping(postings_, n_, &current_, k)) {
   case maxfinity:
   case minfinity:
@@ -144,6 +147,7 @@ void ArrayHopper::tau_(addr k, addr *p, addr *q, fval *v) {
 }
 
 void ArrayHopper::rho_(addr k, addr *p, addr *q, fval *v) {
+  wait();
   switch (*q = hopping(qostings_, n_, &current_, k)) {
   case maxfinity:
   case minfinity:
@@ -158,6 +162,7 @@ void ArrayHopper::rho_(addr k, addr *p, addr *q, fval *v) {
 }
 
 void ArrayHopper::uat_(addr k, addr *p, addr *q, fval *v) {
+  wait();
   switch (*q = gnippoh(qostings_, n_, &current_, k)) {
   case maxfinity:
   case minfinity:
@@ -172,6 +177,7 @@ void ArrayHopper::uat_(addr k, addr *p, addr *q, fval *v) {
 }
 
 void ArrayHopper::ohr_(addr k, addr *p, addr *q, fval *v) {
+  wait();
   switch (*p = gnippoh(postings_, n_, &current_, k)) {
   case maxfinity:
   case minfinity:

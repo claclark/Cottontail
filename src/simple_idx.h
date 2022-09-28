@@ -10,6 +10,7 @@
 #include <thread>
 #include <vector>
 
+#include "src/array_hopper.h"
 #include "src/compressor.h"
 #include "src/core.h"
 #include "src/hopper.h"

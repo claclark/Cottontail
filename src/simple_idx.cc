@@ -349,18 +349,10 @@ std::shared_ptr<CacheRecord> SimpleIdx::load_cache(addr feature) {
 
 std::unique_ptr<Hopper> SimpleIdx::hopper_(addr feature) {
   std::shared_ptr<CacheRecord> c = load_cache(feature);
-  if (c != nullptr) {
-    if (!c->ready) {
-      std::unique_lock<std::mutex> l(c->lock);
-      do {
-        c->condition.wait(l, [&] { return c->ready; });
-      } while (!c->ready);
-    }
-    c->condition.notify_all();
-  }
   if (c == nullptr || c->n == 0) {
     return std::make_unique<EmptyHopper>();
   } else if (c->n == 1) {
+    c->wait();
     if (c->fostings == nullptr) {
       return std::make_unique<SingletonHopper>(*(c->postings), *(c->qostings),
                                                0.0);
@@ -418,23 +410,17 @@ std::map<fval, addr> SimpleIdx::feature_histogram() {
   for (auto &ir : pst_map_) {
     std::shared_ptr<CacheRecord> c = load_cache(ir.feature);
     if (c != nullptr) {
-      if (!c->ready) {
-        std::unique_lock<std::mutex> l(c->lock);
-        do {
-          c->condition.wait(l, [&] { return c->ready; });
-        } while (!c->ready);
-      }
-      c->condition.notify_all();
-    }
-    if (c != nullptr && c->fostings != nullptr) {
-      fval *start = c->fostings.get();
-      fval *end = start + c->n;
-      for (fval *v = start; v < end; v++) {
-        fval value = *v;
-        if (histogram.find(value) == histogram.end())
-          histogram[value] = 1;
-        else
-          histogram[value]++;
+      c->wait();
+      if (c->fostings != nullptr) {
+        fval *start = c->fostings.get();
+        fval *end = start + c->n;
+        for (fval *v = start; v < end; v++) {
+          fval value = *v;
+          if (histogram.find(value) == histogram.end())
+            histogram[value] = 1;
+          else
+            histogram[value]++;
+        }
       }
     }
   }
