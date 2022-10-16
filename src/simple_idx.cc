@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cassert>
 #include <fstream>
+#include <future>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -253,36 +254,50 @@ void SimpleIdx::reset_() {
 }
 
 namespace {
-void decompress_postings(std::unique_ptr<char[]> storage,
-                         std::shared_ptr<Compressor> posting_compressor,
-                         std::shared_ptr<Compressor> fvalue_compressor,
-                         std::shared_ptr<CacheRecord> c) {
+
+void decompress_postings(std::shared_ptr<Compressor> compressor, char *from,
+                         addr n, char *to, addr m) {
+  compressor->tang(from, n, to, m);
+}
+
+void decompress_cache(std::unique_ptr<char[]> storage,
+                      std::shared_ptr<Compressor> posting_compressor,
+                      std::shared_ptr<Compressor> fvalue_compressor,
+                      std::shared_ptr<CacheRecord> c) {
 
   char *buffer = storage.get();
   PstRecord *pstp = reinterpret_cast<PstRecord *>(buffer);
-  buffer += sizeof(PstRecord);
+  char *pbuffer = buffer + sizeof(PstRecord);
+  char *qbuffer = pbuffer + pstp->pst;
+  char *fbuffer = qbuffer + pstp->qst;
   c->postings = cottontail::shared_array<cottontail::addr>(c->n);
-  posting_compressor->tang(buffer, pstp->pst,
-                           reinterpret_cast<char *>(c->postings.get()),
-                           c->n * sizeof(addr));
-  buffer += pstp->pst;
+  std::future<void> qfuture;
   if (pstp->qst == 0) {
     c->qostings = c->postings;
   } else {
     c->qostings = cottontail::shared_array<cottontail::addr>(c->n);
-    posting_compressor->tang(buffer, pstp->qst,
-                             reinterpret_cast<char *>(c->qostings.get()),
-                             c->n * sizeof(addr));
+    qfuture = std::async(std::launch::async, decompress_postings,
+                         posting_compressor, qbuffer, pstp->qst,
+                         reinterpret_cast<char *>(c->qostings.get()),
+                         c->n * sizeof(addr));
   }
-  buffer += pstp->qst;
+  std::future<void> ffuture;
   if (pstp->fst == 0) {
     c->fostings = nullptr;
   } else {
     c->fostings = cottontail::shared_array<cottontail::fval>(c->n);
-    fvalue_compressor->tang(buffer, pstp->fst,
-                            reinterpret_cast<char *>(c->fostings.get()),
-                            c->n * sizeof(fval));
+    ffuture = std::async(std::launch::async, decompress_postings,
+                         fvalue_compressor, fbuffer, pstp->fst,
+                         reinterpret_cast<char *>(c->fostings.get()),
+                         c->n * sizeof(fval));
   }
+  decompress_postings(posting_compressor, pbuffer, pstp->pst,
+                      reinterpret_cast<char *>(c->postings.get()),
+                      c->n * sizeof(addr));
+  if (pstp->qst > 0)
+    qfuture.wait();
+  if (pstp->fst > 0)
+    ffuture.wait();
   c->lock.lock();
   c->ready = true;
   c->lock.unlock();
@@ -320,7 +335,7 @@ std::shared_ptr<CacheRecord> SimpleIdx::load_cache(addr feature) {
   PstRecord *pstp = reinterpret_cast<PstRecord *>(buffer);
   c->n = pstp->n;
   c->ready = false;
-  std::thread t(decompress_postings, std::move(storage), posting_compressor_,
+  std::thread t(decompress_cache, std::move(storage), posting_compressor_,
                 fvalue_compressor_, c);
   t.detach();
   if (c->n > large_threshold_) {
