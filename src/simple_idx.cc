@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <cassert>
 #include <fstream>
-#include <future>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -271,33 +270,31 @@ void decompress_cache(std::unique_ptr<char[]> storage,
   char *qbuffer = pbuffer + pstp->pst;
   char *fbuffer = qbuffer + pstp->qst;
   c->postings = cottontail::shared_array<cottontail::addr>(c->n);
-  std::future<void> qfuture;
+  std::thread qthread;
   if (pstp->qst == 0) {
     c->qostings = c->postings;
   } else {
     c->qostings = cottontail::shared_array<cottontail::addr>(c->n);
-    qfuture = std::async(std::launch::async, decompress_postings,
-                         posting_compressor, qbuffer, pstp->qst,
-                         reinterpret_cast<char *>(c->qostings.get()),
-                         c->n * sizeof(addr));
+    qthread = std::thread(
+        decompress_postings, posting_compressor, qbuffer, pstp->qst,
+        reinterpret_cast<char *>(c->qostings.get()), c->n * sizeof(addr));
   }
-  std::future<void> ffuture;
+  std::thread fthread;
   if (pstp->fst == 0) {
     c->fostings = nullptr;
   } else {
     c->fostings = cottontail::shared_array<cottontail::fval>(c->n);
-    ffuture = std::async(std::launch::async, decompress_postings,
-                         fvalue_compressor, fbuffer, pstp->fst,
-                         reinterpret_cast<char *>(c->fostings.get()),
-                         c->n * sizeof(fval));
+    fthread = std::thread(
+        decompress_postings, fvalue_compressor, fbuffer, pstp->fst,
+        reinterpret_cast<char *>(c->fostings.get()), c->n * sizeof(fval));
   }
   decompress_postings(posting_compressor, pbuffer, pstp->pst,
                       reinterpret_cast<char *>(c->postings.get()),
                       c->n * sizeof(addr));
   if (pstp->qst > 0)
-    qfuture.wait();
+    qthread.join();
   if (pstp->fst > 0)
-    ffuture.wait();
+    fthread.join();
   c->lock.lock();
   c->ready = true;
   c->lock.unlock();
