@@ -23,7 +23,7 @@ namespace cottontail {
 
 class Stats;
 
-class Warren {
+class Warren : public Committable {
 public:
   static std::shared_ptr<Warren> make(const std::string &name,
                                       const std::string &burrow,
