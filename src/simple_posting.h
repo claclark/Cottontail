@@ -7,6 +7,7 @@
 
 #include "src/compressor.h"
 #include "src/core.h"
+#include "src/hopper.h"
 #include "src/simple.h"
 
 namespace cottontail {
@@ -21,6 +22,7 @@ public:
   bool invariants(std::string *error = nullptr);
   bool operator==(const SimplePosting &other);
   inline size_t size() { return postings_.size(); }
+  std::unique_ptr<Hopper> hopper();
 
   SimplePosting(const SimplePosting &) = delete;
   SimplePosting &operator=(const SimplePosting &) = delete;

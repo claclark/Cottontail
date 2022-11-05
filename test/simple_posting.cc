@@ -72,6 +72,25 @@ TEST(SimplePosting, Tokens) {
     EXPECT_TRUE(posting6->invariants(&error)) << error;
     EXPECT_TRUE(*posting3 == *posting6);
   }
+  std::unique_ptr<cottontail::Hopper> hopper4 = posting4->hopper();
+  std::unique_ptr<cottontail::Hopper> hopper5 = posting5->hopper();
+  std::unique_ptr<cottontail::Hopper> hopper6 = posting6->hopper();
+  cottontail::addr p, q;
+  hopper4->tau(0, &p, &q);
+  ASSERT_TRUE(p == 1);
+  ASSERT_TRUE(p == q);
+  hopper4->tau(17, &p, &q);
+  ASSERT_TRUE(p == 20);
+  ASSERT_TRUE(p == q);
+  hopper5->tau(0, &p, &q);
+  ASSERT_TRUE(p == 2);
+  ASSERT_TRUE(p == q);
+  hopper5->tau(100, &p, &q);
+  ASSERT_TRUE(p == cottontail::maxfinity);
+  ASSERT_TRUE(p == q);
+  hopper6->uat(10, &p, &q);
+  ASSERT_TRUE(p == 6);
+  ASSERT_TRUE(p == q);
 }
 
 TEST(SimplePosting, Annotations) {
@@ -139,6 +158,35 @@ TEST(SimplePosting, Annotations) {
     EXPECT_TRUE(posting6->invariants(&error)) << error;
     EXPECT_TRUE(*posting3 == *posting6);
   }
+  std::unique_ptr<cottontail::Hopper> hopper4 = posting4->hopper();
+  std::unique_ptr<cottontail::Hopper> hopper5 = posting5->hopper();
+  std::unique_ptr<cottontail::Hopper> hopper6 = posting6->hopper();
+  cottontail::addr p, q;
+  cottontail::fval v;
+  hopper4->tau(0, &p, &q, &v);
+  ASSERT_TRUE(p == 1);
+  ASSERT_TRUE(q == 4);
+  ASSERT_TRUE(v == 1.0);
+  hopper4->tau(17, &p, &q, &v);
+  ASSERT_TRUE(p == 20);
+  ASSERT_TRUE(q == 24);
+  ASSERT_TRUE(v == 3.0);
+  hopper5->tau(0, &p, &q, &v);
+  ASSERT_TRUE(p == 2);
+  ASSERT_TRUE(q == 2);
+  ASSERT_TRUE(v == 1.0);
+  hopper5->tau(100, &p, &q, &v);
+  ASSERT_TRUE(p == cottontail::maxfinity);
+  ASSERT_TRUE(q == cottontail::maxfinity);
+  ASSERT_TRUE(v == 0.0);
+  hopper6->uat(10, &p, &q, &v);
+  ASSERT_TRUE(p == 4);
+  ASSERT_TRUE(q == 10);
+  ASSERT_TRUE(v == 0.0);
+  hopper6->uat(100, &p, &q, &v);
+  ASSERT_TRUE(p == 6);
+  ASSERT_TRUE(q == 12);
+  ASSERT_TRUE(v == 0.0);
 }
 
 TEST(SimplePosting, Append) {
