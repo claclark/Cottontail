@@ -153,13 +153,15 @@ private:
   std::shared_ptr<std::map<addr, std::shared_ptr<SimplePosting>>> index_;
 };
 
-std::shared_ptr<Fiver> Fiver::make(
-    std::shared_ptr<Working> working, std::shared_ptr<Featurizer> featurizer,
-    std::shared_ptr<Tokenizer> tokenizer, addr identifier, std::string *error,
-    std::shared_ptr<std::map<std::string, std::string>> parameters,
-    std::shared_ptr<Compressor> posting_compressor,
-    std::shared_ptr<Compressor> fvalue_compressor,
-    std::shared_ptr<Compressor> text_compressor) {
+std::shared_ptr<Fiver>
+Fiver::make(std::shared_ptr<Working> working,
+            std::shared_ptr<Featurizer> featurizer,
+            std::shared_ptr<Tokenizer> tokenizer, std::string identifier,
+            std::string *error,
+            std::shared_ptr<std::map<std::string, std::string>> parameters,
+            std::shared_ptr<Compressor> posting_compressor,
+            std::shared_ptr<Compressor> fvalue_compressor,
+            std::shared_ptr<Compressor> text_compressor) {
   if (featurizer == nullptr) {
     safe_set(error) = "Fiver needs a featurizer (got nullptr)";
     return nullptr;
@@ -206,6 +208,9 @@ std::shared_ptr<Fiver> Fiver::make(
     fiver->text_compressor_ = null_compressor;
   else
     fiver->text_compressor_ = text_compressor;
+  fiver->appends_ = appends;
+  fiver->annotations_ = annotations;
+  fiver->index_ = index;
   fiver->annotator_ = annotator;
   fiver->appender_ = appender;
   fiver->built_ = false;
@@ -220,9 +225,11 @@ bool Fiver::transaction_(std::string *error = nullptr) {
   return true;
 };
 
-bool Fiver::ready_() { return false; };
+bool Fiver::ready_() { return true; };
 
 void Fiver::commit_() {
+  if (annotations_->size() == 0)
+    return;
   std::sort(annotations_->begin(), annotations_->end(),
             [](const Annotation &a, const Annotation &b) {
               return a.feature < b.feature ||

@@ -19,15 +19,14 @@ namespace cottontail {
 
 class Fiver final : public Warren {
 public:
-  static std::shared_ptr<Fiver> make(
-      std::shared_ptr<Working> working, std::shared_ptr<Featurizer> featurizer,
-      std::shared_ptr<Tokenizer> tokenizer, addr identifier,
-      std::string *error = nullptr,
-      std::shared_ptr<std::map<std::string, std::string>> parameters = nullptr,
-      std::shared_ptr<Compressor> posting_compressor = nullptr,
-      std::shared_ptr<Compressor> fvalue_compressor = nullptr,
-      std::shared_ptr<Compressor> text_compressor = nullptr
-      );
+  static std::shared_ptr<Fiver>
+  make(std::shared_ptr<Working> working, std::shared_ptr<Featurizer> featurizer,
+       std::shared_ptr<Tokenizer> tokenizer, std::string identifier,
+       std::string *error = nullptr,
+       std::shared_ptr<std::map<std::string, std::string>> parameters = nullptr,
+       std::shared_ptr<Compressor> posting_compressor = nullptr,
+       std::shared_ptr<Compressor> fvalue_compressor = nullptr,
+       std::shared_ptr<Compressor> text_compressor = nullptr);
 
   virtual ~Fiver(){};
   Fiver(const Fiver &) = delete;
