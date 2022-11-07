@@ -1,15 +1,19 @@
 #include "src/fiver.h"
 
+#include <algorithm>
 #include <iostream>
 #include <map>
 
 #include "src/annotator.h"
 #include "src/appender.h"
+#include "src/compressor.h"
 #include "src/core.h"
 #include "src/fastid_txt.h"
 #include "src/featurizer.h"
+#include "src/hopper.h"
 #include "src/recipe.h"
 #include "src/simple.h"
+#include "src/simple_posting.h"
 #include "src/stemmer.h"
 #include "src/tokenizer.h"
 
@@ -107,10 +111,138 @@ private:
   std::shared_ptr<Annotator> annotator_;
 };
 
+class FiverIdx final : public Idx {
+public:
+  static std::shared_ptr<Idx>
+  make(std::shared_ptr<std::map<addr, std::shared_ptr<SimplePosting>>> index,
+       std::string *error = nullptr) {
+    if (index == nullptr) {
+      safe_set(error) = "FiverIdx got null index";
+      return nullptr;
+    }
+    std::shared_ptr<FiverIdx> idx = std::shared_ptr<FiverIdx>(new FiverIdx());
+    idx->index_ = index;
+    return idx;
+  };
+
+  virtual ~FiverIdx(){};
+  FiverIdx(const FiverIdx &) = delete;
+  FiverIdx &operator=(const FiverIdx &) = delete;
+  FiverIdx(FiverIdx &&) = delete;
+  FiverIdx &operator=(FiverIdx &&) = delete;
+
+private:
+  FiverIdx(){};
+  std::string recipe_() final { return ""; };
+  std::unique_ptr<Hopper> hopper_(addr feature) final {
+    auto posting = index_->find(feature);
+    if (posting == index_->end())
+      return std::make_unique<EmptyHopper>();
+    else
+      return posting->second->hopper();
+  };
+  addr count_(addr feature) final {
+    auto posting = index_->find(feature);
+    if (posting == index_->end())
+      return 0;
+    else
+      return posting->second->size();
+  };
+  addr vocab_() final { return index_->size(); };
+  void reset_() final{};
+  std::shared_ptr<std::map<addr, std::shared_ptr<SimplePosting>>> index_;
+};
+
 std::shared_ptr<Fiver> Fiver::make(
     std::shared_ptr<Working> working, std::shared_ptr<Featurizer> featurizer,
     std::shared_ptr<Tokenizer> tokenizer, addr identifier, std::string *error,
-    std::shared_ptr<std::map<std::string, std::string>> parameters) {
-  return nullptr;
+    std::shared_ptr<std::map<std::string, std::string>> parameters,
+    std::shared_ptr<Compressor> posting_compressor,
+    std::shared_ptr<Compressor> fvalue_compressor,
+    std::shared_ptr<Compressor> text_compressor) {
+  if (featurizer == nullptr) {
+    safe_set(error) = "Fiver needs a featurizer (got nullptr)";
+    return nullptr;
+  }
+  if (tokenizer == nullptr) {
+    safe_set(error) = "Fiver needs a tokenizer (got nullptr)";
+    return nullptr;
+  }
+  std::shared_ptr<std::vector<std::string>> appends =
+      std::make_shared<std::vector<std::string>>();
+  std::shared_ptr<std::vector<Annotation>> annotations =
+      std::make_shared<std::vector<Annotation>>();
+  std::shared_ptr<std::map<addr, std::shared_ptr<SimplePosting>>> index =
+      std::make_shared<std::map<addr, std::shared_ptr<SimplePosting>>>();
+  std::shared_ptr<Annotator> annotator =
+      FiverAnnotator::make(annotations, error);
+  if (annotator == nullptr)
+    return nullptr;
+  std::shared_ptr<Appender> appender =
+      FiverAppender::make(appends, featurizer, tokenizer, annotator, error);
+  if (annotator == nullptr)
+    return nullptr;
+  std::shared_ptr<Idx> idx = FiverIdx::make(index, error);
+  if (idx == nullptr)
+    return nullptr;
+  std::shared_ptr<Fiver> fiver = std::shared_ptr<Fiver>(
+      new Fiver(working, featurizer, tokenizer, idx, nullptr));
+  if (fiver == nullptr)
+    return nullptr;
+  fiver->parameters_ = parameters;
+  std::shared_ptr<Compressor> null_compressor = nullptr;
+  if (posting_compressor == nullptr || fvalue_compressor == nullptr ||
+      text_compressor == nullptr)
+    null_compressor = Compressor::make("null", "");
+  if (posting_compressor == nullptr)
+    fiver->posting_compressor_ = null_compressor;
+  else
+    fiver->posting_compressor_ = posting_compressor;
+  if (fvalue_compressor == nullptr)
+    fiver->fvalue_compressor_ = null_compressor;
+  else
+    fiver->fvalue_compressor_ = fvalue_compressor;
+  if (text_compressor == nullptr)
+    fiver->text_compressor_ = null_compressor;
+  else
+    fiver->text_compressor_ = text_compressor;
+  fiver->annotator_ = annotator;
+  fiver->appender_ = appender;
+  fiver->built_ = false;
+  return fiver;
 }
+
+bool Fiver::transaction_(std::string *error = nullptr) {
+  if (built_) {
+    safe_set(error) = "Fiver does not allow additional transactions";
+    return false;
+  }
+  return true;
+};
+
+bool Fiver::ready_() { return false; };
+
+void Fiver::commit_() {
+  std::sort(annotations_->begin(), annotations_->end(),
+            [](const Annotation &a, const Annotation &b) {
+              return a.feature < b.feature ||
+                     (a.feature == b.feature && a.p < b.p);
+            });
+  std::shared_ptr<SimplePostingFactory> posting_factory =
+      SimplePostingFactory::make(posting_compressor_, fvalue_compressor_);
+  std::vector<Annotation>::iterator it = annotations_->begin();
+  while (it < annotations_->end()) {
+    std::shared_ptr<SimplePosting> posting =
+        posting_factory->posting_from_annotations(&it, annotations_->end());
+    (*index_)[posting->feature()] = posting;
+  }
+  annotations_->clear();
+  built_ = true;
+};
+
+void Fiver::abort_() {
+  appends_->clear();
+  annotations_->clear();
+};
+
 } // namespace cottontail

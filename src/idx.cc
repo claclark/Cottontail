@@ -5,6 +5,7 @@
 
 #include "src/core.h"
 #include "src/hopper.h"
+#include "src/null_idx.h"
 #include "src/simple_idx.h"
 #include "src/working.h"
 
@@ -18,6 +19,10 @@ std::shared_ptr<Idx> Idx::make(const std::string &name,
     idx = SimpleIdx::make(recipe, working, error);
     if (idx != nullptr)
       idx->name_ = "simple";
+  } else if (name == "null") {
+    idx = NullIdx::make(recipe, error);
+    if (idx != nullptr)
+      idx->name_ = "null";
   } else {
     safe_set(error) = "No Idx named: " + name;
     idx = nullptr;

@@ -9,6 +9,7 @@
 #include "src/core.h"
 #include "src/featurizer.h"
 #include "src/idx.h"
+#include "src/simple_posting.h"
 #include "src/tokenizer.h"
 #include "src/txt.h"
 #include "src/warren.h"
@@ -22,7 +23,11 @@ public:
       std::shared_ptr<Working> working, std::shared_ptr<Featurizer> featurizer,
       std::shared_ptr<Tokenizer> tokenizer, addr identifier,
       std::string *error = nullptr,
-      std::shared_ptr<std::map<std::string, std::string>> parameters = nullptr);
+      std::shared_ptr<std::map<std::string, std::string>> parameters = nullptr,
+      std::shared_ptr<Compressor> posting_compressor = nullptr,
+      std::shared_ptr<Compressor> fvalue_compressor = nullptr,
+      std::shared_ptr<Compressor> text_compressor = nullptr
+      );
 
   virtual ~Fiver(){};
   Fiver(const Fiver &) = delete;
@@ -54,10 +59,18 @@ private:
       *value = "";
     return true;
   };
-
+  bool transaction_(std::string *error) final;
+  bool ready_() final;
+  void commit_() final;
+  void abort_() final;
+  bool built_;
+  std::shared_ptr<std::map<std::string, std::string>> parameters_;
+  std::shared_ptr<Compressor> posting_compressor_;
+  std::shared_ptr<Compressor> fvalue_compressor_;
+  std::shared_ptr<Compressor> text_compressor_;
   std::shared_ptr<std::vector<std::string>> appends_;
   std::shared_ptr<std::vector<Annotation>> annotations_;
-  std::shared_ptr<std::map<std::string, std::string>> parameters_;
+  std::shared_ptr<std::map<addr, std::shared_ptr<SimplePosting>>> index_;
 };
 
 } // namespace cottontail
