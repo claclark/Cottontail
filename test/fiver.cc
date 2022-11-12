@@ -14,7 +14,7 @@ TEST(Fiver, Basic) {
       cottontail::Tokenizer::make("ascii", "");
   ASSERT_NE(tokenizer, nullptr);
   std::shared_ptr<cottontail::Fiver> fiver =
-      cottontail::Fiver::make(nullptr, featurizer, tokenizer, "test0");
+      cottontail::Fiver::make(nullptr, featurizer, tokenizer);
   fiver->start();
   ASSERT_TRUE(fiver->transaction());
   std::string test0 = "I swear\n"
@@ -33,15 +33,16 @@ TEST(Fiver, Basic) {
                       "And fulfil my duties\n"
                       "As a Canadian citizen.";
   cottontail::addr p, q;
+  cottontail::addr staging = cottontail::maxfinity / 2;
   ASSERT_TRUE(fiver->appender()->append(test0, &p, &q));
-  ASSERT_EQ(p, 0);
-  ASSERT_EQ(q, 24);
+  ASSERT_EQ(p, staging + 0);
+  ASSERT_EQ(q, staging + 24);
   ASSERT_TRUE(fiver->appender()->append(test1, &p, &q));
-  ASSERT_EQ(p, 25);
-  ASSERT_EQ(q, 34);
+  ASSERT_EQ(p, staging + 25);
+  ASSERT_EQ(q, staging + 34);
   ASSERT_TRUE(fiver->appender()->append(test2, &p, &q));
-  ASSERT_EQ(p, 35);
-  ASSERT_EQ(q, 62);
+  ASSERT_EQ(p, staging + 35);
+  ASSERT_EQ(q, staging + 62);
   ASSERT_TRUE(fiver->ready());
   fiver->commit();
   std::unique_ptr<cottontail::Hopper> hopper =

@@ -21,12 +21,12 @@ class Fiver final : public Warren {
 public:
   static std::shared_ptr<Fiver>
   make(std::shared_ptr<Working> working, std::shared_ptr<Featurizer> featurizer,
-       std::shared_ptr<Tokenizer> tokenizer, std::string identifier,
-       std::string *error = nullptr,
+       std::shared_ptr<Tokenizer> tokenizer, std::string *error = nullptr,
        std::shared_ptr<std::map<std::string, std::string>> parameters = nullptr,
        std::shared_ptr<Compressor> posting_compressor = nullptr,
        std::shared_ptr<Compressor> fvalue_compressor = nullptr,
        std::shared_ptr<Compressor> text_compressor = nullptr);
+  void location(addr where) {where_ = where;};
 
   virtual ~Fiver(){};
   Fiver(const Fiver &) = delete;
@@ -63,6 +63,7 @@ private:
   void commit_() final;
   void abort_() final;
   bool built_;
+  addr where_;
   std::shared_ptr<std::map<std::string, std::string>> parameters_;
   std::shared_ptr<Compressor> posting_compressor_;
   std::shared_ptr<Compressor> fvalue_compressor_;

@@ -1,6 +1,7 @@
 #include "src/fiver.h"
 
 #include <algorithm>
+#include <cassert>
 #include <iostream>
 #include <map>
 
@@ -18,6 +19,8 @@
 #include "src/tokenizer.h"
 
 namespace cottontail {
+
+constexpr addr staging = maxfinity / 2;
 
 class FiverAnnotator : public Annotator {
 public:
@@ -48,6 +51,17 @@ private:
     annotations_->emplace_back(feature, p, q, v);
     return true;
   };
+  bool transaction_(std::string *error) final {
+    if (annotations_ == nullptr) {
+      safe_set(error) =
+          "FiverAnnotator does not support more than one transaction";
+      return false;
+    }
+    return true;
+  };
+  bool ready_() final { return true; };
+  void commit_() final { annotations_ = nullptr; };
+  void abort_() final { annotations_->clear(); };
   std::shared_ptr<std::vector<Annotation>> annotations_;
 };
 
@@ -62,11 +76,11 @@ public:
       safe_set(error) = "FiverAnnotator got null append vector";
       return nullptr;
     }
+    appends->push_back("");
     std::shared_ptr<FiverAppender> appender =
         std::shared_ptr<FiverAppender>(new FiverAppender());
     appender->appends_ = appends;
-    appender->address_ = 0;
-    appender->feature_ = featurizer->featurize("\n"); // bad magic
+    appender->address_ = staging;
     appender->featurizer_ = featurizer;
     appender->tokenizer_ = tokenizer;
     appender->annotator_ = annotator;
@@ -83,7 +97,9 @@ private:
   FiverAppender(){};
   std::string recipe_() final { return ""; };
   bool append_(const std::string &text, addr *p, addr *q, std::string *error) {
-    appends_->push_back(text);
+    if ((*appends_)[appends_->size() - 1].length() > 0)
+      (*appends_)[appends_->size() - 1] += "\n";
+    (*appends_)[appends_->size() - 1] += text;
     std::vector<Token> tokens = tokenizer_->tokenize(featurizer_, text);
     if (tokens.size() == 0) {
       *p = address_ + 1;
@@ -100,11 +116,28 @@ private:
     *p = address_;
     *q = last_address;
     address_ = (last_address + 1);
-    addr v = appends_->size() - 1;
-    return annotator_->annotate(feature_, *p, *q, v, error);
+    return true;
+  }
+  bool transaction_(std::string *error) final {
+    if (appends_ == nullptr) {
+      safe_set(error) =
+          "FiverAppender does not support more than one transaction";
+      return false;
+    }
+    return true;
+  };
+  bool ready_() { return true; };
+  void commit_() {
+    addr separator = featurizer_->featurize("\n");
+    assert(annotator_->annotate(separator, staging, address_, (addr) 0));
+    address_ = staging;
+    appends_ = nullptr;
+  }
+  void abort_() {
+    address_ = staging;
+    appends_->clear();
   }
   addr address_;
-  addr feature_;
   std::shared_ptr<std::vector<std::string>> appends_;
   std::shared_ptr<Featurizer> featurizer_;
   std::shared_ptr<Tokenizer> tokenizer_;
@@ -156,8 +189,7 @@ private:
 std::shared_ptr<Fiver>
 Fiver::make(std::shared_ptr<Working> working,
             std::shared_ptr<Featurizer> featurizer,
-            std::shared_ptr<Tokenizer> tokenizer, std::string identifier,
-            std::string *error,
+            std::shared_ptr<Tokenizer> tokenizer, std::string *error,
             std::shared_ptr<std::map<std::string, std::string>> parameters,
             std::shared_ptr<Compressor> posting_compressor,
             std::shared_ptr<Compressor> fvalue_compressor,
@@ -191,6 +223,8 @@ Fiver::make(std::shared_ptr<Working> working,
       new Fiver(working, featurizer, tokenizer, idx, nullptr));
   if (fiver == nullptr)
     return nullptr;
+  fiver->built_ = false;
+  fiver->where_ = 0;
   fiver->parameters_ = parameters;
   std::shared_ptr<Compressor> null_compressor = nullptr;
   if (posting_compressor == nullptr || fvalue_compressor == nullptr ||
@@ -213,23 +247,36 @@ Fiver::make(std::shared_ptr<Working> working,
   fiver->index_ = index;
   fiver->annotator_ = annotator;
   fiver->appender_ = appender;
-  fiver->built_ = false;
   return fiver;
 }
 
 bool Fiver::transaction_(std::string *error = nullptr) {
   if (built_) {
-    safe_set(error) = "Fiver does not allow additional transactions";
+    safe_set(error) = "Fiver does not support more than one transaction";
+    return false;
+  }
+  if (!appender_->transaction(error))
+    return false;
+  if (!annotator_->transaction(error)) {
+    appender_->abort();
     return false;
   }
   return true;
 };
 
-bool Fiver::ready_() { return true; };
+bool Fiver::ready_() { return appender_->ready() && annotator_->ready(); };
 
 void Fiver::commit_() {
+  appender_->commit();
+  annotator_->commit();
   if (annotations_->size() == 0)
     return;
+  addr relocate = staging + where_;
+  for (auto &annotation : (*annotations_))
+    if (annotation.p >= staging) {
+      annotation.p -= relocate;
+      annotation.q -= relocate;
+    }
   std::sort(annotations_->begin(), annotations_->end(),
             [](const Annotation &a, const Annotation &b) {
               return a.feature < b.feature ||
@@ -248,8 +295,9 @@ void Fiver::commit_() {
 };
 
 void Fiver::abort_() {
-  appends_->clear();
-  annotations_->clear();
+  appender_->abort();
+  annotator_->abort();
+  where_ = 0;
 };
 
 } // namespace cottontail
