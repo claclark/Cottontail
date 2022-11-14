@@ -43,7 +43,7 @@ private:
   virtual std::unique_ptr<Hopper> hopper_(addr feature) = 0;
   virtual addr count_(addr feature);
   virtual addr vocab_() = 0;
-  virtual void reset_() = 0;
+  virtual void reset_(){};
   std::string name_ = "";
 };
 } // namespace cottontail

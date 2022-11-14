@@ -138,8 +138,15 @@ public:
 protected:
   std::string default_container_;
   std::shared_ptr<Stemmer> stemmer_ = nullptr;
+  std::shared_ptr<Working> working_ = nullptr;
+  std::shared_ptr<Featurizer> featurizer_ = nullptr;
+  std::shared_ptr<Tokenizer> tokenizer_ = nullptr;
+  std::shared_ptr<Idx> idx_ = nullptr;
+  std::shared_ptr<Txt> txt_ = nullptr;
   std::shared_ptr<Annotator> annotator_ = nullptr;
   std::shared_ptr<Appender> appender_ = nullptr;
+  std::shared_ptr<Stats> stats_ = nullptr;
+  std::shared_ptr<Scribe> scribe_ = nullptr;
 
 private:
   virtual bool set_parameter_(const std::string &key, const std::string &value,
@@ -148,13 +155,6 @@ private:
                               std::string *error) = 0;
   std::string name_ = "";
   bool started_ = false;
-  std::shared_ptr<Working> working_ = nullptr;
-  std::shared_ptr<Featurizer> featurizer_ = nullptr;
-  std::shared_ptr<Tokenizer> tokenizer_ = nullptr;
-  std::shared_ptr<Idx> idx_ = nullptr;
-  std::shared_ptr<Txt> txt_ = nullptr;
-  std::shared_ptr<Stats> stats_ = nullptr;
-  std::shared_ptr<Scribe> scribe_ = nullptr;
 };
 } // namespace cottontail
 
