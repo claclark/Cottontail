@@ -428,15 +428,15 @@ TEST(SimplePosting, Merge) {
   EXPECT_TRUE(posting4->get(3, &p, &q, &v));
   EXPECT_EQ(p, 400);
   EXPECT_EQ(q, 600);
-  EXPECT_EQ(v, 103000.0);
+  EXPECT_EQ(v, 1000.0);
   EXPECT_TRUE(posting4->get(4, &p, &q, &v));
   EXPECT_EQ(p, 700);
   EXPECT_EQ(q, 900);
-  EXPECT_EQ(v, 999.0);
+  EXPECT_EQ(v, 111.0);
   EXPECT_TRUE(posting4->get(5, &p, &q, &v));
   EXPECT_EQ(p, 800);
   EXPECT_EQ(q, 1000);
-  EXPECT_EQ(v, -3.0);
+  EXPECT_EQ(v, -1.5);
   EXPECT_TRUE(posting4->get(6, &p, &q, &v));
   EXPECT_EQ(p, 2000);
   EXPECT_EQ(q, 3000);
@@ -466,15 +466,15 @@ TEST(SimplePosting, Merge) {
   EXPECT_TRUE(posting6->get(3, &p, &q, &v));
   EXPECT_EQ(p, 400);
   EXPECT_EQ(q, 600);
-  EXPECT_EQ(v, 103000.0);
+  EXPECT_EQ(v, 1000.0);
   EXPECT_TRUE(posting6->get(4, &p, &q, &v));
   EXPECT_EQ(p, 700);
   EXPECT_EQ(q, 900);
-  EXPECT_EQ(v, 999.0);
+  EXPECT_EQ(v, 111.0);
   EXPECT_TRUE(posting6->get(5, &p, &q, &v));
   EXPECT_EQ(p, 800);
   EXPECT_EQ(q, 1000);
-  EXPECT_EQ(v, -3.0);
+  EXPECT_EQ(v, -1.5);
   EXPECT_TRUE(posting6->get(6, &p, &q, &v));
   EXPECT_EQ(p, 2000);
   EXPECT_EQ(q, 3000);
@@ -489,4 +489,50 @@ TEST(SimplePosting, Merge) {
   EXPECT_EQ(v, -1000000.0);
   EXPECT_FALSE(posting6->get(9, &p, &q, &v));
   EXPECT_FALSE(posting6->get(1000000, &p, &q, &v));
+}
+
+TEST(SimplePosting, Hopper) {
+  std::shared_ptr<cottontail::Compressor> compressor =
+      cottontail::Compressor::make("null", "");
+  ASSERT_NE(compressor, nullptr);
+  std::shared_ptr<cottontail::SimplePostingFactory> factory =
+      cottontail::SimplePostingFactory::make(compressor, compressor);
+  ASSERT_NE(factory, nullptr);
+  std::vector<std::shared_ptr<cottontail::SimplePosting>> postings;
+  std::shared_ptr<cottontail::SimplePosting> posting0 =
+      factory->posting_from_feature(123);
+  ASSERT_NE(posting0, nullptr);
+  posting0->push(100, 300, 2.0);
+  posting0->push(200, 400, -1.0);
+  posting0->push(300, 500, 4.0);
+  posting0->push(400, 600, -2.0);
+  postings.push_back(posting0);
+  std::shared_ptr<cottontail::SimplePosting> posting1 =
+      factory->posting_from_feature(123);
+  ASSERT_NE(posting1, nullptr);
+  posting1->push(1, 111, -3.0);
+  posting1->push(33, 333, -4.0);
+  posting1->push(200, 400, 3.0);
+  posting1->push(400, 599, 6.0);
+  postings.push_back(posting1);
+  std::shared_ptr<cottontail::SimplePosting> posting2 =
+      factory->posting_from_feature(123);
+  ASSERT_NE(posting2, nullptr);
+  posting2->push(0, 0, 0.0);
+  posting2->push(1, 111, 1.0);
+  posting2->push(350, 550, 5.0);
+  posting2->push(400, 600, -5.0);
+  posting2->push(1000, 1001, 7.0);
+  postings.push_back(posting2);
+  std::shared_ptr<cottontail::SimplePosting> merged =
+      factory->posting_from_merge(postings);
+  ASSERT_NE(merged, nullptr);
+  std::unique_ptr<cottontail::Hopper> hopper = merged->hopper();
+  cottontail::addr p, q;
+  cottontail::fval v, x = 0.0;
+  for (hopper->tau(0, &p, &q, &v); p < cottontail::maxfinity;
+       hopper->tau(p + 1, &p, &q, &v)) {
+    EXPECT_EQ(v, x);
+    x += 1.0;
+  }
 }

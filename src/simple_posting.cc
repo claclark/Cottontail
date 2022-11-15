@@ -156,28 +156,28 @@ std::shared_ptr<SimplePosting> SimplePostingFactory::posting_from_merge(
   } else {
     std::vector<size_t> index(postings.size(), 0);
     for (;;) {
-      addr p0 = maxfinity, q0 = maxfinity, p1, q1;
-      fval v0 = 0.0, v1;
+      addr p0, q0, p = maxfinity, q = maxfinity, minq = maxfinity;
+      fval v0, v = 0.0;
       for (size_t i = 0; i < postings.size(); i++) {
-        if (postings[i]->get(index[i], &p1, &q1, &v1)) {
-          if (p0 > p1) {
-            p0 = p1;
-            q0 = q1;
-            v0 = v1;
-          } else if (p0 == p1) {
-            assert(q0 == q1);
-            v0 += v1; // probably the most useful thing to do here
+        addr p0, q0;
+        fval v0;
+        if (postings[i]->get(index[i], &p0, &q0, &v0)) {
+          if (q0 < minq)
+            minq = q0;
+          if (p0 < p || (p0 == p && q0 <= q)) {
+            p = p0;
+            q = q0;
+            v = v0;
           }
         }
       }
-      if (p0 < maxfinity) {
-        merged_posting->push(p0, q0, v0);
-        for (size_t i = 0; i < postings.size(); i++)
-          if (postings[i]->get(index[i], &p1, &q1, &v1) && p0 == p1)
-            index[i]++;
-      } else {
+      if (p == maxfinity)
         break;
-      }
+      if (q == minq)
+        merged_posting->push(p, q, v);
+      for (size_t i = 0; i < postings.size(); i++)
+        if (postings[i]->get(index[i], &p0, &q0, &v0) && p == p0)
+          index[i]++;
     }
   }
   return merged_posting;
