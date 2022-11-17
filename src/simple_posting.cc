@@ -47,20 +47,20 @@ std::shared_ptr<SimplePosting> SimplePostingFactory::posting_from_annotations(
   bool clear_qostings = true;
   bool clear_fostings = true;
   for (stop = (*start); stop < end && stop->feature == posting->feature_;
-       stop++) {
-    assert(stop->p <= stop->q);
-    if (stop->p < stop->q)
-      clear_qostings = false;
-    if (stop->v != 0.0)
-      clear_fostings = false;
-    assert(posting->postings_.size() == 0 ||
-           stop->p >= posting->postings_.back());
-    posting->postings_.push_back(stop->p);
-    assert(posting->qostings_.size() == 0 ||
-           stop->q >= posting->qostings_.back());
-    posting->qostings_.push_back(stop->q);
-    posting->fostings_.push_back(stop->v);
-  }
+       stop++)
+    if (stop->p <= stop->q) {
+      if (stop->p < stop->q)
+        clear_qostings = false;
+      if (stop->v != 0.0)
+        clear_fostings = false;
+      if (posting->postings_.size() == 0 ||
+          (stop->p >= posting->postings_.back() &&
+           stop->q >= posting->qostings_.back())) {
+        posting->postings_.push_back(stop->p);
+        posting->qostings_.push_back(stop->q);
+        posting->fostings_.push_back(stop->v);
+      }
+    }
   if (clear_qostings)
     posting->qostings_.clear();
   if (clear_fostings)

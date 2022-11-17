@@ -536,3 +536,35 @@ TEST(SimplePosting, Hopper) {
     x += 1.0;
   }
 }
+
+TEST(SimplePosting, Invariants) {
+  std::vector<cottontail::Annotation> ann;
+  ann.emplace_back(1, 100, 2, -1.0);
+  ann.emplace_back(1, 100, 300, 1.0);
+  ann.emplace_back(1, 0, 400, -1.0);
+  ann.emplace_back(1, 200, 400, 2.0);
+  ann.emplace_back(1, 300, 500, 3.0);
+  ann.emplace_back(1, 300, 500, 1.0);
+  ann.emplace_back(1, 1000, 400, -1.0);
+  ann.emplace_back(1, 400, 600, 4.0);
+  ann.emplace_back(1, 100, 2, -1.0);
+  std::shared_ptr<cottontail::Compressor> compressor =
+      cottontail::Compressor::make("null", "");
+  ASSERT_NE(compressor, nullptr);
+  std::shared_ptr<cottontail::SimplePostingFactory> factory =
+      cottontail::SimplePostingFactory::make(compressor, compressor);
+  ASSERT_NE(factory, nullptr);
+  std::vector<cottontail::Annotation>::iterator it = ann.begin();
+  std::shared_ptr<cottontail::SimplePosting> posting =
+      factory->posting_from_annotations(&it, ann.end());
+  ASSERT_NE(posting, nullptr);
+  std::unique_ptr<cottontail::Hopper> hopper = posting->hopper();
+  ASSERT_NE(hopper, nullptr);
+  cottontail::addr p, q;
+  cottontail::fval v, x = 1.0;
+  for (hopper->tau(0, &p, &q, &v); p < cottontail::maxfinity;
+       hopper->tau(p + 1, &p, &q, &v)) {
+    EXPECT_EQ(v, x);
+    x += 1.0;
+  }
+}
