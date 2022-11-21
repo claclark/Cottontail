@@ -1,6 +1,6 @@
 cc_test(
     name = "tests",
-    srcs = glob(["**/*.cc"]),
+    srcs = glob(["**/*.cc"]) + glob(["**/*.h"]),
     deps = [
         "//src:cottontail",
         "@googletest//:gtest_main",

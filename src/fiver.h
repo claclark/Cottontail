@@ -26,7 +26,23 @@ public:
        std::shared_ptr<Compressor> posting_compressor = nullptr,
        std::shared_ptr<Compressor> fvalue_compressor = nullptr,
        std::shared_ptr<Compressor> text_compressor = nullptr);
-  void location(addr where) {where_ = where;};
+  static std::shared_ptr<Fiver>
+  merge(const std::vector<std::shared_ptr<Fiver>> &fivers,
+        std::string *error = nullptr,
+        std::shared_ptr<Compressor> posting_compressor = nullptr,
+        std::shared_ptr<Compressor> fvalue_compressor = nullptr,
+        std::shared_ptr<Compressor> text_compressor = nullptr);
+
+  bool relocate(addr where, std::string *error = nullptr) {
+    if (built_) {
+      safe_set(error) = "Fiver can't change location after build complete";
+      return false;
+    } else {
+      where_ = where;
+      return true;
+    }
+  };
+  bool range(addr *p, addr *q);
 
   virtual ~Fiver(){};
   Fiver(const Fiver &) = delete;

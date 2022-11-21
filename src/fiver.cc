@@ -23,6 +23,7 @@
 namespace cottontail {
 
 constexpr addr staging = maxfinity / 2;
+const std::string separator = "\n";
 
 class FiverAnnotator : public Annotator {
 public:
@@ -131,8 +132,8 @@ private:
   bool ready_() { return true; };
   void commit_() {
     if (address_ > staging) {
-      addr separator = featurizer_->featurize("\n");
-      assert(annotator_->annotate(separator, staging, address_ - 1, (addr)0));
+      assert(annotator_->annotate(featurizer_->featurize(separator), staging,
+                                  address_ - 1, (addr)0));
       address_ = staging;
     }
     appends_ = nullptr;
@@ -207,7 +208,7 @@ public:
     std::shared_ptr<FiverTxt> txt = std::shared_ptr<FiverTxt>(new FiverTxt());
     txt->count_ = -1;
     txt->tokenizer_ = tokenizer;
-    txt->hopper_ = idx->hopper(featurizer->featurize("\n"));
+    txt->hopper_ = idx->hopper(featurizer->featurize(separator));
     txt->text_ = text;
     return txt;
   };
@@ -249,13 +250,17 @@ private:
     hopper_->ohr(q, &p1, &q1, &i1);
     if (p1 == p0)
       return result;
-    for (addr j = i0 + 1; j < i1; j++)
+    for (addr j = i0 + 1; j < i1; j++) {
+      result += "\n";
       result += (*text_)[j];
+    }
     if (q1 <= q) {
+      result += "\n";
       result += (*text_)[i1];
     } else {
       const char *s = (*text_)[i1].c_str();
-      const char *e = tokenizer_->skip(s, (*text_)[i1].length(), q1 - p1 + 1);
+      const char *e = tokenizer_->skip(s, (*text_)[i1].length(), q - p1 + 1);
+      result += "\n";
       result += (*text_)[i1].substr(0, e - s);
     }
     return result;
@@ -342,6 +347,91 @@ Fiver::make(std::shared_ptr<Working> working,
   return fiver;
 }
 
+std::shared_ptr<Fiver>
+Fiver::merge(const std::vector<std::shared_ptr<Fiver>> &fivers,
+             std::string *error, std::shared_ptr<Compressor> posting_compressor,
+             std::shared_ptr<Compressor> fvalue_compressor,
+             std::shared_ptr<Compressor> text_compressor) {
+  if (fivers.size() == 0) {
+    safe_set(error) = "Fiver::merge got empty vector";
+    return nullptr;
+  }
+  std::shared_ptr<std::vector<std::string>> text =
+      std::make_shared<std::vector<std::string>>();
+  std::vector<Annotation> ann;
+  addr chunk = fivers[0]->featurizer_->featurize(separator);
+  for (auto &fiver : fivers) {
+    auto posting =
+        fiver->index_->find(fiver->featurizer_->featurize(separator));
+    if (posting != fiver->index_->end()) {
+      std::unique_ptr<Hopper> hopper = posting->second->hopper();
+      addr p, q, v;
+      for (hopper->tau(0, &p, &q, &v); p < maxfinity;
+           hopper->tau(p + 1, &p, &q, &v)) {
+        text->push_back((*(fiver->appends_))[v]);
+        ann.emplace_back(chunk, p, q, addr2fval(text->size() - 1));
+      }
+    }
+  }
+  std::sort(ann.begin(), ann.end(),
+            [](const Annotation &a, const Annotation &b) {
+              return a.feature < b.feature ||
+                     (a.feature == b.feature &&
+                      (a.q < b.q || (a.q == b.q && a.p > b.p)));
+            });
+  std::shared_ptr<Fiver> fiver = std::shared_ptr<Fiver>(
+      new Fiver(fivers[0]->working_, fivers[0]->featurizer_,
+                fivers[0]->tokenizer_, nullptr, nullptr));
+  if (posting_compressor == nullptr)
+    fiver->posting_compressor_ = fivers[0]->posting_compressor_;
+  else
+    fiver->posting_compressor_ = posting_compressor;
+  if (fvalue_compressor == nullptr)
+    fiver->fvalue_compressor_ = fivers[0]->fvalue_compressor_;
+  else
+    fiver->fvalue_compressor_ = fvalue_compressor;
+  if (text_compressor == nullptr)
+    fiver->text_compressor_ = fivers[0]->text_compressor_;
+  else
+    fiver->text_compressor_ = text_compressor;
+  std::shared_ptr<SimplePostingFactory> posting_factory =
+      SimplePostingFactory::make(fiver->posting_compressor_,
+                                 fiver->fvalue_compressor_);
+  std::shared_ptr<std::map<addr, std::shared_ptr<SimplePosting>>> index =
+      std::make_shared<std::map<addr, std::shared_ptr<SimplePosting>>>();
+  std::vector<Annotation>::iterator it = ann.begin();
+  (*index)[chunk] = posting_factory->posting_from_annotations(&it, ann.end());
+  std::map<addr, std::vector<std::shared_ptr<SimplePosting>>> unmerged_index;
+  for (auto &f : fivers)
+    for (auto &i : *(f->index_))
+      if (i.first != chunk)
+        unmerged_index[i.first].push_back(i.second);
+  for (auto &u : unmerged_index)
+    (*index)[u.first] = posting_factory->posting_from_merge(u.second);
+  fiver->built_ = true;
+  fiver->where_ = 0;
+  fiver->parameters_ = fivers[0]->parameters_;
+  fiver->appends_ = text;
+  fiver->index_ = index;
+  fiver->idx_ = FiverIdx::make(fiver->index_);
+  fiver->txt_ = FiverTxt::make(fiver->featurizer_, fiver->tokenizer_,
+                               fiver->idx_, fiver->appends_);
+  return fiver;
+}
+
+bool Fiver::range(addr *p, addr *q) {
+  if (!built_ || index_ == nullptr || appends_ == nullptr)
+    return false;
+  std::unique_ptr<Hopper> hopper =
+      idx_->hopper(featurizer_->featurize(separator));
+  hopper->tau(minfinity + 1, p, q);
+  if (*p == maxfinity)
+    return false;
+  addr r;
+  hopper->uat(maxfinity - 1, &r, q);
+  return true;
+}
+
 bool Fiver::transaction_(std::string *error = nullptr) {
   if (built_) {
     safe_set(error) = "Fiver does not support more than one transaction";
@@ -363,7 +453,7 @@ void Fiver::commit_() {
   annotator_->commit();
   if (annotations_->size() == 0)
     return;
-  addr relocate = staging + where_;
+  addr relocate = staging - where_;
   for (auto &annotation : (*annotations_))
     if (annotation.p >= staging) {
       annotation.p -= relocate;
@@ -372,7 +462,8 @@ void Fiver::commit_() {
   std::sort(annotations_->begin(), annotations_->end(),
             [](const Annotation &a, const Annotation &b) {
               return a.feature < b.feature ||
-                     (a.feature == b.feature && a.p < b.p);
+                     (a.feature == b.feature &&
+                      (a.q < b.q || (a.q == b.q && a.p > b.p)));
             });
   std::shared_ptr<SimplePostingFactory> posting_factory =
       SimplePostingFactory::make(posting_compressor_, fvalue_compressor_);
