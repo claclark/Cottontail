@@ -100,7 +100,8 @@ private:
   FiverAppender(){};
   std::string recipe_() final { return ""; };
   bool append_(const std::string &text, addr *p, addr *q, std::string *error) {
-    if ((*appends_)[appends_->size() - 1].length() > 0)
+    if ((*appends_)[appends_->size() - 1].length() > 0 &&
+        (*appends_)[appends_->size() - 1].back() != '\n')
       (*appends_)[appends_->size() - 1] += "\n";
     (*appends_)[appends_->size() - 1] += text;
     std::vector<Token> tokens = tokenizer_->tokenize(featurizer_, text);
@@ -131,6 +132,9 @@ private:
   };
   bool ready_() { return true; };
   void commit_() {
+    if ((*appends_)[appends_->size() - 1].length() > 0 &&
+        (*appends_)[appends_->size() - 1].back() != '\n')
+      (*appends_)[appends_->size() - 1] += "\n";
     if (address_ > staging) {
       assert(annotator_->annotate(featurizer_->featurize(separator), staging,
                                   address_ - 1, (addr)0));
@@ -250,17 +254,13 @@ private:
     hopper_->ohr(q, &p1, &q1, &i1);
     if (p1 == p0)
       return result;
-    for (addr j = i0 + 1; j < i1; j++) {
-      result += "\n";
+    for (addr j = i0 + 1; j < i1; j++)
       result += (*text_)[j];
-    }
     if (q1 <= q) {
-      result += "\n";
       result += (*text_)[i1];
     } else {
       const char *s = (*text_)[i1].c_str();
       const char *e = tokenizer_->skip(s, (*text_)[i1].length(), q - p1 + 1);
-      result += "\n";
       result += (*text_)[i1].substr(0, e - s);
     }
     return result;

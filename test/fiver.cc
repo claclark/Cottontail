@@ -64,10 +64,10 @@ TEST(Fiver, Basic) {
             "allegiance\nTo His Majesty\nKing Charles the ");
   EXPECT_EQ(fiver->txt()->translate(0, 24), test0 + "\n");
   EXPECT_EQ(fiver->txt()->translate(25, 34), test1 + "\n");
-  EXPECT_EQ(fiver->txt()->translate(35, 61), test2);
-  EXPECT_EQ(fiver->txt()->translate(35, 100), test2);
-  EXPECT_EQ(fiver->txt()->translate(61, 61), "citizen.");
-  EXPECT_EQ(fiver->txt()->translate(61, 100), "citizen.");
+  EXPECT_EQ(fiver->txt()->translate(35, 61), test2 + "\n");
+  EXPECT_EQ(fiver->txt()->translate(35, 100), test2 + "\n");
+  EXPECT_EQ(fiver->txt()->translate(61, 61), "citizen.\n");
+  EXPECT_EQ(fiver->txt()->translate(61, 100), "citizen.\n");
   EXPECT_EQ(fiver->txt()->translate(62, 100), "");
   EXPECT_EQ(fiver->txt()->translate(0, 0), "I ");
   EXPECT_EQ(fiver->txt()->translate(0, 2), "I swear\nThat ");
@@ -96,9 +96,9 @@ make_fiver(std::shared_ptr<cottontail::Fiver> prev, size_t start,
       cottontail::Fiver::make(nullptr, featurizer, tokenizer);
   if (fiver == nullptr)
     return nullptr;
+  fiver->start();
   if (!fiver->transaction())
     return nullptr;
-  fiver->start();
   cottontail::addr p, q;
   cottontail::addr f = featurizer->featurize("fake:");
   if (!fiver->appender()->append(fake->generate(start + 0, start + 127), &p,
@@ -123,22 +123,24 @@ make_fiver(std::shared_ptr<cottontail::Fiver> prev, size_t start,
   if (!fiver->ready())
     return nullptr;
   fiver->commit();
+  fiver->end();
   return fiver;
 }
 
 void check_text(std::shared_ptr<cottontail::Fiver> fiver, const std::string &s,
                 size_t n) {
   std::unique_ptr<cottontail::Hopper> hopper = fiver->hopper_from_gcl(s);
+  ASSERT_NE(hopper, nullptr);
   cottontail::addr p, q;
   size_t i = 0;
   for (hopper->tau(cottontail::minfinity + 1, &p, &q);
        p < cottontail::maxfinity; hopper->tau(p + 1, &p, &q)) {
     std::string t = fiver->txt()->translate(p, q);
     t = "\"" + t + "\"";
-    ASSERT_EQ(s, t);
+    EXPECT_EQ(s, t);
     i++;
   }
-  ASSERT_EQ(i, n);
+  EXPECT_EQ(i, n);
 }
 
 TEST(Fiver, Merge) {
@@ -147,10 +149,14 @@ TEST(Fiver, Merge) {
   std::shared_ptr<cottontail::Fiver> fiver0 = make_fiver(nullptr, 10, &fake);
   ASSERT_NE(fiver0, nullptr);
   fivers.push_back(fiver0);
+  fiver0->start();
   std::shared_ptr<cottontail::Fiver> fiver1 = make_fiver(fiver0, 20, &fake);
+  fiver0->end();
   ASSERT_NE(fiver1, nullptr);
   fivers.push_back(fiver1);
+  fiver1->start();
   std::shared_ptr<cottontail::Fiver> fiver2 = make_fiver(fiver1, 30, &fake);
+  fiver1->end();
   ASSERT_NE(fiver2, nullptr);
   fivers.push_back(fiver2);
   std::shared_ptr<cottontail::Fiver> fiver = cottontail::Fiver::merge(fivers);
@@ -202,5 +208,169 @@ TEST(Fiver, Merge) {
   check_text(fiver, "\"248\n249\n30\n31\n\"", 1);
   check_text(fiver, "\"136\n137\n138\n139\n\"", 3);
   check_text(fiver, "\"225\n226\n227\n228\n\"", 3);
+  fiver->end();
+}
+
+TEST(Fiver, Merge2) {
+  const char *sonnet20[] = {
+      "A woman's face with nature's own hand painted,",
+      "Hast thou, the master mistress of my passion;",
+      "A woman's gentle heart, but not acquainted",
+      "With shifting change, as is false women's fashion:",
+      "An eye more bright than theirs, less false in rolling,",
+      "Gilding the object whereupon it gazeth;",
+      "A man in hue all 'hues' in his controlling,",
+      "Which steals men's eyes and women's souls amazeth.",
+      "And for a woman wert thou first created;",
+      "Till Nature, as she wrought thee, fell a-doting,",
+      "And by addition me of thee defeated,",
+      "By adding one thing to my purpose nothing.",
+      "   But since she prick'd thee out for women's pleasure,",
+      "   Mine be thy love and thy love's use their treasure."};
+  std::shared_ptr<cottontail::Featurizer> featurizer =
+      cottontail::Featurizer::make("hashing", "");
+  ASSERT_NE(featurizer, nullptr);
+  std::shared_ptr<cottontail::Tokenizer> tokenizer =
+      cottontail::Tokenizer::make("ascii", "");
+  ASSERT_NE(tokenizer, nullptr);
+  cottontail::addr p, q, v;
+  cottontail::addr fline = featurizer->featurize("line:");
+  std::shared_ptr<cottontail::Fiver> fiver0 =
+      cottontail::Fiver::make(nullptr, featurizer, tokenizer);
+  ASSERT_NE(fiver0, nullptr);
+  fiver0->start();
+  ASSERT_TRUE(fiver0->transaction());
+  ASSERT_TRUE(fiver0->appender()->append(std::string(sonnet20[0]), &p, &q));
+  ASSERT_TRUE(fiver0->annotator()->annotate(fline, p, q, (cottontail::addr)1));
+  ASSERT_TRUE(fiver0->appender()->append(std::string(sonnet20[1]), &p, &q));
+  ASSERT_TRUE(fiver0->annotator()->annotate(fline, p, q, (cottontail::addr)2));
+  ASSERT_TRUE(fiver0->appender()->append(std::string(sonnet20[2]), &p, &q));
+  ASSERT_TRUE(fiver0->annotator()->annotate(fline, p, q, (cottontail::addr)3));
+  ASSERT_TRUE(fiver0->appender()->append(std::string(sonnet20[3]), &p, &q));
+  ASSERT_TRUE(fiver0->annotator()->annotate(fline, p, q, (cottontail::addr)4));
+  ASSERT_TRUE(fiver0->ready());
+  fiver0->commit();
+  fiver0->end();
+  std::shared_ptr<cottontail::Fiver> fiver1 =
+      cottontail::Fiver::make(nullptr, featurizer, tokenizer);
+  ASSERT_NE(fiver1, nullptr);
+  fiver1->start();
+  ASSERT_TRUE(fiver1->transaction());
+  ASSERT_TRUE(fiver1->appender()->append(std::string(sonnet20[4]), &p, &q));
+  ASSERT_TRUE(fiver1->annotator()->annotate(fline, p, q, (cottontail::addr)5));
+  ASSERT_TRUE(fiver1->appender()->append(std::string(sonnet20[5]), &p, &q));
+  ASSERT_TRUE(fiver1->annotator()->annotate(fline, p, q, (cottontail::addr)6));
+  ASSERT_TRUE(fiver1->appender()->append(std::string(sonnet20[6]), &p, &q));
+  ASSERT_TRUE(fiver1->annotator()->annotate(fline, p, q, (cottontail::addr)7));
+  ASSERT_TRUE(fiver0->range(&p, &q));
+  fiver1->relocate(q + 1);
+  ASSERT_TRUE(fiver1->ready());
+  fiver1->commit();
+  fiver1->end();
+  std::shared_ptr<cottontail::Fiver> fiver2 =
+      cottontail::Fiver::make(nullptr, featurizer, tokenizer);
+  ASSERT_NE(fiver2, nullptr);
+  fiver2->start();
+  ASSERT_TRUE(fiver2->transaction());
+  ASSERT_TRUE(fiver2->appender()->append(std::string(sonnet20[7]), &p, &q));
+  ASSERT_TRUE(fiver2->annotator()->annotate(fline, p, q, (cottontail::addr)8));
+  ASSERT_TRUE(fiver2->appender()->append(std::string(sonnet20[8]), &p, &q));
+  ASSERT_TRUE(fiver2->annotator()->annotate(fline, p, q, (cottontail::addr)9));
+  ASSERT_TRUE(fiver2->appender()->append(std::string(sonnet20[9]), &p, &q));
+  ASSERT_TRUE(fiver2->annotator()->annotate(fline, p, q, (cottontail::addr)10));
+  ASSERT_TRUE(fiver1->range(&p, &q));
+  fiver2->relocate(q + 1);
+  ASSERT_TRUE(fiver2->ready());
+  fiver2->commit();
+  fiver2->end();
+  std::shared_ptr<cottontail::Fiver> fiver3 =
+      cottontail::Fiver::make(nullptr, featurizer, tokenizer);
+  ASSERT_NE(fiver3, nullptr);
+  fiver3->start();
+  ASSERT_TRUE(fiver3->transaction());
+  ASSERT_TRUE(fiver3->appender()->append(std::string(sonnet20[10]), &p, &q));
+  ASSERT_TRUE(fiver3->annotator()->annotate(fline, p, q, (cottontail::addr)11));
+  ASSERT_TRUE(fiver3->appender()->append(std::string(sonnet20[11]), &p, &q));
+  ASSERT_TRUE(fiver3->annotator()->annotate(fline, p, q, (cottontail::addr)12));
+  ASSERT_TRUE(fiver3->appender()->append(std::string(sonnet20[12]), &p, &q));
+  ASSERT_TRUE(fiver3->annotator()->annotate(fline, p, q, (cottontail::addr)13));
+  ASSERT_TRUE(fiver3->appender()->append(std::string(sonnet20[13]), &p, &q));
+  ASSERT_TRUE(fiver3->annotator()->annotate(fline, p, q, (cottontail::addr)14));
+  ASSERT_TRUE(fiver2->range(&p, &q));
+  fiver3->relocate(q + 1);
+  ASSERT_TRUE(fiver3->ready());
+  fiver3->commit();
+  fiver3->end();
+  std::vector<std::shared_ptr<cottontail::Fiver>> fivers;
+  fivers.push_back(fiver0);
+  fivers.push_back(fiver1);
+  std::shared_ptr<cottontail::Fiver> fiver01 = cottontail::Fiver::merge(fivers);
+  ASSERT_NE(fiver01, nullptr);
+  fivers.clear();
+  fivers.push_back(fiver2);
+  fivers.push_back(fiver3);
+  std::shared_ptr<cottontail::Fiver> fiver23 = cottontail::Fiver::merge(fivers);
+  ASSERT_NE(fiver23, nullptr);
+  fivers.clear();
+  fivers.push_back(fiver01);
+  fivers.push_back(fiver23);
+  std::shared_ptr<cottontail::Fiver> fiver = cottontail::Fiver::merge(fivers);
+  fiver->start();
+  std::unique_ptr<cottontail::Hopper> hopper = fiver->hopper_from_gcl("line:");
+  ASSERT_NE(hopper, nullptr);
+  cottontail::addr i = 0;
+  for (hopper->tau(0, &p, &q, &v); p < cottontail::maxfinity;
+       hopper->tau(p + 1, &p, &q, &v)) {
+    std::string s = fiver->txt()->translate(p, q);
+    std::string t = std::string(sonnet20[i]);
+    if (i == 11) {
+      t += "\n   ";
+    } else if (i == 12) {
+      s = "   " + s;
+      t = t + "\n   ";
+    } else if (i == 13) {
+      s = "   " + s;
+      t = t + "\n";
+    } else
+      t += "\n";
+    EXPECT_EQ(t, s);
+    i++;
+    EXPECT_EQ(i, v);
+  }
+  hopper = fiver->hopper_from_gcl("\"women s fashion an eye\"");
+  ASSERT_NE(hopper, nullptr);
+  hopper->tau(0, &p, &q);
+  EXPECT_EQ(fiver->txt()->translate(p, q), "women's fashion:\nAn eye ");
+  hopper = fiver->hopper_from_gcl("\"fell a-doting, And by\"");
+  ASSERT_NE(hopper, nullptr);
+  hopper->tau(0, &p, &q);
+  EXPECT_EQ(fiver->txt()->translate(p, q), "fell a-doting,\nAnd by ");
+  hopper = fiver->hopper_from_gcl("\"controlling, Which\"");
+  ASSERT_NE(hopper, nullptr);
+  hopper->tau(0, &p, &q);
+  EXPECT_EQ(fiver->txt()->translate(p, q), "controlling,\nWhich ");
+  std::string t = fiver->txt()->translate(0, 10000);
+  std::string s;
+  for (i = 0; i < 14; i++)
+    s += (std::string(sonnet20[i]) + "\n");
+  EXPECT_EQ(s, t);
+  hopper = fiver->hopper_from_gcl("woman");
+  ASSERT_NE(hopper, nullptr);
+  i = 0;
+  for (hopper->tau(0, &p, &q); p < cottontail::maxfinity;
+       hopper->tau(p + 1, &p, &q)) {
+    EXPECT_EQ(fiver->txt()->translate(p, q).substr(0, 5), "woman");
+    i++;
+  }
+  EXPECT_EQ(i, 3);
+  hopper = fiver->hopper_from_gcl("women");
+  ASSERT_NE(hopper, nullptr);
+  i = 0;
+  for (hopper->tau(0, &p, &q); p < cottontail::maxfinity;
+       hopper->tau(p + 1, &p, &q)) {
+    EXPECT_EQ(fiver->txt()->translate(p, q), "women\'");
+    i++;
+  }
+  EXPECT_EQ(i, 3);
   fiver->end();
 }
