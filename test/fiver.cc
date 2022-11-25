@@ -374,3 +374,78 @@ TEST(Fiver, Merge2) {
   EXPECT_EQ(i, 3);
   fiver->end();
 }
+
+TEST(Fiver, NoText) {
+  std::shared_ptr<cottontail::Featurizer> featurizer =
+      cottontail::Featurizer::make("hashing", "");
+  ASSERT_NE(featurizer, nullptr);
+  std::shared_ptr<cottontail::Tokenizer> tokenizer =
+      cottontail::Tokenizer::make("ascii", "");
+  ASSERT_NE(tokenizer, nullptr);
+  cottontail::addr p, q;
+  cottontail::addr thing = featurizer->featurize("thing:");
+  std::shared_ptr<cottontail::Fiver> fiver0 =
+      cottontail::Fiver::make(nullptr, featurizer, tokenizer);
+  ASSERT_NE(fiver0, nullptr);
+  fiver0->start();
+  ASSERT_TRUE(fiver0->transaction());
+  ASSERT_TRUE(fiver0->appender()->append("aaa bbb ccc ddd", &p, &q));
+  ASSERT_TRUE(fiver0->annotator()->annotate(thing, p, q));
+  ASSERT_TRUE(fiver0->appender()->append("eee fff ggg", &p, &q));
+  ASSERT_TRUE(fiver0->annotator()->annotate(thing, p, q));
+  ASSERT_TRUE(fiver0->appender()->append("hhh iii jjj kkk", &p, &q));
+  ASSERT_TRUE(fiver0->annotator()->annotate(thing, p, q));
+  ASSERT_TRUE(fiver0->ready());
+  fiver0->commit();
+  fiver0->end();
+  std::shared_ptr<cottontail::Fiver> fiver1 =
+      cottontail::Fiver::make(nullptr, featurizer, tokenizer);
+  ASSERT_NE(fiver1, nullptr);
+  fiver1->start();
+  cottontail::addr foo = featurizer->featurize("foo:");
+  cottontail::addr bar = featurizer->featurize("bar:");
+  ASSERT_TRUE(fiver1->transaction());
+  ASSERT_TRUE(fiver1->annotator()->annotate(bar, 3, 4));
+  ASSERT_TRUE(fiver1->annotator()->annotate(foo, 5, 6));
+  ASSERT_TRUE(fiver1->annotator()->annotate(foo, 8, 9));
+  ASSERT_TRUE(fiver1->annotator()->annotate(bar, 6, 7));
+  ASSERT_TRUE(fiver1->annotator()->annotate(foo, 1, 2));
+  ASSERT_TRUE(fiver1->ready());
+  fiver1->commit();
+  fiver1->end();
+  std::vector<std::shared_ptr<cottontail::Fiver>> fivers;
+  fivers.push_back(fiver0);
+  fivers.push_back(fiver1);
+  std::shared_ptr<cottontail::Fiver> fiver = cottontail::Fiver::merge(fivers);
+  ASSERT_NE(fiver, nullptr);
+  fiver->start();
+  std::unique_ptr<cottontail::Hopper> hopper = fiver->hopper_from_gcl("jjj");
+  ASSERT_NE(hopper, nullptr);
+  hopper->tau(0, &p, &q);
+  EXPECT_EQ(p, 9);
+  EXPECT_EQ(p, q);
+  hopper = fiver->hopper_from_gcl("bbb");
+  ASSERT_NE(hopper, nullptr);
+  hopper->tau(0, &p, &q);
+  EXPECT_EQ(p, 1);
+  EXPECT_EQ(p, q);
+  hopper = fiver->idx()->hopper(foo);
+  ASSERT_NE(hopper, nullptr);
+  hopper->tau(3, &p, &q);
+  EXPECT_EQ(p, 5);
+  EXPECT_EQ(q, 6);
+  hopper->uat(10000, &p, &q);
+  EXPECT_EQ(p, 8);
+  EXPECT_EQ(q, 9);
+  hopper = fiver->idx()->hopper(bar);
+  ASSERT_NE(hopper, nullptr);
+  hopper->tau(0, &p, &q);
+  EXPECT_EQ(p, 3);
+  EXPECT_EQ(q, 4);
+  hopper = fiver->hopper_from_gcl("\"ggg hhh\"");
+  hopper->tau(0, &p, &q);
+  EXPECT_EQ(p, 6);
+  EXPECT_EQ(q, 7);
+  ASSERT_NE(hopper, nullptr);
+  fiver->end();
+}
