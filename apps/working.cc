@@ -12,26 +12,24 @@
 
 #include <cstring>
 #define EXPECT_STREQ(a, b) (assert(strcmp((a), (b)) == 0))
+#define ASSERT_STREQ(a, b) (assert(strcmp((a), (b)) == 0))
 
-#include <unistd.h>
-
-#include <fstream>
-#include <memory>
-#include <string>
-
-#include "src/cottontail.h"
 #include <cassert>
+#include <cstring>
 #include <fstream>
 #include <iostream>
 #include <memory>
 #include <string>
 #include <thread>
+#include <unistd.h>
 #include <vector>
 
-void test0() {
+#include "src/cottontail.h"
+
+void usage(std::string program_name) {
+  std::cerr << "usage: " << program_name << "\n";
 }
 
 int main(int argc, char **argv) {
-  test0();
   return 0;
 }
