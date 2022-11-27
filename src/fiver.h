@@ -84,7 +84,7 @@ private:
   std::shared_ptr<Compressor> posting_compressor_;
   std::shared_ptr<Compressor> fvalue_compressor_;
   std::shared_ptr<Compressor> text_compressor_;
-  std::shared_ptr<std::vector<std::string>> appends_;
+  std::shared_ptr<std::string> text_;
   std::shared_ptr<std::vector<Annotation>> annotations_;
   std::shared_ptr<std::map<addr, std::shared_ptr<SimplePosting>>> index_;
 };

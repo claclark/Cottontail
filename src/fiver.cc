@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cstring>
 #include <iostream>
 #include <map>
 
@@ -70,19 +71,19 @@ private:
 
 class FiverAppender : public Appender {
 public:
-  static std::shared_ptr<Appender>
-  make(std::shared_ptr<std::vector<std::string>> appends,
-       std::shared_ptr<Featurizer> featurizer,
-       std::shared_ptr<Tokenizer> tokenizer,
-       std::shared_ptr<Annotator> annotator, std::string *error = nullptr) {
-    if (appends == nullptr) {
-      safe_set(error) = "FiverAnnotator got null append vector";
+  static std::shared_ptr<Appender> make(std::shared_ptr<std::string> text,
+                                        std::shared_ptr<Featurizer> featurizer,
+                                        std::shared_ptr<Tokenizer> tokenizer,
+                                        std::shared_ptr<Annotator> annotator,
+                                        std::string *error = nullptr) {
+    if (text == nullptr || featurizer == nullptr || tokenizer == nullptr ||
+        annotator == nullptr) {
+      safe_set(error) = "FiverAnnotator got null pointer";
       return nullptr;
     }
-    appends->push_back("");
     std::shared_ptr<FiverAppender> appender =
         std::shared_ptr<FiverAppender>(new FiverAppender());
-    appender->appends_ = appends;
+    appender->text_ = text;
     appender->address_ = staging;
     appender->featurizer_ = featurizer;
     appender->tokenizer_ = tokenizer;
@@ -100,10 +101,14 @@ private:
   FiverAppender(){};
   std::string recipe_() final { return ""; };
   bool append_(const std::string &text, addr *p, addr *q, std::string *error) {
-    if ((*appends_)[appends_->size() - 1].length() > 0 &&
-        (*appends_)[appends_->size() - 1].back() != '\n')
-      (*appends_)[appends_->size() - 1] += "\n";
-    (*appends_)[appends_->size() - 1] += text;
+    if (text.length() == 0) {
+      *p = address_ + 1;
+      *q = address_;
+      return true;
+    }
+    if (text_->length() > 0 && text_->back() != '\n')
+      *text_ += "\n";
+    *text_ += text;
     std::vector<Token> tokens = tokenizer_->tokenize(featurizer_, text);
     if (tokens.size() == 0) {
       *p = address_ + 1;
@@ -123,7 +128,7 @@ private:
     return true;
   }
   bool transaction_(std::string *error) final {
-    if (appends_ == nullptr) {
+    if (text_ == nullptr) {
       safe_set(error) =
           "FiverAppender does not support more than one transaction";
       return false;
@@ -132,22 +137,21 @@ private:
   };
   bool ready_() { return true; };
   void commit_() {
-    if ((*appends_)[appends_->size() - 1].length() > 0 &&
-        (*appends_)[appends_->size() - 1].back() != '\n')
-      (*appends_)[appends_->size() - 1] += "\n";
+    if (text_->length() > 0 && text_->back() != '\n')
+      *text_ += "\n";
     if (address_ > staging) {
       assert(annotator_->annotate(featurizer_->featurize(separator), staging,
                                   address_ - 1, (addr)0));
       address_ = staging;
     }
-    appends_ = nullptr;
+    text_ = nullptr;
   }
   void abort_() {
     address_ = staging;
-    appends_->clear();
+    (*text_) = "";
   }
   addr address_;
-  std::shared_ptr<std::vector<std::string>> appends_;
+  std::shared_ptr<std::string> text_;
   std::shared_ptr<Featurizer> featurizer_;
   std::shared_ptr<Tokenizer> tokenizer_;
   std::shared_ptr<Annotator> annotator_;
@@ -196,17 +200,17 @@ private:
 
 class FiverTxt final : public Txt {
 public:
-  static std::shared_ptr<Txt>
-  make(std::shared_ptr<Featurizer> featurizer,
-       std::shared_ptr<Tokenizer> tokenizer, std::shared_ptr<Idx> idx,
-       std::shared_ptr<std::vector<std::string>> text,
-       std::string *error = nullptr) {
+  static std::shared_ptr<Txt> make(std::shared_ptr<Featurizer> featurizer,
+                                   std::shared_ptr<Tokenizer> tokenizer,
+                                   std::shared_ptr<Idx> idx,
+                                   std::shared_ptr<std::string> text,
+                                   std::string *error = nullptr) {
     if (idx == nullptr) {
       safe_set(error) = "FiverIdx got null idx";
       return nullptr;
     }
     if (text == nullptr) {
-      safe_set(error) = "FiverIdx got null text vector";
+      safe_set(error) = "FiverIdx got null text pointer";
       return nullptr;
     }
     std::shared_ptr<FiverTxt> txt = std::shared_ptr<FiverTxt>(new FiverTxt());
@@ -227,43 +231,20 @@ private:
   FiverTxt(){};
   std::string recipe_() final { return ""; };
   std::string translate_(addr p, addr q) final {
-    addr p0, q0, i0;
-    hopper_->rho(p, &p0, &q0, &i0);
-    if (p0 > q)
+    addr p0, q0, i;
+    hopper_->rho(p, &p0, &q0, &i);
+    if (p0 == maxfinity)
       return "";
-    const char *s = (*text_)[i0].c_str();
-    size_t l = (*text_)[i0].length();
-    const char *t;
-    addr ps;
-    if (p > p0) {
-      ps = p;
-      t = tokenizer_->skip(s, l, p - p0);
-      l -= t - s;
-    } else {
-      ps = p0;
-      t = s;
-    }
-    if (q < q0) {
-      const char *e = tokenizer_->skip(t, l, q - ps + 1);
-      l = e - t;
-    }
-    std::string result = (*text_)[i0].substr(t - s, l);
-    if (q <= q0)
-      return result;
-    addr p1, q1, i1;
-    hopper_->ohr(q, &p1, &q1, &i1);
-    if (p1 == p0)
-      return result;
-    for (addr j = i0 + 1; j < i1; j++)
-      result += (*text_)[j];
-    if (q1 <= q) {
-      result += (*text_)[i1];
-    } else {
-      const char *s = (*text_)[i1].c_str();
-      const char *e = tokenizer_->skip(s, (*text_)[i1].length(), q - p1 + 1);
-      result += (*text_)[i1].substr(0, e - s);
-    }
-    return result;
+    const char *t = text_->c_str();
+    const char *s = t + i;
+    if (p0 < p)
+      s = tokenizer_->skip(s, text_->length() - (s - t), p - p0);
+    hopper_->ohr(q, &p0, &q0, &i);
+    if (q0 < q)
+      return text_->substr(s - t, text_->length() - (s - t));
+    const char *e = t + i;
+    e = tokenizer_->skip(e, text_->length() - (e - t), q - p0 + 1);
+    return text_->substr(s - t, e - s);
   };
   addr tokens_() final {
     if (count_ >= 0)
@@ -277,7 +258,7 @@ private:
   addr count_;
   std::shared_ptr<Tokenizer> tokenizer_;
   std::unique_ptr<Hopper> hopper_;
-  std::shared_ptr<std::vector<std::string>> text_;
+  std::shared_ptr<std::string> text_;
 };
 
 std::shared_ptr<Fiver>
@@ -296,8 +277,7 @@ Fiver::make(std::shared_ptr<Working> working,
     safe_set(error) = "Fiver needs a tokenizer (got nullptr)";
     return nullptr;
   }
-  std::shared_ptr<std::vector<std::string>> appends =
-      std::make_shared<std::vector<std::string>>();
+  std::shared_ptr<std::string> text = std::make_shared<std::string>();
   std::shared_ptr<std::vector<Annotation>> annotations =
       std::make_shared<std::vector<Annotation>>();
   std::shared_ptr<std::map<addr, std::shared_ptr<SimplePosting>>> index =
@@ -307,7 +287,7 @@ Fiver::make(std::shared_ptr<Working> working,
   if (annotator == nullptr)
     return nullptr;
   std::shared_ptr<Appender> appender =
-      FiverAppender::make(appends, featurizer, tokenizer, annotator, error);
+      FiverAppender::make(text, featurizer, tokenizer, annotator, error);
   if (annotator == nullptr)
     return nullptr;
   std::shared_ptr<Idx> idx = NullIdx::make("", error);
@@ -339,7 +319,7 @@ Fiver::make(std::shared_ptr<Working> working,
     fiver->text_compressor_ = null_compressor;
   else
     fiver->text_compressor_ = text_compressor;
-  fiver->appends_ = appends;
+  fiver->text_ = text;
   fiver->annotations_ = annotations;
   fiver->index_ = index;
   fiver->annotator_ = annotator;
@@ -356,21 +336,23 @@ Fiver::merge(const std::vector<std::shared_ptr<Fiver>> &fivers,
     safe_set(error) = "Fiver::merge got empty vector";
     return nullptr;
   }
-  std::shared_ptr<std::vector<std::string>> text =
-      std::make_shared<std::vector<std::string>>();
+  std::shared_ptr<std::string> text = std::make_shared<std::string>();
   std::vector<Annotation> ann;
   addr chunk = fivers[0]->featurizer_->featurize(separator);
   for (auto &fiver : fivers) {
-    auto posting =
-        fiver->index_->find(fiver->featurizer_->featurize(separator));
-    if (posting != fiver->index_->end()) {
-      std::unique_ptr<Hopper> hopper = posting->second->hopper();
-      addr p, q, v;
-      for (hopper->tau(0, &p, &q, &v); p < maxfinity;
-           hopper->tau(p + 1, &p, &q, &v)) {
-        text->push_back((*(fiver->appends_))[v]);
-        ann.emplace_back(chunk, p, q, addr2fval(text->size() - 1));
+    if (fiver->text_->length() > 0) {
+      auto posting =
+          fiver->index_->find(fiver->featurizer_->featurize(separator));
+      if (posting != fiver->index_->end()) {
+        std::unique_ptr<Hopper> hopper = posting->second->hopper();
+        addr p, q, v;
+        for (hopper->tau(0, &p, &q, &v); p < maxfinity;
+             hopper->tau(p + 1, &p, &q, &v))
+          ann.emplace_back(chunk, p, q, addr2fval(v + text->length()));
       }
+      if (text->length() > 0 && text->back() != '\n')
+        *text += "\n";
+      *text += *(fiver->text_);
     }
   }
   std::sort(ann.begin(), ann.end(),
@@ -411,16 +393,16 @@ Fiver::merge(const std::vector<std::shared_ptr<Fiver>> &fivers,
   fiver->built_ = true;
   fiver->where_ = 0;
   fiver->parameters_ = fivers[0]->parameters_;
-  fiver->appends_ = text;
+  fiver->text_ = text;
   fiver->index_ = index;
   fiver->idx_ = FiverIdx::make(fiver->index_);
   fiver->txt_ = FiverTxt::make(fiver->featurizer_, fiver->tokenizer_,
-                               fiver->idx_, fiver->appends_);
+                               fiver->idx_, fiver->text_);
   return fiver;
 }
 
 bool Fiver::range(addr *p, addr *q) {
-  if (!built_ || index_ == nullptr || appends_ == nullptr)
+  if (!built_ || index_ == nullptr || text_ == nullptr)
     return false;
   std::unique_ptr<Hopper> hopper =
       idx_->hopper(featurizer_->featurize(separator));
@@ -476,7 +458,7 @@ void Fiver::commit_() {
   annotations_->clear();
   idx_ = FiverIdx::make(index_);
   assert(idx_ != nullptr);
-  txt_ = FiverTxt::make(featurizer_, tokenizer_, idx_, appends_);
+  txt_ = FiverTxt::make(featurizer_, tokenizer_, idx_, text_);
   assert(txt_ != nullptr);
   built_ = true;
 };
