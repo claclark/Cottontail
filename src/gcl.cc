@@ -228,6 +228,74 @@ void NotContaining::ohr_(addr k, addr *p, addr *q, fval *v) {
   }
 }
 
+void Merge::tau_(addr k, addr *p, addr *q, fval *v) {
+  addr pl, ql, pr, qr;
+  fval vl, vr;
+  left_->tau(k, &pl, &ql, &vl);
+  right_->tau(k, &pr, &qr, &vr);
+  if (ql < qr) {
+    *p = pl;
+    *q = ql;
+    *v = vl;
+  } else if (ql > qr) {
+    *p = pr;
+    *q = qr;
+    *v = vr;
+  } else if (pl < pr) {
+    *p = pr;
+    *q = qr;
+    *v = vr;
+  } else {
+    *p = pl;
+    *q = ql;
+    *v = vl;
+  }
+}
+
+void Merge::rho_(addr k, addr *p, addr *q, fval *v) {
+  addr p0, q0;
+  if (k == minfinity) {
+    *p = *q = minfinity;
+    *v = 0.0;
+  }
+  uat(k - 1, &p0, &q0);
+  tau(p0 + 1, p, q, v);
+}
+
+void Merge::uat_(addr k, addr *p, addr *q, fval *v) {
+  addr pl, ql, pr, qr;
+  fval vl, vr;
+  left_->uat(k, &pl, &ql, &vl);
+  right_->uat(k, &pr, &qr, &vr);
+  if (pl > pr) {
+    *p = pl;
+    *q = ql;
+    *v = vl;
+  } else if (pr > pl) {
+    *p = pr;
+    *q = qr;
+    *v = vr;
+  } else if (ql < qr) {
+    *p = pr;
+    *q = qr;
+    *v = vr;
+  } else {
+    *p = pl;
+    *q = ql;
+    *v = vl;
+  }
+}
+
+void Merge::ohr_(addr k, addr *p, addr *q, fval *v) {
+  if (k == maxfinity) {
+    *p = *q = maxfinity;
+    *v = 0.0;
+  }
+  addr p0, q0;
+  tau(k + 1, &p0, &q0);
+  uat(q0 - 1, p, q, v);
+}
+
 namespace {
 std::unique_ptr<Hopper> make_link_hopper(const std::set<addr> &s) {
   if (s.size() == 0)

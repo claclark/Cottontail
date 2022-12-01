@@ -168,6 +168,23 @@ private:
   void ohr_(addr k, addr *p, addr *q, fval *v) final;
 };
 
+class Merge final : public Binary {
+public:
+  Merge(std::unique_ptr<Hopper> left, std::unique_ptr<Hopper> right)
+      : Binary(std::move(left), std::move(right)){};
+  virtual ~Merge(){};
+  Merge(Merge const &) = delete;
+  Merge &operator=(Merge const &) = delete;
+  Merge(Merge &&) = delete;
+  Merge &operator=(Merge &&) = delete;
+
+private:
+  void tau_(addr k, addr *p, addr *q, fval *v) final;
+  void rho_(addr k, addr *p, addr *q, fval *v) final;
+  void uat_(addr k, addr *p, addr *q, fval *v) final;
+  void ohr_(addr k, addr *p, addr *q, fval *v) final;
+};
+
 class Link : public Unary {
 public:
   Link(std::unique_ptr<Hopper> expr) : Unary(std::move(expr)){};

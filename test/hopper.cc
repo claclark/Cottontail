@@ -62,8 +62,7 @@ TEST(Hopper, Empty) {
 }
 
 TEST(Hopper, Singleton) {
-  cottontail::SingletonHopper
-  hopper(8, 16, 1.0);
+  cottontail::SingletonHopper hopper(8, 16, 1.0);
   cottontail::addr p, q;
   cottontail::fval v;
 

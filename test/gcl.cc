@@ -143,7 +143,7 @@ TEST(GCLTest, E2E) {
   EXPECT_EQ(q, 7);
 }
 
-TEST(GCLTest, LINK) {
+TEST(GCLTest, Link) {
   cottontail::addr n = 763;
   std::string burrow = cottontail::DEFAULT_BURROW;
   std::string error;
@@ -248,4 +248,72 @@ TEST(GCLTest, LINK) {
   ASSERT_EQ(p, q);
   ASSERT_EQ(v, 0);
   warren->end();
+}
+
+std::unique_ptr<cottontail::Hopper>
+merge(std::unique_ptr<cottontail::Hopper> left,
+      std::unique_ptr<cottontail::Hopper> right) {
+  return std::make_unique<cottontail::gcl::Merge>(std::move(left),
+                                                  std::move(right));
+}
+
+TEST(GCLTest, Merge) {
+  std::unique_ptr<cottontail::Hopper> h0 =
+      std::make_unique<cottontail::SingletonHopper>(0, 10, 0.0);
+  std::unique_ptr<cottontail::Hopper> h1 =
+      std::make_unique<cottontail::SingletonHopper>(1, 11, 1.0);
+  std::unique_ptr<cottontail::Hopper> h2 =
+      std::make_unique<cottontail::SingletonHopper>(2, 12, 2.0);
+  std::unique_ptr<cottontail::Hopper> h3 =
+      std::make_unique<cottontail::SingletonHopper>(3, 13, 3.0);
+  std::unique_ptr<cottontail::Hopper> h4 =
+      std::make_unique<cottontail::SingletonHopper>(4, 14, 4.0);
+  std::unique_ptr<cottontail::Hopper> ha =
+      std::make_unique<cottontail::SingletonHopper>(2, 20, -1.0);
+  std::unique_ptr<cottontail::Hopper> hb =
+      std::make_unique<cottontail::SingletonHopper>(3, 40, -2.0);
+  std::unique_ptr<cottontail::Hopper> hz =
+      std::make_unique<cottontail::SingletonHopper>(1, 11, -99.0);
+  std::unique_ptr<cottontail::Hopper> hopper = merge(
+      std::move(h1),
+      merge(std::move(h3),
+            merge(std::move(ha),
+                  merge(std::move(hb),
+                        merge(std::move(h4),
+                              merge(std::move(hz),
+                                    merge(std::move(h0), std::move(h2))))))));
+  ASSERT_NE(hopper, nullptr);
+  cottontail::addr p, q, i = 0;
+  cottontail::fval v;
+  for (hopper->tau(cottontail::minfinity + 1, &p, &q, &v);
+       p < cottontail::maxfinity; hopper->tau(p + 1, &p, &q, &v)) {
+    EXPECT_EQ(p, i);
+    EXPECT_EQ(q, i + 10);
+    EXPECT_EQ(v, (cottontail::fval)i);
+    i++;
+  }
+  i = 0;
+  for (hopper->rho(cottontail::minfinity + 1, &p, &q, &v);
+       q < cottontail::maxfinity; hopper->rho(q + 1, &p, &q, &v)) {
+    EXPECT_EQ(p, i);
+    EXPECT_EQ(q, i + 10);
+    EXPECT_EQ(v, (cottontail::fval)i);
+    i++;
+  }
+  i = 4;
+  for (hopper->uat(cottontail::maxfinity - 1, &p, &q, &v);
+       q > cottontail::minfinity; hopper->uat(q - 1, &p, &q, &v)) {
+    EXPECT_EQ(p, i);
+    EXPECT_EQ(q, i + 10);
+    EXPECT_EQ(v, (cottontail::fval)i);
+    --i;
+  }
+  i = 4;
+  for (hopper->ohr(cottontail::maxfinity - 1, &p, &q, &v);
+       p > cottontail::minfinity; hopper->ohr(p - 1, &p, &q, &v)) {
+    EXPECT_EQ(p, i);
+    EXPECT_EQ(q, i + 10);
+    EXPECT_EQ(v, (cottontail::fval)i);
+    --i;
+  }
 }
