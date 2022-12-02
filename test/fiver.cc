@@ -116,7 +116,7 @@ make_fiver(std::shared_ptr<cottontail::Fiver> prev, size_t start,
     return nullptr;
   fiver->annotator()->annotate(f, p, q, 3.0);
   if (prev != nullptr) {
-    if (!prev->range(&p, &q))
+    if (!prev->txt()->range(&p, &q))
       return nullptr;
     fiver->relocate(q + 1);
   }
@@ -262,7 +262,9 @@ TEST(Fiver, Merge2) {
   ASSERT_TRUE(fiver1->annotator()->annotate(fline, p, q, (cottontail::addr)6));
   ASSERT_TRUE(fiver1->appender()->append(std::string(sonnet20[6]), &p, &q));
   ASSERT_TRUE(fiver1->annotator()->annotate(fline, p, q, (cottontail::addr)7));
-  ASSERT_TRUE(fiver0->range(&p, &q));
+  fiver0->start();
+  ASSERT_TRUE(fiver0->txt()->range(&p, &q));
+  fiver0->end();
   fiver1->relocate(q + 1);
   ASSERT_TRUE(fiver1->ready());
   fiver1->commit();
@@ -278,7 +280,9 @@ TEST(Fiver, Merge2) {
   ASSERT_TRUE(fiver2->annotator()->annotate(fline, p, q, (cottontail::addr)9));
   ASSERT_TRUE(fiver2->appender()->append(std::string(sonnet20[9]), &p, &q));
   ASSERT_TRUE(fiver2->annotator()->annotate(fline, p, q, (cottontail::addr)10));
-  ASSERT_TRUE(fiver1->range(&p, &q));
+  fiver1->start();
+  ASSERT_TRUE(fiver1->txt()->range(&p, &q));
+  fiver1->end();
   fiver2->relocate(q + 1);
   ASSERT_TRUE(fiver2->ready());
   fiver2->commit();
@@ -296,7 +300,9 @@ TEST(Fiver, Merge2) {
   ASSERT_TRUE(fiver3->annotator()->annotate(fline, p, q, (cottontail::addr)13));
   ASSERT_TRUE(fiver3->appender()->append(std::string(sonnet20[13]), &p, &q));
   ASSERT_TRUE(fiver3->annotator()->annotate(fline, p, q, (cottontail::addr)14));
-  ASSERT_TRUE(fiver2->range(&p, &q));
+  fiver2->start();
+  ASSERT_TRUE(fiver2->txt()->range(&p, &q));
+  fiver2->end();
   fiver3->relocate(q + 1);
   ASSERT_TRUE(fiver3->ready());
   fiver3->commit();

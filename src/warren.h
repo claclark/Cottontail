@@ -44,14 +44,14 @@ public:
   };
   inline std::string name() { return name_; }
   inline void start() {
-    // Aspirational stub for update synchronization
     assert(!started_);
+    start_();
     started_ = true;
   };
   inline void end() {
     assert(started_);
     started_ = false;
-    // Aspirational stub for update synchronization
+    end_();
   }
   inline void started() { assert(started_); }
   inline std::shared_ptr<Working> working() {
@@ -149,6 +149,8 @@ protected:
   std::shared_ptr<Scribe> scribe_ = nullptr;
 
 private:
+  virtual void start_(){};
+  virtual void end_(){};
   virtual bool set_parameter_(const std::string &key, const std::string &value,
                               std::string *error) = 0;
   virtual bool get_parameter_(const std::string &key, std::string *value,

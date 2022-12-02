@@ -42,7 +42,6 @@ public:
       return true;
     }
   };
-  bool range(addr *p, addr *q);
 
   virtual ~Fiver(){};
   Fiver(const Fiver &) = delete;

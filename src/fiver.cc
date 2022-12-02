@@ -255,6 +255,14 @@ private:
       count_ += q - p + 1;
     return count_;
   }
+  bool range_(addr *p, addr *q) {
+    hopper_->tau(minfinity + 1, p, q);
+    if (*p == maxfinity)
+      return false;
+    addr r;
+    hopper_->uat(maxfinity - 1, &r, q);
+    return true;
+  }
   addr count_;
   std::shared_ptr<Tokenizer> tokenizer_;
   std::unique_ptr<Hopper> hopper_;
@@ -399,19 +407,6 @@ Fiver::merge(const std::vector<std::shared_ptr<Fiver>> &fivers,
   fiver->txt_ = FiverTxt::make(fiver->featurizer_, fiver->tokenizer_,
                                fiver->idx_, fiver->text_);
   return fiver;
-}
-
-bool Fiver::range(addr *p, addr *q) {
-  if (!built_ || index_ == nullptr || text_ == nullptr)
-    return false;
-  std::unique_ptr<Hopper> hopper =
-      idx_->hopper(featurizer_->featurize(separator));
-  hopper->tau(minfinity + 1, p, q);
-  if (*p == maxfinity)
-    return false;
-  addr r;
-  hopper->uat(maxfinity - 1, &r, q);
-  return true;
 }
 
 bool Fiver::transaction_(std::string *error = nullptr) {
