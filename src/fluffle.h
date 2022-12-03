@@ -15,6 +15,7 @@ struct Fluffle {
     return std::make_shared<Fluffle>();
   };
   std::mutex lock;
+  addr address = 0;
   std::vector<std::shared_ptr<Warren>> warrens;
 };
 

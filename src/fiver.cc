@@ -90,6 +90,7 @@ public:
     appender->annotator_ = annotator;
     return appender;
   };
+  addr appended() { return address_ - staging; };
 
   virtual ~FiverAppender(){};
   FiverAppender(const FiverAppender &) = delete;
@@ -408,6 +409,14 @@ Fiver::merge(const std::vector<std::shared_ptr<Fiver>> &fivers,
                                fiver->idx_, fiver->text_);
   return fiver;
 }
+
+addr Fiver::relocate(addr where) {
+  assert(!built_);
+  where_ = where;
+  std::shared_ptr<FiverAppender> fiver_appender =
+      std::static_pointer_cast<FiverAppender>(appender_);
+  return where + fiver_appender->appended();
+};
 
 bool Fiver::transaction_(std::string *error = nullptr) {
   if (built_) {
