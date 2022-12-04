@@ -136,15 +136,16 @@ private:
     }
     return true;
   };
-  bool ready_() { return true; };
-  void commit_() {
+  bool ready_() {
     if (text_->length() > 0 && text_->back() != '\n')
       *text_ += "\n";
-    if (address_ > staging) {
+    if (address_ > staging)
       assert(annotator_->annotate(featurizer_->featurize(separator), staging,
                                   address_ - 1, (addr)0));
-      address_ = staging;
-    }
+    return true;
+  }
+  void commit_() {
+    address_ = staging;
     text_ = nullptr;
   }
   void abort_() {
@@ -432,13 +433,12 @@ bool Fiver::transaction_(std::string *error = nullptr) {
   return true;
 };
 
-bool Fiver::ready_() { return appender_->ready() && annotator_->ready(); };
-
-void Fiver::commit_() {
-  appender_->commit();
-  annotator_->commit();
+bool Fiver::ready_() {
+  if (built_ || !appender_->ready() || !annotator_->ready())
+    return false;
   if (annotations_->size() == 0)
-    return;
+    return true;
+  index_->clear();
   addr relocate = staging - where_;
   for (auto &annotation : (*annotations_))
     if (annotation.p >= staging) {
@@ -459,18 +459,31 @@ void Fiver::commit_() {
         posting_factory->posting_from_annotations(&it, annotations_->end());
     (*index_)[posting->feature()] = posting;
   }
-  annotations_->clear();
-  idx_ = FiverIdx::make(index_);
-  assert(idx_ != nullptr);
-  txt_ = FiverTxt::make(featurizer_, tokenizer_, idx_, text_);
-  assert(txt_ != nullptr);
-  built_ = true;
+  return true;
+};
+
+void Fiver::commit_() {
+  if (!built_) {
+    appender_->commit();
+    annotator_->commit();
+    annotations_->clear();
+    idx_ = FiverIdx::make(index_);
+    assert(idx_ != nullptr);
+    txt_ = FiverTxt::make(featurizer_, tokenizer_, idx_, text_);
+    assert(txt_ != nullptr);
+    built_ = true;
+  }
 };
 
 void Fiver::abort_() {
-  appender_->abort();
-  annotator_->abort();
-  where_ = 0;
+  if (!built_) {
+    appender_->abort();
+    annotator_->abort();
+    text_->clear();
+    annotations_->clear();
+    index_->clear();
+    where_ = 0;
+  }
 };
 
 } // namespace cottontail
