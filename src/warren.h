@@ -79,11 +79,11 @@ public:
     return stats_;
   }
   inline std::shared_ptr<Annotator> annotator() {
-    assert(started_);
+    assert(annotator_ != nullptr);
     return annotator_;
   }
   inline std::shared_ptr<Appender> appender() {
-    assert(started_);
+    assert(appender_ != nullptr);
     return appender_;
   }
   inline std::string default_container() {

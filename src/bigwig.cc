@@ -189,10 +189,23 @@ Bigwig::make(std::shared_ptr<Working> working,
       new Bigwig(working, featurizer, tokenizer, nullptr, nullptr));
   bigwig->parameters_ = parameters;
   bigwig->fiver_ = nullptr;
-  bigwig->posting_compressor_ = posting_compressor;
-  bigwig->fvalue_compressor_ = fvalue_compressor;
-  bigwig->text_compressor_ = text_compressor;
   bigwig->fluffle_ = fluffle;
+  std::shared_ptr<Compressor> null_compressor = nullptr;
+  if (posting_compressor == nullptr || fvalue_compressor == nullptr ||
+      text_compressor == nullptr)
+    null_compressor = Compressor::make("null", "");
+  if (posting_compressor == nullptr)
+    bigwig->posting_compressor_ = null_compressor;
+  else
+    bigwig->posting_compressor_ = posting_compressor;
+  if (fvalue_compressor == nullptr)
+    bigwig->fvalue_compressor_ = null_compressor;
+  else
+    bigwig->fvalue_compressor_ = fvalue_compressor;
+  if (text_compressor == nullptr)
+    bigwig->text_compressor_ = null_compressor;
+  else
+    bigwig->text_compressor_ = text_compressor;
   return bigwig;
 }
 
@@ -204,9 +217,13 @@ void Bigwig::start_() {
   txt_ = BigwigTxt::make(warrens_);
   assert(txt_ != nullptr);
   fluffle_->lock.unlock();
+  for (auto &warren : warrens_)
+    warren->start();
 }
 
 void Bigwig::end_() {
+  for (auto &warren : warrens_)
+    warren->end();
   fluffle_->lock.lock();
   warrens_.clear();
   idx_ = nullptr;
@@ -241,17 +258,16 @@ bool Bigwig::transaction_(std::string *error) {
 }
 
 bool Bigwig::ready_() {
+  fluffle_->lock.lock();
+  fluffle_->address = fiver_->relocate(fluffle_->address);
+  fluffle_->lock.unlock();
   if (!fiver_->ready()) {
     appender_ = nullptr;
     annotator_ = nullptr;
     fiver_ = nullptr;
     return false;
-  } else {
-    fluffle_->lock.lock();
-    fluffle_->address = fiver_->relocate(fluffle_->address);
-    fluffle_->lock.unlock();
-    return true;
   }
+  return true;
 }
 
 void Bigwig::commit_() {
@@ -259,7 +275,14 @@ void Bigwig::commit_() {
   fluffle_->lock.lock();
   fluffle_->warrens.push_back(fiver_);
   fluffle_->lock.unlock();
+  appender_ = nullptr;
+  annotator_ = nullptr;
+  fiver_ = nullptr;
 }
 
-void Bigwig::abort_() {}
+void Bigwig::abort_() {
+  appender_ = nullptr;
+  annotator_ = nullptr;
+  fiver_ = nullptr;
+}
 } // namespace cottontail
