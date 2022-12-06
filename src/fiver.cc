@@ -235,7 +235,7 @@ private:
   std::string translate_(addr p, addr q) final {
     addr p0, q0, i;
     hopper_->rho(p, &p0, &q0, &i);
-    if (p0 == maxfinity)
+    if (p0 > q)
       return "";
     const char *t = text_->c_str();
     const char *s = t + i;
