@@ -217,18 +217,12 @@ void Bigwig::start_() {
   txt_ = BigwigTxt::make(warrens_);
   assert(txt_ != nullptr);
   fluffle_->lock.unlock();
-  for (auto &warren : warrens_)
-    warren->start();
 }
 
 void Bigwig::end_() {
-  for (auto &warren : warrens_)
-    warren->end();
-  fluffle_->lock.lock();
   warrens_.clear();
   idx_ = nullptr;
   txt_ = nullptr;
-  fluffle_->lock.unlock();
 }
 
 bool Bigwig::transaction_(std::string *error) {
@@ -258,22 +252,19 @@ bool Bigwig::transaction_(std::string *error) {
 }
 
 bool Bigwig::ready_() {
-  fluffle_->lock.lock();
-  fluffle_->address = fiver_->relocate(fluffle_->address);
-  fluffle_->lock.unlock();
-  if (!fiver_->ready()) {
-    appender_ = nullptr;
-    annotator_ = nullptr;
-    fiver_ = nullptr;
-    return false;
-  }
-  return true;
+    fluffle_->lock.lock();
+    fluffle_->address = fiver_->relocate(fluffle_->address);
+    fluffle_->warrens.push_back(fiver_);
+    fiver_->start();
+    fluffle_->lock.unlock();
+    return fiver_->ready();
 }
 
 void Bigwig::commit_() {
-  fiver_->commit();
   fluffle_->lock.lock();
-  fluffle_->warrens.push_back(fiver_);
+  fiver_->commit();
+  fiver_->end();
+  fiver_->start();
   fluffle_->lock.unlock();
   appender_ = nullptr;
   annotator_ = nullptr;
@@ -281,6 +272,7 @@ void Bigwig::commit_() {
 }
 
 void Bigwig::abort_() {
+  fiver_->abort();
   appender_ = nullptr;
   annotator_ = nullptr;
   fiver_ = nullptr;

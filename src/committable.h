@@ -32,8 +32,14 @@ public:
   inline bool ready() {
     lock_.lock();
     assert(started_);
-    vote_ = ready_();
-    bool result = vote_;
+    bool result;
+    if (readied_) {
+      result = vote_;
+    } else {
+      readied_ = true;
+      vote_ = ready_();
+      result = vote_;
+    }
     lock_.unlock();
     return result;
   }
@@ -41,14 +47,14 @@ public:
     lock_.lock();
     assert(started_ && vote_);
     commit_();
-    started_ = vote_ = false;
+    started_ = readied_ = vote_ = false;
     lock_.unlock();
   }
   inline void abort() {
     lock_.lock();
     assert(started_);
     abort_();
-    started_ = vote_ = false;
+    started_ = readied_ = vote_ = false;
     lock_.unlock();
   }
 
@@ -58,6 +64,7 @@ protected:
 private:
   std::mutex lock_;
   bool started_ = false;
+  bool readied_ = false;
   bool vote_ = false;
   virtual bool transaction_(std::string *error = nullptr) {
     safe_set(error) = "Committable does not support transactions";
