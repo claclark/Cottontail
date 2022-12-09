@@ -33,6 +33,7 @@ public:
         std::shared_ptr<Compressor> fvalue_compressor = nullptr,
         std::shared_ptr<Compressor> text_compressor = nullptr);
   addr relocate(addr where);
+  void sequence(addr number);
 
   virtual ~Fiver(){};
   Fiver(const Fiver &) = delete;
@@ -45,7 +46,12 @@ private:
         std::shared_ptr<Featurizer> featurizer,
         std::shared_ptr<Tokenizer> tokenizer, std::shared_ptr<Idx> idx,
         std::shared_ptr<Txt> txt)
-      : Warren(working, featurizer, tokenizer, idx, txt){};
+      : Warren(working, featurizer, tokenizer, idx, txt) {
+    name_ = "kitten";
+  };
+  std::string recipe_() final {
+    return identifier_;
+  }
   bool set_parameter_(const std::string &key, const std::string &value,
                       std::string *error) final {
     safe_set(error) = "Fiver can't set its parameters";
@@ -70,6 +76,7 @@ private:
   void abort_() final;
   bool built_;
   addr where_;
+  std::string identifier_;
   std::shared_ptr<std::map<std::string, std::string>> parameters_;
   std::shared_ptr<Compressor> posting_compressor_;
   std::shared_ptr<Compressor> fvalue_compressor_;

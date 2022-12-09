@@ -164,15 +164,12 @@ private:
   std::vector<std::shared_ptr<Warren>> warrens_;
 };
 
-std::shared_ptr<Bigwig>
-Bigwig::make(std::shared_ptr<Working> working,
-             std::shared_ptr<Featurizer> featurizer,
-             std::shared_ptr<Tokenizer> tokenizer,
-             std::shared_ptr<Fluffle> fluffle, std::string *error,
-             std::shared_ptr<std::map<std::string, std::string>> parameters,
-             std::shared_ptr<Compressor> posting_compressor,
-             std::shared_ptr<Compressor> fvalue_compressor,
-             std::shared_ptr<Compressor> text_compressor) {
+std::shared_ptr<Bigwig> Bigwig::make(
+    std::shared_ptr<Working> working, std::shared_ptr<Featurizer> featurizer,
+    std::shared_ptr<Tokenizer> tokenizer, std::shared_ptr<Fluffle> fluffle,
+    std::string *error, std::shared_ptr<Compressor> posting_compressor,
+    std::shared_ptr<Compressor> fvalue_compressor,
+    std::shared_ptr<Compressor> text_compressor) {
   if (featurizer == nullptr) {
     safe_set(error) = "Bigwig needs a featurizer (got nullptr)";
     return nullptr;
@@ -187,9 +184,11 @@ Bigwig::make(std::shared_ptr<Working> working,
   }
   std::shared_ptr<Bigwig> bigwig = std::shared_ptr<Bigwig>(
       new Bigwig(working, featurizer, tokenizer, nullptr, nullptr));
-  bigwig->parameters_ = parameters;
   bigwig->fiver_ = nullptr;
-  bigwig->fluffle_ = fluffle;
+  if (fluffle == nullptr)
+    bigwig->fluffle_ = Fluffle::make();
+  else
+    bigwig->fluffle_ = fluffle;
   std::shared_ptr<Compressor> null_compressor = nullptr;
   if (posting_compressor == nullptr || fvalue_compressor == nullptr ||
       text_compressor == nullptr)
@@ -211,12 +210,14 @@ Bigwig::make(std::shared_ptr<Working> working,
 
 void Bigwig::start_() {
   fluffle_->lock.lock();
-  warrens_ = fluffle_->warrens;
+  for (auto &warren : fluffle_->warrens)
+    if (warren->name() == "fiver")
+      warrens_.push_back(warren);
+  fluffle_->lock.unlock();
   idx_ = BigwigIdx::make(warrens_);
   assert(idx_ != nullptr);
   txt_ = BigwigTxt::make(warrens_);
   assert(txt_ != nullptr);
-  fluffle_->lock.unlock();
 }
 
 void Bigwig::end_() {
@@ -226,8 +227,12 @@ void Bigwig::end_() {
 }
 
 bool Bigwig::transaction_(std::string *error) {
+  fluffle_->lock.lock();
+  std::shared_ptr<std::map<std::string, std::string>> parameters =
+      fluffle_->parameters;
+  fluffle_->lock.unlock();
   fiver_ =
-      Fiver::make(working_, featurizer_, tokenizer_, error, parameters_,
+      Fiver::make(working_, featurizer_, tokenizer_, error, parameters,
                   posting_compressor_, fvalue_compressor_, text_compressor_);
   if (fiver_ == nullptr)
     return false;
@@ -252,18 +257,18 @@ bool Bigwig::transaction_(std::string *error) {
 }
 
 bool Bigwig::ready_() {
-    fluffle_->lock.lock();
-    fluffle_->address = fiver_->relocate(fluffle_->address);
-    fluffle_->warrens.push_back(fiver_);
-    fiver_->start();
-    fluffle_->lock.unlock();
-    return fiver_->ready();
+  fluffle_->lock.lock();
+  fluffle_->address = fiver_->relocate(fluffle_->address);
+  fiver_->sequence(fluffle_->sequence);
+  fluffle_->sequence++;
+  fluffle_->warrens.push_back(fiver_);
+  fluffle_->lock.unlock();
+  return fiver_->ready();
 }
 
 void Bigwig::commit_() {
   fluffle_->lock.lock();
   fiver_->commit();
-  fiver_->end();
   fiver_->start();
   fluffle_->lock.unlock();
   appender_ = nullptr;

@@ -14,6 +14,8 @@
 #define EXPECT_STREQ(a, b) (assert(strcmp((a), (b)) == 0))
 #define ASSERT_STREQ(a, b) (assert(strcmp((a), (b)) == 0))
 
+#define TEST(a, b) void test_##b()
+
 #include <cassert>
 #include <cstring>
 #include <fstream>

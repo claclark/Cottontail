@@ -43,6 +43,7 @@ public:
     scribe_ = Scribe::null();
   };
   inline std::string name() { return name_; }
+  inline std::string recipe() { return recipe_();}
   inline void start() {
     assert(!started_);
     start_();
@@ -136,6 +137,7 @@ public:
   Warren &operator=(Warren &&) = delete;
 
 protected:
+  std::string name_ = "";
   std::string default_container_;
   std::shared_ptr<Stemmer> stemmer_ = nullptr;
   std::shared_ptr<Working> working_ = nullptr;
@@ -149,13 +151,13 @@ protected:
   std::shared_ptr<Scribe> scribe_ = nullptr;
 
 private:
+  virtual std::string recipe_() {return "";};;
   virtual void start_(){};
   virtual void end_(){};
   virtual bool set_parameter_(const std::string &key, const std::string &value,
                               std::string *error) = 0;
   virtual bool get_parameter_(const std::string &key, std::string *value,
                               std::string *error) = 0;
-  std::string name_ = "";
   bool started_ = false;
 };
 } // namespace cottontail

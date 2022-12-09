@@ -5,6 +5,7 @@
 #include <cstring>
 #include <iostream>
 #include <map>
+#include <sstream>
 
 #include "src/annotator.h"
 #include "src/appender.h"
@@ -419,6 +420,14 @@ addr Fiver::relocate(addr where) {
   return where + fiver_appender->appended();
 };
 
+void Fiver::sequence(addr number) {
+  std::stringstream ss;
+  ss.fill('0');
+  ss.width(20);
+  ss << number;
+  identifier_ = ss.str();
+};
+
 bool Fiver::transaction_(std::string *error = nullptr) {
   if (built_) {
     safe_set(error) = "Fiver does not support more than one transaction";
@@ -472,6 +481,7 @@ void Fiver::commit_() {
     txt_ = FiverTxt::make(featurizer_, tokenizer_, idx_, text_);
     assert(txt_ != nullptr);
     built_ = true;
+    name_ = "fiver";
   }
 };
 

@@ -16,9 +16,8 @@ class Bigwig final : public Warren {
 public:
   static std::shared_ptr<Bigwig>
   make(std::shared_ptr<Working> working, std::shared_ptr<Featurizer> featurizer,
-       std::shared_ptr<Tokenizer> tokenizer, std::shared_ptr<Fluffle> fluffle,
-       std::string *error = nullptr,
-       std::shared_ptr<std::map<std::string, std::string>> parameters = nullptr,
+       std::shared_ptr<Tokenizer> tokenizer,
+       std::shared_ptr<Fluffle> fluffle = nullptr, std::string *error = nullptr,
        std::shared_ptr<Compressor> posting_compressor = nullptr,
        std::shared_ptr<Compressor> fvalue_compressor = nullptr,
        std::shared_ptr<Compressor> text_compressor = nullptr);
@@ -34,38 +33,50 @@ private:
          std::shared_ptr<Featurizer> featurizer,
          std::shared_ptr<Tokenizer> tokenizer, std::shared_ptr<Idx> idx,
          std::shared_ptr<Txt> txt)
-      : Warren(working, featurizer, tokenizer, idx, txt){};
+      : Warren(working, featurizer, tokenizer, idx, txt) {
+    name_ = "bigwig";
+  };
   void start_() final;
   void end_() final;
   bool set_parameter_(const std::string &key, const std::string &value,
                       std::string *error) final {
-    safe_set(error) = "Bigwig can't set its parameters";
-    return false;
+    std::shared_ptr<std::map<std::string, std::string>> parameters =
+        std::make_shared<std::map<std::string, std::string>>();
+    fluffle_->lock.lock();
+    if (fluffle_->parameters != nullptr)
+      (*parameters) = *(fluffle_->parameters);
+    (*parameters)[key] = value;
+    fluffle_->parameters = parameters;
+    fluffle_->lock.unlock();
+    return true;
   };
   bool get_parameter_(const std::string &key, std::string *value,
                       std::string *error) final {
-    if (parameters_ == nullptr) {
+    fluffle_->lock.lock();
+    std::shared_ptr<std::map<std::string, std::string>> parameters =
+        fluffle_->parameters;
+    if (parameters == nullptr) {
       *value = "";
-      return true;
+    } else {
+      std::map<std::string, std::string>::iterator item = parameters->find(key);
+      if (item != parameters->end())
+        *value = item->second;
+      else
+        *value = "";
     }
-    std::map<std::string, std::string>::iterator item = parameters_->find(key);
-    if (item != parameters_->end())
-      *value = item->second;
-    else
-      *value = "";
+    fluffle_->lock.unlock();
     return true;
   };
   bool transaction_(std::string *error) final;
   bool ready_() final;
   void commit_() final;
   void abort_() final;
-  std::shared_ptr<std::map<std::string, std::string>> parameters_;
-  std::shared_ptr<Compressor> posting_compressor_;
-  std::shared_ptr<Compressor> fvalue_compressor_;
-  std::shared_ptr<Compressor> text_compressor_;
   std::shared_ptr<Fiver> fiver_;
   std::shared_ptr<Fluffle> fluffle_;
   std::vector<std::shared_ptr<Warren>> warrens_;
+  std::shared_ptr<Compressor> posting_compressor_;
+  std::shared_ptr<Compressor> fvalue_compressor_;
+  std::shared_ptr<Compressor> text_compressor_;
 };
 
 } // namespace cottontail
