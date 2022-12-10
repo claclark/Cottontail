@@ -21,6 +21,9 @@ public:
        std::shared_ptr<Compressor> posting_compressor = nullptr,
        std::shared_ptr<Compressor> fvalue_compressor = nullptr,
        std::shared_ptr<Compressor> text_compressor = nullptr);
+  void merge(bool on = true) {
+    merge_ = on;
+  }
 
   virtual ~Bigwig(){};
   Bigwig(const Bigwig &) = delete;
@@ -36,41 +39,18 @@ private:
       : Warren(working, featurizer, tokenizer, idx, txt) {
     name_ = "bigwig";
   };
+  virtual std::shared_ptr<Warren> clone_(std::string *error) final;
   void start_() final;
   void end_() final;
   bool set_parameter_(const std::string &key, const std::string &value,
-                      std::string *error) final {
-    std::shared_ptr<std::map<std::string, std::string>> parameters =
-        std::make_shared<std::map<std::string, std::string>>();
-    fluffle_->lock.lock();
-    if (fluffle_->parameters != nullptr)
-      (*parameters) = *(fluffle_->parameters);
-    (*parameters)[key] = value;
-    fluffle_->parameters = parameters;
-    fluffle_->lock.unlock();
-    return true;
-  };
+                      std::string *error) final;
   bool get_parameter_(const std::string &key, std::string *value,
-                      std::string *error) final {
-    fluffle_->lock.lock();
-    std::shared_ptr<std::map<std::string, std::string>> parameters =
-        fluffle_->parameters;
-    if (parameters == nullptr) {
-      *value = "";
-    } else {
-      std::map<std::string, std::string>::iterator item = parameters->find(key);
-      if (item != parameters->end())
-        *value = item->second;
-      else
-        *value = "";
-    }
-    fluffle_->lock.unlock();
-    return true;
-  };
+                      std::string *error) final ;
   bool transaction_(std::string *error) final;
   bool ready_() final;
   void commit_() final;
   void abort_() final;
+  bool merge_ = true;
   std::shared_ptr<Fiver> fiver_;
   std::shared_ptr<Fluffle> fluffle_;
   std::vector<std::shared_ptr<Warren>> warrens_;

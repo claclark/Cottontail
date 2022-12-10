@@ -347,6 +347,8 @@ Fiver::merge(const std::vector<std::shared_ptr<Fiver>> &fivers,
     safe_set(error) = "Fiver::merge got empty vector";
     return nullptr;
   }
+  if (fivers.size() == 1)
+    return fivers[0];
   std::shared_ptr<std::string> text = std::make_shared<std::string>();
   std::vector<Annotation> ann;
   addr chunk = fivers[0]->featurizer_->featurize(separator);
@@ -403,6 +405,7 @@ Fiver::merge(const std::vector<std::shared_ptr<Fiver>> &fivers,
     (*index)[u.first] = posting_factory->posting_from_merge(u.second);
   fiver->built_ = true;
   fiver->where_ = 0;
+  fiver->identifier_ = fivers[0]->identifier_; 
   fiver->parameters_ = fivers[0]->parameters_;
   fiver->text_ = text;
   fiver->index_ = index;
@@ -493,6 +496,8 @@ void Fiver::abort_() {
     annotations_->clear();
     index_->clear();
     where_ = 0;
+    built_ = true;
+    name_ = "remove";
   }
 };
 

@@ -44,6 +44,9 @@ public:
   };
   inline std::string name() { return name_; }
   inline std::string recipe() { return recipe_();}
+  inline std::shared_ptr<Warren> clone(std::string *error = nullptr) {
+    return clone_(error);
+  };
   inline void start() {
     assert(!started_);
     start_();
@@ -152,6 +155,10 @@ protected:
 
 private:
   virtual std::string recipe_() {return "";};;
+  virtual std::shared_ptr<Warren> clone_(std::string *error) {
+    safe_set(error) = "Warren can't be cloned";
+    return nullptr;
+  };
   virtual void start_(){};
   virtual void end_(){};
   virtual bool set_parameter_(const std::string &key, const std::string &value,

@@ -2,7 +2,9 @@
 
 #include <map>
 #include <memory>
+#include <set>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "src/annotator.h"
@@ -208,6 +210,12 @@ std::shared_ptr<Bigwig> Bigwig::make(
   return bigwig;
 }
 
+std::shared_ptr<Warren> Bigwig::clone_(std::string *error) {
+  return Bigwig::make(working_, featurizer_, tokenizer_, fluffle_, error,
+                      posting_compressor_, fvalue_compressor_,
+                      text_compressor_);
+}
+
 void Bigwig::start_() {
   fluffle_->lock.lock();
   for (auto &warren : fluffle_->warrens)
@@ -224,6 +232,37 @@ void Bigwig::end_() {
   warrens_.clear();
   idx_ = nullptr;
   txt_ = nullptr;
+}
+
+bool Bigwig::set_parameter_(const std::string &key, const std::string &value,
+                            std::string *error) {
+  std::shared_ptr<std::map<std::string, std::string>> parameters =
+      std::make_shared<std::map<std::string, std::string>>();
+  fluffle_->lock.lock();
+  if (fluffle_->parameters != nullptr)
+    (*parameters) = *(fluffle_->parameters);
+  (*parameters)[key] = value;
+  fluffle_->parameters = parameters;
+  fluffle_->lock.unlock();
+  return true;
+}
+
+bool Bigwig::get_parameter_(const std::string &key, std::string *value,
+                            std::string *error) {
+  fluffle_->lock.lock();
+  std::shared_ptr<std::map<std::string, std::string>> parameters =
+      fluffle_->parameters;
+  if (parameters == nullptr) {
+    *value = "";
+  } else {
+    std::map<std::string, std::string>::iterator item = parameters->find(key);
+    if (item != parameters->end())
+      *value = item->second;
+    else
+      *value = "";
+  }
+  fluffle_->lock.unlock();
+  return true;
 }
 
 bool Bigwig::transaction_(std::string *error) {
@@ -266,18 +305,76 @@ bool Bigwig::ready_() {
   return fiver_->ready();
 }
 
+namespace {
+void merge_worker(std::shared_ptr<Fluffle> fluffle) {
+  for (;;) {
+    fluffle->lock.lock();
+    size_t start, end;
+    for (start = 0; start < fluffle->warrens.size(); start++)
+      if (fluffle->warrens[start]->name() == "fiver" ||
+          fluffle->warrens[start]->name() == "remove")
+        break;
+    if (start == fluffle->warrens.size()) {
+      fluffle->merging = false;
+      fluffle->lock.unlock();
+      return;
+    }
+    for (end = start + 1; end < fluffle->warrens.size(); end++)
+      if (fluffle->warrens[start]->name() != "fiver" &&
+          fluffle->warrens[start]->name() != "remove")
+        break;
+    if (end - start < 2) {
+      fluffle->merging = false;
+      fluffle->lock.unlock();
+      return;
+    }
+    std::vector<std::shared_ptr<Fiver>> fivers;
+    for (size_t i = start; i < end; i++)
+      if (fluffle->warrens[start]->name() == "fiver")
+        fivers.push_back(std::static_pointer_cast<Fiver>(fluffle->warrens[i]));
+    fluffle->lock.unlock();
+    std::shared_ptr<Fiver> merged = Fiver::merge(fivers);
+    fluffle->lock.lock();
+    std::vector<std::shared_ptr<Warren>> warrens;
+    for (size_t i = 0; i < start; i++)
+      warrens.push_back(fluffle->warrens[i]);
+    if (merged != nullptr)
+      warrens.push_back(merged);
+    for (size_t i = end; i < fluffle->warrens.size(); i++)
+      warrens.push_back(fluffle->warrens[i]);
+    fluffle->warrens = warrens;
+    fluffle->lock.unlock();
+  }
+}
+
+void try_merge(std::shared_ptr<Fluffle> fluffle) {
+  fluffle->lock.lock();
+  if (!fluffle->merging) {
+    fluffle->merging = true;
+    std::thread t(merge_worker, fluffle);
+    t.detach();
+  }
+  fluffle->lock.unlock();
+}
+} // namespace
+
 void Bigwig::commit_() {
   fluffle_->lock.lock();
   fiver_->commit();
   fiver_->start();
   fluffle_->lock.unlock();
+  try_merge(fluffle_);
   appender_ = nullptr;
   annotator_ = nullptr;
   fiver_ = nullptr;
 }
 
 void Bigwig::abort_() {
+  fluffle_->lock.lock();
   fiver_->abort();
+  fiver_->start();
+  fluffle_->lock.unlock();
+  try_merge(fluffle_);
   appender_ = nullptr;
   annotator_ = nullptr;
   fiver_ = nullptr;

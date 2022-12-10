@@ -19,6 +19,7 @@ struct Fluffle {
     return fluffle;
   };
   std::mutex lock;
+  bool merging = false;
   addr address = 0;
   addr sequence = 0;
   std::vector<std::shared_ptr<Warren>> warrens;

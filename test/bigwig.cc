@@ -6,7 +6,7 @@
 #include "src/bigwig.h"
 #include "src/cottontail.h"
 
-TEST(Bigwig, Basic) {
+void basic(bool merge) {
   const char *hamlet[] = {"To be, or not to be, that is the question:",
                           "Whether 'tis nobler in the mind to suffer",
                           "The slings and arrows of outrageous fortune,",
@@ -30,6 +30,7 @@ TEST(Bigwig, Basic) {
   std::shared_ptr<cottontail::Fluffle> fluffle = cottontail::Fluffle::make();
   std::shared_ptr<cottontail::Bigwig> bigwig =
       cottontail::Bigwig::make(nullptr, featurizer, tokenizer, fluffle);
+  bigwig->merge(merge);
   ASSERT_TRUE(bigwig->transaction());
   ASSERT_TRUE(bigwig->appender()->append(std::string(hamlet[0]), &p, &q));
   ASSERT_TRUE(bigwig->annotator()->annotate(line, p, q, (cottontail::addr)1));
@@ -162,6 +163,11 @@ TEST(Bigwig, Basic) {
   EXPECT_EQ(i, 11);
 }
 
+TEST(Bigwig, Basic) {
+  basic(false);
+  basic(true);
+}
+
 TEST(Bigwig, Two) {
   std::shared_ptr<cottontail::Featurizer> featurizer =
       cottontail::Featurizer::make("hashing", "");
@@ -174,8 +180,10 @@ TEST(Bigwig, Two) {
   std::shared_ptr<cottontail::Fluffle> fluffle = cottontail::Fluffle::make();
   std::shared_ptr<cottontail::Bigwig> big =
       cottontail::Bigwig::make(nullptr, featurizer, tokenizer, fluffle);
+  big->merge(false);
   std::shared_ptr<cottontail::Bigwig> wig =
       cottontail::Bigwig::make(nullptr, featurizer, tokenizer, fluffle);
+  wig->merge(false);
   ASSERT_NE(big, nullptr);
   ASSERT_NE(wig, nullptr);
   big->start();
