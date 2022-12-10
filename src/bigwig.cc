@@ -363,7 +363,8 @@ void Bigwig::commit_() {
   fiver_->commit();
   fiver_->start();
   fluffle_->lock.unlock();
-  try_merge(fluffle_);
+  if (merge_)
+    try_merge(fluffle_);
   appender_ = nullptr;
   annotator_ = nullptr;
   fiver_ = nullptr;
@@ -374,7 +375,8 @@ void Bigwig::abort_() {
   fiver_->abort();
   fiver_->start();
   fluffle_->lock.unlock();
-  try_merge(fluffle_);
+  if (merge_)
+    try_merge(fluffle_);
   appender_ = nullptr;
   annotator_ = nullptr;
   fiver_ = nullptr;
