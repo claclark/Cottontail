@@ -180,10 +180,6 @@ std::shared_ptr<Bigwig> Bigwig::make(
     safe_set(error) = "Bigwig needs a tokenizer (got nullptr)";
     return nullptr;
   }
-  if (fluffle == nullptr) {
-    safe_set(error) = "Bigwig needs a fluffle (got nullptr)";
-    return nullptr;
-  }
   std::shared_ptr<Bigwig> bigwig = std::shared_ptr<Bigwig>(
       new Bigwig(working, featurizer, tokenizer, nullptr, nullptr));
   bigwig->fiver_ = nullptr;
@@ -320,8 +316,8 @@ void merge_worker(std::shared_ptr<Fluffle> fluffle) {
       return;
     }
     for (end = start + 1; end < fluffle->warrens.size(); end++)
-      if (fluffle->warrens[start]->name() != "fiver" &&
-          fluffle->warrens[start]->name() != "remove")
+      if (fluffle->warrens[end]->name() != "fiver" &&
+          fluffle->warrens[end]->name() != "remove")
         break;
     if (end - start < 2) {
       fluffle->merging = false;
@@ -330,7 +326,7 @@ void merge_worker(std::shared_ptr<Fluffle> fluffle) {
     }
     std::vector<std::shared_ptr<Fiver>> fivers;
     for (size_t i = start; i < end; i++)
-      if (fluffle->warrens[start]->name() == "fiver")
+      if (fluffle->warrens[i]->name() == "fiver")
         fivers.push_back(std::static_pointer_cast<Fiver>(fluffle->warrens[i]));
     fluffle->lock.unlock();
     std::shared_ptr<Fiver> merged = Fiver::merge(fivers);
@@ -338,8 +334,10 @@ void merge_worker(std::shared_ptr<Fluffle> fluffle) {
     std::vector<std::shared_ptr<Warren>> warrens;
     for (size_t i = 0; i < start; i++)
       warrens.push_back(fluffle->warrens[i]);
-    if (merged != nullptr)
+    if (merged != nullptr) {
       warrens.push_back(merged);
+      merged->start();
+    }
     for (size_t i = end; i < fluffle->warrens.size(); i++)
       warrens.push_back(fluffle->warrens[i]);
     fluffle->warrens = warrens;

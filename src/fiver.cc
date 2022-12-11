@@ -405,6 +405,7 @@ Fiver::merge(const std::vector<std::shared_ptr<Fiver>> &fivers,
     (*index)[u.first] = posting_factory->posting_from_merge(u.second);
   fiver->built_ = true;
   fiver->where_ = 0;
+  fiver->name_ = "fiver";
   fiver->identifier_ = fivers[0]->identifier_; 
   fiver->parameters_ = fivers[0]->parameters_;
   fiver->text_ = text;

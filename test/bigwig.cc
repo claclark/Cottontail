@@ -1,5 +1,7 @@
 #include <memory>
 #include <string>
+#include <thread>
+#include <vector>
 
 #include "gtest/gtest.h"
 
@@ -271,4 +273,88 @@ TEST(Bigwig, Two) {
   EXPECT_EQ(q, cottontail::maxfinity);
   wig->end();
   big->end();
+}
+
+void tiger(cottontail::addr n) {
+  std::shared_ptr<cottontail::Featurizer> featurizer =
+      cottontail::Featurizer::make("hashing", "");
+  ASSERT_NE(featurizer, nullptr);
+  std::shared_ptr<cottontail::Tokenizer> tokenizer =
+      cottontail::Tokenizer::make("ascii", "");
+  ASSERT_NE(tokenizer, nullptr);
+  std::shared_ptr<cottontail::Bigwig> bigwig =
+      cottontail::Bigwig::make(nullptr, featurizer, tokenizer);
+  ASSERT_NE(bigwig, nullptr);
+  cottontail::addr line = featurizer->featurize("line:");
+  auto worker = [&](std::string text) {
+    std::shared_ptr<cottontail::Warren> warren = bigwig->clone();
+    std::static_pointer_cast<cottontail::Bigwig>(warren)->merge(true);
+    ASSERT_NE(warren, nullptr);
+    for (cottontail::addr i = 0; i < n; i++) {
+      cottontail::addr p, q;
+      ASSERT_TRUE(warren->transaction());
+      ASSERT_TRUE(warren->appender()->append(text, &p, &q));
+      ASSERT_TRUE(warren->annotator()->annotate(line, p, q, i));
+      ASSERT_TRUE(warren->ready());
+      warren->commit();
+    }
+  };
+  const char *diangu[] = {
+      "A little effort, a little harvest",
+      "Think thrice before you act",
+      "No entry into the tiger's den, no tiger cub",
+      "Diligence in life, no need for rewards",
+      "An inch of time is an inch of gold",
+      "People are in a good mood when they encounter good news",
+      "The tiger's den cannot hide it, the tiger's power cannot be blocked",
+      "Dancing with the shadows, just like in the human world"};
+  cottontail::addr m = sizeof(diangu) / sizeof(char *);
+  std::vector<std::thread> workers;
+  for (cottontail::addr i = 0; i < m; i++)
+    workers.emplace_back(std::thread(worker, std::string(diangu[i])));
+  for (auto &worker : workers)
+    worker.join();
+  bigwig->start();
+  std::unique_ptr<cottontail::Hopper> hopper = bigwig->idx()->hopper(line);
+  ASSERT_NE(hopper, nullptr);
+  cottontail::addr histogram[n];
+  for (cottontail::addr i = 0; i < n; i++)
+    histogram[i] = 0;
+  cottontail::addr p, q, v;
+  for (hopper->tau(0, &p, &q, &v); p < cottontail::maxfinity;
+       hopper->tau(p + 1, &p, &q, &v))
+    histogram[v]++;
+  for (cottontail::addr i = 0; i < n; i++)
+    EXPECT_EQ(histogram[i], m);
+  bigwig->end();
+  bigwig->start();
+  for (cottontail::addr i = 0; i < m; i++) {
+    std::string saying = diangu[i];
+    std::string gcl = "\"" + saying + "\"";
+    hopper = bigwig->hopper_from_gcl(gcl);
+    cottontail::addr j = 0;
+    for (hopper->tau(0, &p, &q); p < cottontail::maxfinity;
+         hopper->tau(p + 1, &p, &q)) {
+      EXPECT_EQ(bigwig->txt()->translate(p, q), saying + "\n");
+      j++;
+    }
+    EXPECT_EQ(j, n);
+  }
+  hopper = bigwig->hopper_from_gcl("tiger");
+  cottontail::addr i = 0;
+  for (hopper->tau(0, &p, &q); p < cottontail::maxfinity;
+       hopper->tau(p + 1, &p, &q)) {
+    std::string tiger = bigwig->txt()->translate(p, q).substr(0, 5);
+    EXPECT_EQ(tiger, "tiger");
+    i++;
+  }
+  EXPECT_EQ(i, 4 * n);
+  bigwig->end();
+}
+
+TEST(Bigwig, Tiger){
+  tiger(1);
+  tiger(3);
+  tiger(11);
+  tiger(111);
 }
