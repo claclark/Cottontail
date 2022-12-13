@@ -181,7 +181,11 @@ private:
       std::vector<std::string> terms =
           context->warren_->tokenizer()->split(context->raw_query_);
       for (auto &term : terms)
-        context->weighted_query_[term] = 1.0;
+        if (context->weighted_query_.find(term) ==
+            context->weighted_query_.end())
+          context->weighted_query_[term] = 1.0;
+        else
+          context->weighted_query_[term] += 1.0;
     }
     std::map<std::string, fval> stemmed_query;
     for (auto &term : context->weighted_query_) {
@@ -280,7 +284,7 @@ RankingContextTransformer::from_name(std::string transformation) {
 class RankingPipeline : public Ranker {
 public:
   RankingPipeline(std::shared_ptr<Warren> warren) : warren_(warren){};
-  virtual ~RankingPipeline() {};
+  virtual ~RankingPipeline(){};
   RankingPipeline(const RankingPipeline &) = delete;
   RankingPipeline &operator=(const RankingPipeline &) = delete;
   RankingPipeline(RankingPipeline &&) = delete;

@@ -83,7 +83,10 @@ ranking(std::shared_ptr<Warren> warren, const std::string &query,
   std::vector<std::string> terms = warren->tokenizer()->split(query);
   std::map<std::string, fval> weighted_query;
   for (auto &term : terms)
-    weighted_query[term] = 1.0;
+    if (weighted_query.find(term) == weighted_query.end())
+      weighted_query[term] = 1.0;
+    else
+      weighted_query[term] += 1.0;
   return ALGORITHM(warren, weighted_query, parameters);
 }
 
