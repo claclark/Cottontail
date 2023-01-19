@@ -39,6 +39,19 @@ cc_binary(
 )
 
 cc_binary(
+    name = "dagstuhl",
+    srcs = [
+      "dagstuhl.cc",
+    ],
+    deps = [
+      "//src:cottontail",
+    ],
+    linkopts = [
+      "-pthread",
+    ],
+)
+
+cc_binary(
     name = "fast-id",
     srcs = [
       "fast-id.cc",

@@ -22,9 +22,7 @@ public:
   inline std::string recipe() { return recipe_(); }
   inline std::string name() { return name_; }
 
-  inline bool have(const std::string &name) {
-    return have_(name);
-  };
+  inline bool have(const std::string &name) { return have_(name); };
   inline addr df(const std::string &term) { return idf_(term); };
   inline fval idf(const std::string &term) { return idf_(term); };
   inline fval rsj(const std::string &term) { return rsj_(term); };
@@ -46,9 +44,7 @@ protected:
 
 private:
   virtual std::string recipe_() { return ""; }
-  virtual bool have_(const std::string &name) {
-    return false;
-  };
+  virtual bool have_(const std::string &name) { return false; };
   virtual fval avgl_() { return 1; };
   virtual fval idf_(const std::string &term) { return 0.0; }
   virtual fval rsj_(const std::string &term) { return 0.0; }
