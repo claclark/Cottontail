@@ -32,7 +32,7 @@ int main(int argc, char **argv) {
     std::cout << query << "\n";
     auto clean = [](std::string s) {
       for (size_t i = 0; i < s.length(); i++)
-        if (s[i] == '\n' || s[i] == '\t')
+        if (s[i] == '\n' || s[i] == '\t' || s[i] == '\r')
           s[i] = ' ';
       return s;
     };
