@@ -25,11 +25,10 @@ int main(int argc, char **argv) {
     std::vector<std::string> tokens;
     std::istringstream iss(line);
     std::string token;
-    while (std::getline(iss, token, '\t')) // but we can specify a different one
+    while (std::getline(iss, token, '\t'))
       tokens.push_back(token);
     std::string docno = tokens[2];
     std::string query = "(>> :paragraph \"" + docno + "\")";
-    std::cout << query << "\n";
     auto clean = [](std::string s) {
       for (size_t i = 0; i < s.length(); i++)
         if (s[i] == '\n' || s[i] == '\t' || s[i] == '\r')
