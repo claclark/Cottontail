@@ -212,6 +212,19 @@ cc_binary(
 )
 
 cc_binary(
+    name = "splade-annotate",
+    srcs = [
+      "splade-annotate.cc",
+    ],
+    deps = [
+      "//src:cottontail",
+    ] ,
+    linkopts = [
+      "-pthread",
+    ],
+)
+
+cc_binary(
     name = "tf-df",
     srcs = [
       "tf-df.cc",
