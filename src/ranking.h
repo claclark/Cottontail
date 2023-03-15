@@ -225,6 +225,23 @@ std::vector<RankingResult> bm25_ranking(std::shared_ptr<Warren> warren,
 std::vector<RankingResult> random_ranking(std::shared_ptr<Warren> warren,
                                           const std::string &container,
                                           size_t depth = 1000);
+// Dot product
+std::vector<RankingResult>
+product_ranking(std::shared_ptr<Warren> warren,
+                const std::map<std::string, fval> &query,
+                const std::map<std::string, fval> &parameters,
+                const std::string &tag, bool convert);
+
+std::vector<RankingResult>
+product_ranking(std::shared_ptr<Warren> warren, const std::string &query,
+                const std::map<std::string, fval> &parameters,
+                const std::string &tag, bool convert);
+
+std::vector<RankingResult> product_ranking(std::shared_ptr<Warren> warren,
+                                           const std::string &query,
+                                           const std::string &tag,
+                                           bool convert);
+
 } // namespace cottontail
 
 #endif // COTTONTAIL_SRC_RANKING_H_

@@ -225,6 +225,22 @@ cc_binary(
 )
 
 cc_binary(
+    name = "splade",
+    srcs = [
+      "splade.cc",
+    ],
+    deps = [
+      "//src:cottontail",
+    ],
+    copts = [
+      "'-std=c++14'",
+    ],
+    linkopts = [
+      "-pthread",
+    ],
+)
+
+cc_binary(
     name = "tf-df",
     srcs = [
       "tf-df.cc",

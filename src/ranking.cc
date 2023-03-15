@@ -1344,4 +1344,106 @@ std::vector<RankingResult> random_ranking(std::shared_ptr<Warren> warren,
   top = top_results(top, current, depth);
   return top;
 }
+
+// Dot product
+std::vector<RankingResult> product_ranking(std::shared_ptr<Warren> warren,
+                                           const std::string &query,
+                                           const std::string &tag,
+                                           bool convert) {
+  std::map<std::string, fval> parameters;
+  return product_ranking(warren, query, parameters, tag, convert);
+}
+
+std::vector<RankingResult>
+product_ranking(std::shared_ptr<Warren> warren, const std::string &query,
+                const std::map<std::string, fval> &parameters,
+                const std::string &tag, bool convert) {
+  std::vector<std::string> terms = warren->tokenizer()->split(query);
+  std::map<std::string, fval> weighted_query;
+  for (auto &term : terms)
+    if (weighted_query.find(term) == weighted_query.end())
+      weighted_query[term] = 1.0;
+    else
+      weighted_query[term] += 1.0;
+  return product_ranking(warren, weighted_query, parameters, tag, convert);
+}
+
+std::vector<RankingResult>
+product_ranking(std::shared_ptr<Warren> warren,
+                const std::map<std::string, fval> &query,
+                const std::map<std::string, fval> &parameters,
+                const std::string &tag, bool convert) {
+  std::vector<RankingResult> top;
+  size_t depth =
+      static_cast<size_t>(ranking_parameter(tag, "depth", parameters));
+  if (depth == 0 || query.size() == 0)
+    return top;
+  std::shared_ptr<Featurizer> featurizer =
+      TaggingFeaturizer::make(warren->featurizer(), tag);
+  if (featurizer == nullptr)
+    return top;
+  struct TermHopper {
+    TermHopper(fval weight, std::unique_ptr<Hopper> hopper)
+        : weight(weight), hopper(std::move(hopper)){};
+    fval weight;
+    addr p, q;
+    fval score;
+    std::unique_ptr<Hopper> hopper;
+  };
+  std::vector<TermHopper> toppers;
+  for (auto &term : query)
+    toppers.emplace_back(
+        term.second, warren->idx()->hopper(featurizer->featurize(term.first)));
+  addr p = maxfinity, q;
+  for (auto &topper : toppers) {
+    if (convert) {
+      addr v;
+      topper.hopper->tau(minfinity + 1, &topper.p, &topper.q, &v);
+      topper.score = topper.weight * v;
+    } else {
+      fval v;
+      topper.hopper->tau(minfinity + 1, &topper.p, &topper.q, &v);
+      topper.score = topper.weight * v;
+    }
+    if (topper.p < p) {
+      p = topper.p;
+      q = topper.q;
+    }
+  }
+  std::vector<RankingResult> current;
+  while (p < maxfinity) {
+    fval target = (top.size() >= depth ? top.back().score() : 0.0);
+    fval score = 0.0;
+    addr next_p = maxfinity, next_q = maxfinity;
+    for (auto &topper : toppers) {
+      if (topper.p == p) {
+        score += topper.score;
+        if (convert) {
+          addr v;
+          topper.hopper->tau(p + 1, &topper.p, &topper.q, &v);
+          topper.score = topper.weight * v;
+        } else {
+          fval v;
+          topper.hopper->tau(p + 1, &topper.p, &topper.q, &v);
+          topper.score = topper.weight * v;
+        }
+      }
+      if (topper.p < next_p) {
+        next_p = topper.p;
+        next_q = topper.q;
+      }
+    }
+    if (score > target) {
+      current.emplace_back(p, q, score);
+      if (current.size() == depth) {
+        top = top_results(top, current, depth);
+        current.clear();
+      }
+    }
+    p = next_p;
+    q = next_q;
+  }
+  top = top_results(top, current, depth);
+  return top;
+}
 } // namespace cottontail
