@@ -1,3 +1,5 @@
+#include "src/bigwig.h"
+
 #include <memory>
 #include <string>
 #include <thread>
@@ -5,7 +7,6 @@
 
 #include "gtest/gtest.h"
 
-#include "src/bigwig.h"
 #include "src/cottontail.h"
 
 void basic(bool merge) {
@@ -288,8 +289,8 @@ void tiger(cottontail::addr n) {
   cottontail::addr line = featurizer->featurize("line:");
   auto worker = [&](std::string text) {
     std::shared_ptr<cottontail::Warren> warren = bigwig->clone();
-    std::static_pointer_cast<cottontail::Bigwig>(warren)->merge(true);
     ASSERT_NE(warren, nullptr);
+    std::static_pointer_cast<cottontail::Bigwig>(warren)->merge(true);
     for (cottontail::addr i = 0; i < n; i++) {
       cottontail::addr p, q;
       ASSERT_TRUE(warren->transaction());
@@ -357,4 +358,92 @@ TEST(Bigwig, Tiger){
   tiger(3);
   tiger(11);
   tiger(111);
+}
+
+void love(cottontail::addr n) {
+  std::shared_ptr<cottontail::Featurizer> featurizer =
+      cottontail::Featurizer::make("hashing", "");
+  ASSERT_NE(featurizer, nullptr);
+  std::shared_ptr<cottontail::Tokenizer> tokenizer =
+      cottontail::Tokenizer::make("ascii", "");
+  ASSERT_NE(tokenizer, nullptr);
+  std::shared_ptr<cottontail::Bigwig> bigwig =
+      cottontail::Bigwig::make(nullptr, featurizer, tokenizer);
+  ASSERT_NE(bigwig, nullptr);
+  cottontail::addr line = featurizer->featurize("line:");
+  auto append_worker = [&](std::string text) {
+    std::shared_ptr<cottontail::Warren> warren = bigwig->clone();
+    ASSERT_NE(warren, nullptr);
+    std::static_pointer_cast<cottontail::Bigwig>(warren)->merge(true);
+    for (cottontail::addr i = 0; i < n; i++) {
+      cottontail::addr p, q;
+      ASSERT_TRUE(warren->transaction());
+      ASSERT_TRUE(warren->appender()->append(text, &p, &q));
+      ASSERT_TRUE(warren->annotator()->annotate(line, p, q, i));
+      ASSERT_TRUE(warren->ready());
+      warren->commit();
+    }
+  };
+  auto check_worker = [&](std::string text, cottontail::addr total) {
+    std::shared_ptr<cottontail::Warren> warren = bigwig->clone();
+    ASSERT_NE(warren, nullptr);
+    cottontail::addr count = 0;
+    while (count < total) {
+      warren->start();
+      std::unique_ptr<cottontail::Hopper> hopper =
+          warren->hopper_from_gcl(text);
+      ASSERT_NE(hopper, nullptr);
+      cottontail::addr current = 0;
+      cottontail::addr p, q;
+      for (hopper->tau(0, &p, &q); p < cottontail::maxfinity;
+           hopper->tau(p + 1, &p, &q)) {
+        std::string t = warren->txt()->translate(p, q);
+        EXPECT_GE(t.length(), text.length());
+        EXPECT_EQ(t.substr(0, text.length()), text);
+        current++;
+      }
+      warren->end();
+      EXPECT_GE(current, count);
+      count = current;
+    }
+  };
+  const char *love[] = {"Baby, baby, don't you know that I need you",
+                        "Coding all night, dreaming in code",
+                        "Error 404: love not found",
+                        "All you need is love, love is all you need",
+                        "C++ is my love language",
+                        "I came in like a wrecking ball",
+                        "Never gonna give you up, never gonna let you down",
+                        "May the force be with you",
+                        "Hello from the other side"};
+  cottontail::addr m = sizeof(love) / sizeof(char *);
+  std::vector<std::thread> workers;
+  workers.emplace_back(std::thread(check_worker, "you", 7 * n));
+  for (cottontail::addr i = 0; i < m; i++)
+    workers.emplace_back(std::thread(append_worker, std::string(love[i])));
+  workers.emplace_back(std::thread(check_worker, "love", 4 * n));
+  cottontail::addr lines = 0;
+  while (lines < n * m) {
+    bigwig->start();
+    std::unique_ptr<cottontail::Hopper> hopper = bigwig->idx()->hopper(line);
+    ASSERT_NE(hopper, nullptr);
+    cottontail::addr current = 0;
+    cottontail::addr p, q;
+    for (hopper->tau(0, &p, &q); p < cottontail::maxfinity;
+         hopper->tau(p + 1, &p, &q))
+      current++;
+    bigwig->end();
+    EXPECT_GE(current, lines);
+    lines = current;
+  }
+  EXPECT_EQ(lines, n * m);
+  for (auto &worker : workers)
+    worker.join();
+}
+
+TEST(bigwig, love) {
+  love(1);
+  love(5);
+  love(18);
+  love(113);
 }

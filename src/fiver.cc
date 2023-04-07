@@ -5,6 +5,7 @@
 #include <cstring>
 #include <iostream>
 #include <map>
+#include <mutex>
 #include <sstream>
 
 #include "src/annotator.h"
@@ -234,6 +235,7 @@ private:
   FiverTxt(){};
   std::string recipe_() final { return ""; };
   std::string translate_(addr p, addr q) final {
+    std::lock_guard<std::mutex> lock(mutex_);
     addr p0, q0, i;
     hopper_->rho(p, &p0, &q0, &i);
     if (p0 > q)
@@ -250,6 +252,7 @@ private:
     return text_->substr(s - t, e - s);
   };
   addr tokens_() final {
+    std::lock_guard<std::mutex> lock(mutex_);
     if (count_ >= 0)
       return count_;
     count_ = 0;
@@ -259,6 +262,7 @@ private:
     return count_;
   }
   bool range_(addr *p, addr *q) {
+    std::lock_guard<std::mutex> lock(mutex_);
     hopper_->tau(minfinity + 1, p, q);
     if (*p == maxfinity)
       return false;
@@ -267,6 +271,7 @@ private:
     return true;
   }
   addr count_;
+  std::mutex mutex_;
   std::shared_ptr<Tokenizer> tokenizer_;
   std::unique_ptr<Hopper> hopper_;
   std::shared_ptr<std::string> text_;
@@ -406,7 +411,7 @@ Fiver::merge(const std::vector<std::shared_ptr<Fiver>> &fivers,
   fiver->built_ = true;
   fiver->where_ = 0;
   fiver->name_ = "fiver";
-  fiver->identifier_ = fivers[0]->identifier_; 
+  fiver->identifier_ = fivers[0]->identifier_;
   fiver->parameters_ = fivers[0]->parameters_;
   fiver->text_ = text;
   fiver->index_ = index;
