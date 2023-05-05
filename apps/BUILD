@@ -1,3 +1,28 @@
+cc_library(
+  name = "collection",
+  srcs = [
+    "collection.cc",
+  ],
+  hdrs = [
+    "collection.h",
+  ],
+  deps = [
+    "//src:cottontail",
+  ],
+)
+
+cc_library(
+  name = "walk",
+  srcs = [
+    "walk.cc",
+  ],
+  hdrs = [
+    "walk.h",
+  ],
+  deps = [
+  ],
+)
+
 cc_binary(
     name = "c4-build",
     srcs = [
@@ -12,18 +37,6 @@ cc_binary(
     ],
 )
 
-cc_library(
-  name = "collection",
-  srcs = [
-    "collection.cc",
-  ],
-  hdrs = [
-    "collection.h",
-  ],
-  deps = [
-    "//src:cottontail",
-  ],
-)
 
 cc_binary(
     name = "containers",
@@ -202,6 +215,7 @@ cc_binary(
     deps = [
       "//src:cottontail",
       "collection",
+      "walk",
     ],
     copts = [
       "-I/usr/local/include",
