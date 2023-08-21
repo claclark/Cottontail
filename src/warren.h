@@ -78,10 +78,6 @@ public:
     assert(started_);
     return txt_;
   };
-  inline std::shared_ptr<Stats> stats() {
-    assert(started_);
-    return stats_;
-  }
   inline std::shared_ptr<Annotator> annotator() {
     assert(annotator_ != nullptr);
     return annotator_;
@@ -150,7 +146,6 @@ protected:
   std::shared_ptr<Txt> txt_ = nullptr;
   std::shared_ptr<Annotator> annotator_ = nullptr;
   std::shared_ptr<Appender> appender_ = nullptr;
-  std::shared_ptr<Stats> stats_ = nullptr;
   std::shared_ptr<Scribe> scribe_ = nullptr;
 
 private:

@@ -6,16 +6,16 @@
 
 #include "src/core.h"
 #include "src/hopper.h"
+#include "src/warren.h"
 
 namespace cottontail {
-
-class Warren;
-
 class Stats {
 public:
   static std::shared_ptr<Stats> make(const std::string &name,
                                      const std::string &recipe,
                                      std::shared_ptr<Warren> warren,
+                                     std::string *error = nullptr);
+  static std::shared_ptr<Stats> make( std::shared_ptr<Warren> warren,
                                      std::string *error = nullptr);
   static bool check(const std::string &name, const std::string &recipe,
                     std::string *error = nullptr);

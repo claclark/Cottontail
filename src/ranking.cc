@@ -961,7 +961,10 @@ std::vector<std::string> rsj_prf(std::shared_ptr<Warren> warren,
   std::vector<std::string> expansion_terms;
   if (ranking.size() == 0)
     return expansion_terms;
-  if (!warren->stats()->have("rsj"))
+  std::shared_ptr<Stats> stats = Stats::make(warren);
+  if (stats == nullptr)
+    return expansion_terms;
+  if (!stats->have("rsj"))
     return expansion_terms;
   size_t expansions =
       static_cast<size_t>(ranking_parameter("rsj", "expansions", parameters));
@@ -975,7 +978,7 @@ std::vector<std::string> rsj_prf(std::shared_ptr<Warren> warren,
   if (texts.size() == 0)
     return expansion_terms;
   std::map<std::string, fval> frequencies;
-  bool unstemmed = warren->stats()->have("unstemmed");
+  bool unstemmed = stats->have("unstemmed");
   for (auto &&text : texts) {
     std::vector<std::string> tokens = warren->tokenizer()->split(text);
     std::set<std::string> seen;
@@ -996,7 +999,7 @@ std::vector<std::string> rsj_prf(std::shared_ptr<Warren> warren,
   }
   std::map<std::string, fval> tsvs;
   for (auto &tf : frequencies) {
-    fval rsj = warren->stats()->rsj(tf.first);
+    fval rsj = stats->rsj(tf.first);
     if (rsj > 0.0) {
       tsvs[tf.first] = rsj * tf.second;
       expansion_terms.push_back(tf.first);
@@ -1132,8 +1135,10 @@ bm25_ranking(std::shared_ptr<Warren> warren,
              const std::map<std::string, fval> &query,
              const std::map<std::string, fval> &parameters) {
   std::vector<RankingResult> top;
-  if (!(warren->stats()->have("avgl") && warren->stats()->have("rsj") &&
-        warren->stats()->have("tf")))
+  std::shared_ptr<Stats> stats = Stats::make(warren);
+  if (stats == nullptr)
+    return top;
+  if (!(stats->have("avgl") && stats->have("rsj") && stats->have("tf")))
     return top;
   size_t depth =
       static_cast<size_t>(ranking_parameter("bm25", "depth", parameters));
@@ -1150,12 +1155,12 @@ bm25_ranking(std::shared_ptr<Warren> warren,
     addr p, q;
     std::unique_ptr<Hopper> hopper;
   };
-  fval avgl = warren->stats()->avgl();
+  fval avgl = stats->avgl();
   std::vector<WandHopper> wand;
   for (auto &wt : query) {
-    fval idf = warren->stats()->rsj(wt.first);
+    fval idf = stats->rsj(wt.first);
     if (idf != 0.0)
-      wand.emplace_back(wt.second * idf, warren->stats()->tf_hopper(wt.first));
+      wand.emplace_back(wt.second * idf, stats->tf_hopper(wt.first));
   }
   for (auto &w : wand)
     w.hopper->tau(minfinity + 1, &w.p, &w.q, &w.tf);

@@ -24,14 +24,6 @@ std::shared_ptr<Warren> Warren::make(const std::string &name,
   if (!warren->get_parameter(container_key, &container_value, error))
     return nullptr;
   warren->default_container_ = container_value;
-  std::string stats_key = "statistics";
-  std::string stats_name;
-  std::string stats_recipe = "";
-  if (!warren->get_parameter(stats_key, &stats_name, error))
-    return nullptr;
-  if (stats_name == "" && container_key != "")
-    stats_name = "idf";
-  warren->stats_ = Stats::make(stats_name, stats_recipe, warren, error);
   std::string stemmer_key = "stemmer";
   std::string stemmer_value;
   if (!warren->get_parameter(stemmer_key, &stemmer_value, error))
