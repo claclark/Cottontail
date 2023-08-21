@@ -146,39 +146,6 @@ int main(int argc, char *argv[]) {
       return -1;
     }
   }
-#if 0
-// TODO: delete this code
-  std::string simple = "simple";
-  std::shared_ptr<cottontail::Warren> warren =
-      cottontail::Warren::make(simple, burrow, &error);
-  if (warren == nullptr) {
-    std::cerr << program_name << ": " << error << "\n";
-    return -1;
-  }
-  warren->start();
-  std::string stemmer_name = "porter";
-  std::string stemmer_recipe = "";
-  std::shared_ptr<cottontail::Stemmer> stemmer =
-      cottontail::Stemmer::make(stemmer_name, stemmer_recipe, &error);
-  if (stemmer == nullptr)
-    std::cerr << program_name << ": " << error << "\n";
-  if (!warren->set_stemmer(stemmer, &error)) {
-    std::cerr << program_name << ": " << error << "\n";
-    return -1;
-  }
-  std::string container_query = "(... <DOC> </DOC>)";
-  if (!warren->set_default_container(container_query, &error)) {
-    std::cerr << program_name << ": " << error << "\n";
-    return -1;
-  }
-  if (verbose)
-    std::cout << "Adding tf-idf annontations\n";
-  if (!tf_idf_annotations(warren, &error)) {
-    std::cerr << program_name << ": " << error << "\n";
-    return -1;
-  }
-  warren->end();
-#endif
   if (verbose)
     std::cout << "Done.\n";
   return 0;
