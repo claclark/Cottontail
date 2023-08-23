@@ -51,6 +51,8 @@ private:
                  std::string *error) final;
   bool add_annotation_(const std::string &tag, addr p, addr q, fval v,
                        std::string *error) final;
+  bool add_annotation_(addr feature, addr p, addr q, fval v,
+                       std::string *error) final;
   bool finalize_(std::string *error) final;
   bool maybe_flush_tokens(bool force, std::string *error);
   bool maybe_flush_annotations(bool force, std::string *error);

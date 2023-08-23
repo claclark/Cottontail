@@ -676,16 +676,21 @@ bool SimpleBuilder::maybe_flush_annotations(bool force, std::string *error) {
   return true;
 };
 
-bool SimpleBuilder::add_annotation_(const std::string &tag, addr p, addr q,
+bool SimpleBuilder::add_annotation_(addr feature, addr p, addr q,
                                     fval v, std::string *error) {
   // for various reasons, it should be correct to silently ignore invalid
   // annotations
   if (p >= 0 && p <= q) {
-    annotations_->emplace_back(featurizer_->featurize(tag), p, q, v);
+    annotations_->emplace_back(feature, p, q, v);
     maybe_flush_annotations(false, error);
   }
   return true;
 };
+
+bool SimpleBuilder::add_annotation_(const std::string &tag, addr p, addr q,
+                                    fval v, std::string *error) {
+  return add_annotation(featurizer_->featurize(tag), p, q, v, error);
+}
 
 bool SimpleBuilder::finalize_(std::string *error) {
   if (verbose())

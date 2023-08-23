@@ -6,16 +6,22 @@
 
 #include "src/annotator.h"
 #include "src/appender.h"
+#include "src/builder.h"
 #include "src/committable.h"
 #include "src/core.h"
+#include "src/warren.h"
 
 namespace cottontail {
 
 class Scribe : public Committable {
 public:
   static std::shared_ptr<Scribe> null(std::string *error = nullptr);
-  inline std::shared_ptr<Annotator> annotator() { return annotator_; };
-  inline std::shared_ptr<Appender> appender() { return appender_; };
+  static std::shared_ptr<Scribe> make(std::shared_ptr<Warren> warren,
+                                      std::string *error = nullptr);
+  static std::shared_ptr<Scribe> make(std::shared_ptr<Builder> builder,
+                                      std::string *error = nullptr);
+  inline std::shared_ptr<Annotator> annotator() { return annotator_(); };
+  inline std::shared_ptr<Appender> appender() { return appender_(); };
   inline bool set(const std::string &key, const std::string &value,
                   std::string *error = nullptr) {
     return set_(key, value, error);
@@ -31,10 +37,10 @@ protected:
   Scribe(){};
 
 private:
-  std::shared_ptr<Annotator> annotator_;
-  std::shared_ptr<Appender> appender_;
-  bool set_(const std::string &key, const std::string &value,
-            std::string *error);
+  virtual std::shared_ptr<Annotator> annotator_() = 0;
+  virtual std::shared_ptr<Appender> appender_() = 0;
+  virtual bool set_(const std::string &key, const std::string &value,
+                    std::string *error) = 0;
 };
 
 } // namespace cottontail

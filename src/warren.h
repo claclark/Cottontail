@@ -13,7 +13,6 @@
 #include "src/hopper.h"
 #include "src/idx.h"
 #include "src/parse.h"
-#include "src/scribe.h"
 #include "src/stemmer.h"
 #include "src/tokenizer.h"
 #include "src/txt.h"
@@ -40,7 +39,6 @@ public:
       : default_container_(std::string("")),
         stemmer_(std::make_shared<NullStemmer>()), working_(working),
         featurizer_(featurizer), tokenizer_(tokenizer), idx_(idx), txt_(txt) {
-    scribe_ = Scribe::null();
   };
   inline std::string name() { return name_; }
   inline std::string recipe() { return recipe_();}
@@ -127,7 +125,6 @@ public:
                             std::string *error = nullptr) {
     return get_parameter_(key, value, error);
   }
-  inline std::shared_ptr<Scribe> scribe() { return scribe_; }
 
   virtual ~Warren(){};
   Warren(const Warren &) = delete;
@@ -146,7 +143,6 @@ protected:
   std::shared_ptr<Txt> txt_ = nullptr;
   std::shared_ptr<Annotator> annotator_ = nullptr;
   std::shared_ptr<Appender> appender_ = nullptr;
-  std::shared_ptr<Scribe> scribe_ = nullptr;
 
 private:
   virtual std::string recipe_() {return "";};;
