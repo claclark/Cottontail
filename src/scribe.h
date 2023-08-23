@@ -20,6 +20,7 @@ public:
                                       std::string *error = nullptr);
   static std::shared_ptr<Scribe> make(std::shared_ptr<Builder> builder,
                                       std::string *error = nullptr);
+  inline std::shared_ptr<Featurizer> featurizer() { return featurizer_(); };
   inline std::shared_ptr<Annotator> annotator() { return annotator_(); };
   inline std::shared_ptr<Appender> appender() { return appender_(); };
   inline bool set(const std::string &key, const std::string &value,
@@ -37,11 +38,16 @@ protected:
   Scribe(){};
 
 private:
+  virtual std::shared_ptr<Featurizer> featurizer_() = 0;
   virtual std::shared_ptr<Annotator> annotator_() = 0;
   virtual std::shared_ptr<Appender> appender_() = 0;
   virtual bool set_(const std::string &key, const std::string &value,
                     std::string *error) = 0;
 };
+
+bool scribe_files(const std::vector<std::string> &filesnames,
+                  std::shared_ptr<Scribe> scrobe, bool verbose = false,
+                  std::string *error = nullptr);
 
 } // namespace cottontail
 #endif // COTTONTAIL_SRC_SCRIBE_H_

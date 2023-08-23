@@ -5,10 +5,12 @@
 
 #include "src/annotator.h"
 #include "src/appender.h"
+#include "src/builder.h"
 #include "src/committable.h"
 #include "src/core.h"
 #include "src/null_annotator.h"
 #include "src/null_appender.h"
+#include "src/null_featurizer.h"
 #include "src/warren.h"
 
 namespace cottontail {
@@ -19,6 +21,7 @@ class NullScribe : public Scribe {
 public:
   NullScribe() {
     std::string recipe = "";
+    null_featurizer_ = NullFeaturizer::make(recipe);
     null_annotator_ = NullAnnotator::make(recipe);
     null_appender_ = NullAppender::make(recipe);
   };
@@ -30,6 +33,7 @@ public:
   NullScribe &operator=(NullScribe &&) = delete;
 
 private:
+  std::shared_ptr<Featurizer> featurizer_() final { return null_featurizer_; }
   std::shared_ptr<Annotator> annotator_() final { return null_annotator_; }
   std::shared_ptr<Appender> appender_() final { return null_appender_; };
   bool set_(const std::string &key, const std::string &value,
@@ -41,6 +45,7 @@ private:
   void commit_() final { return; };
   void abort_() final { return; };
 
+  std::shared_ptr<Featurizer> null_featurizer_;
   std::shared_ptr<Annotator> null_annotator_;
   std::shared_ptr<Appender> null_appender_;
 };
@@ -56,6 +61,9 @@ public:
   WarrenScribe &operator=(WarrenScribe &&) = delete;
 
 private:
+  std::shared_ptr<Featurizer> featurizer_() final {
+    return warren_->featurizer();
+  }
   std::shared_ptr<Annotator> annotator_() final { return warren_->annotator(); }
   std::shared_ptr<Appender> appender_() final { return warren_->appender(); };
   bool set_(const std::string &key, const std::string &value,
@@ -163,7 +171,7 @@ private:
 
 class BuilderScribe : public Scribe {
 public:
-  BuilderScribe(std::shared_ptr<Builder> builder) : builder_(builder){
+  BuilderScribe(std::shared_ptr<Builder> builder) : builder_(builder) {
     builder_annotator_ = BuilderAnnotator::make(builder);
     builder_appender_ = BuilderAppender::make(builder);
   };
@@ -176,6 +184,9 @@ public:
   BuilderScribe &operator=(BuilderScribe &&) = delete;
 
 private:
+  std::shared_ptr<Featurizer> featurizer_() final {
+    return builder_->featurizer();
+  }
   std::shared_ptr<Annotator> annotator_() final { return builder_annotator_; }
   std::shared_ptr<Appender> appender_() final { return builder_appender_; };
   bool set_(const std::string &key, const std::string &value,
@@ -222,6 +233,51 @@ std::shared_ptr<Scribe> Scribe::make(std::shared_ptr<Builder> builder,
     return nullptr;
   }
   return std::shared_ptr<Scribe>(new BuilderScribe(builder));
+}
+
+bool scribe_files(const std::vector<std::string> &filenames,
+                  std::shared_ptr<Scribe> scribe, bool verbose,
+                  std::string *error) {
+  if (scribe == nullptr) {
+    safe_set(error) = "Function scribe_files passed null scribe";
+    return false;
+  }
+  if (!scribe->transaction())
+    return false;
+  addr file_feature = scribe->featurizer()->featurize("file:");
+  addr filename_feature = scribe->featurizer()->featurize("filename:");
+  addr content_feature = scribe->featurizer()->featurize("content:");
+  for (auto &filename : filenames) {
+    if (verbose)
+      std::cout << "Scribe inhaling: " << filename << "\n";
+    std::shared_ptr<std::string> content = inhale(filename, error);
+    if (content) {
+      addr name_p, name_q, content_p, content_q;
+      if (!scribe->appender()->append(filename, &name_p, &name_q, error))
+        return false;
+      if (!scribe->appender()->append(*content, &content_p, &content_q, error))
+        return false;
+      if (!scribe->annotator()->annotate(file_feature, name_p, content_q,
+                                         error))
+        return false;
+      if (!scribe->annotator()->annotate(filename_feature, name_p, name_q,
+                                         error))
+        return false;
+      if (!scribe->annotator()->annotate(content_feature, content_p, content_q,
+                                         error))
+        return false;
+    }
+  }
+  if (verbose)
+    std::cout << "Scribe commiting\n";
+  if (!scribe->ready()) {
+    safe_set(error) = "Function scribe_files unable to commit";
+    return false;
+  }
+  scribe->commit();
+  if (verbose)
+    std::cout << "Scribe done\n";
+  return true;
 }
 
 } // namespace cottontail

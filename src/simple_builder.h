@@ -47,6 +47,7 @@ public:
 
 private:
   SimpleBuilder(){};
+  std::shared_ptr<Featurizer> get_featurizer_() final;
   bool add_text_(const std::string &text, addr *p, addr *q,
                  std::string *error) final;
   bool add_annotation_(const std::string &tag, addr p, addr q, fval v,

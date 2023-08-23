@@ -31,6 +31,10 @@
 
 namespace cottontail {
 
+std::shared_ptr<Featurizer> SimpleBuilder::get_featurizer_() {
+  return featurizer_;
+};
+
 namespace {
 
 bool tok_cmp(const TokRecord &a, const TokRecord &b) {
@@ -676,8 +680,8 @@ bool SimpleBuilder::maybe_flush_annotations(bool force, std::string *error) {
   return true;
 };
 
-bool SimpleBuilder::add_annotation_(addr feature, addr p, addr q,
-                                    fval v, std::string *error) {
+bool SimpleBuilder::add_annotation_(addr feature, addr p, addr q, fval v,
+                                    std::string *error) {
   // for various reasons, it should be correct to silently ignore invalid
   // annotations
   if (p >= 0 && p <= q) {

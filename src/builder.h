@@ -16,6 +16,7 @@ namespace cottontail {
 
 class Builder {
 public:
+  inline std::shared_ptr<Featurizer> featurizer() { return get_featurizer_(); };
   bool add_text(const std::string &text, addr *p, addr *q,
                 std::string *error = nullptr) {
     if (failed_) {
@@ -105,6 +106,7 @@ protected:
   Builder(){};
 
 private:
+  virtual std::shared_ptr<Featurizer> get_featurizer_() = 0;
   virtual bool add_text_(const std::string &text, addr *p, addr *q,
                          std::string *error) = 0;
   virtual bool add_annotation_(const std::string &tag, addr p, addr q, fval v,
