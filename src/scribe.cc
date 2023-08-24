@@ -40,7 +40,8 @@ private:
             std::string *error) final {
     return true;
   };
-  bool transaction_(std::string *error = nullptr) final { return true; };
+  bool finalize_(std::string *error) final { return true; };
+  bool transaction_(std::string *error) final { return true; };
   bool ready_() final { return true; };
   void commit_() final { return; };
   void abort_() final { return; };
@@ -70,7 +71,8 @@ private:
             std::string *error) final {
     return warren_->set_parameter(key, value, error);
   };
-  bool transaction_(std::string *error = nullptr) final {
+  bool finalize_(std::string *error) final { return true; }
+  bool transaction_(std::string *error) final {
     return warren_->transaction(error);
   };
   bool ready_() final { return warren_->ready(); };
@@ -112,14 +114,7 @@ private:
     builder_->add_annotation(feature, p, q, v, error);
     return true;
   };
-  bool transaction_(std::string *error) final {
-    if (builder_ == nullptr) {
-      safe_set(error) =
-          "BuilderAnnotator does not support more than one transaction";
-      return false;
-    }
-    return true;
-  };
+  bool transaction_(std::string *error) final { return true; };
   bool ready_() final { return true; };
   void commit_() final { builder_ = nullptr; };
   void abort_() final { builder_ = nullptr; };
@@ -152,16 +147,13 @@ private:
   std::string recipe_() final { return ""; };
   bool append_(const std::string &text, addr *p, addr *q,
                std::string *error) final {
-    return builder_->add_text(text, p, q, error);
-  };
-  bool transaction_(std::string *error) final {
     if (builder_ == nullptr) {
-      safe_set(error) =
-          "BuilderAppender does not support more than one transaction";
+      safe_set(error) = "BuilderAppender has null builder";
       return false;
     }
-    return true;
+    return builder_->add_text(text, p, q, error);
   };
+  bool transaction_(std::string *error) final { return true; };
   bool ready_() final { return true; };
   void commit_() final { builder_ = nullptr; };
   void abort_() final { builder_ = nullptr; };
@@ -194,14 +186,8 @@ private:
     safe_set(error) = "BuilderScribe does not support parameters";
     return false;
   };
-  bool transaction_(std::string *error = nullptr) final {
-    if (builder_ == nullptr) {
-      safe_set(error) =
-          "BuilderScribe does not support more than one transaction";
-      return false;
-    }
-    return true;
-  };
+  bool finalize_(std::string *error) { return builder_->finalize(error); }
+  bool transaction_(std::string *error) final { return true; };
   bool ready_() final { return true; };
   void commit_() final { return; };
   void abort_() final { return; };
@@ -242,14 +228,14 @@ bool scribe_files(const std::vector<std::string> &filenames,
     safe_set(error) = "Function scribe_files passed null scribe";
     return false;
   }
-  if (!scribe->transaction())
-    return false;
   addr file_feature = scribe->featurizer()->featurize("file:");
   addr filename_feature = scribe->featurizer()->featurize("filename:");
   addr content_feature = scribe->featurizer()->featurize("content:");
   for (auto &filename : filenames) {
+    if (!scribe->transaction())
+      return false;
     if (verbose)
-      std::cout << "Scribe inhaling: " << filename << "\n";
+      std::cout << "scribe_files inhaling: " << filename << "\n";
     std::shared_ptr<std::string> content = inhale(filename, error);
     if (content) {
       addr name_p, name_q, content_p, content_q;
@@ -266,17 +252,17 @@ bool scribe_files(const std::vector<std::string> &filenames,
       if (!scribe->annotator()->annotate(content_feature, content_p, content_q,
                                          error))
         return false;
+      if (verbose)
+        std::cout << "scribe_files commiting: " << filename << "\n";
+      if (!scribe->ready()) {
+        safe_set(error) = "Function scribe_files unable to commit";
+        return false;
+      }
+      scribe->commit();
     }
   }
   if (verbose)
-    std::cout << "Scribe commiting\n";
-  if (!scribe->ready()) {
-    safe_set(error) = "Function scribe_files unable to commit";
-    return false;
-  }
-  scribe->commit();
-  if (verbose)
-    std::cout << "Scribe done\n";
+    std::cout << "scribe_files done\n";
   return true;
 }
 

@@ -27,6 +27,9 @@ public:
                   std::string *error = nullptr) {
     return set_(key, value, error);
   };
+  inline bool finalize(std::string *error = nullptr) {
+    return finalize_(error);
+  }
 
   virtual ~Scribe(){};
   Scribe(const Scribe &) = delete;
@@ -43,6 +46,7 @@ private:
   virtual std::shared_ptr<Appender> appender_() = 0;
   virtual bool set_(const std::string &key, const std::string &value,
                     std::string *error) = 0;
+  virtual bool finalize_(std::string *error) = 0;
 };
 
 bool scribe_files(const std::vector<std::string> &filesnames,
