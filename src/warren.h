@@ -61,11 +61,9 @@ public:
     return working_;
   };
   inline std::shared_ptr<Featurizer> featurizer() {
-    assert(started_);
     return featurizer_;
   };
   inline std::shared_ptr<Tokenizer> tokenizer() {
-    assert(started_);
     return tokenizer_;
   };
   inline std::shared_ptr<Idx> idx() {
