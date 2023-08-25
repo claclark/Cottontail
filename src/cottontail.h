@@ -15,6 +15,7 @@
 #include "src/ranker.h"
 #include "src/ranking.h"
 #include "src/recipe.h"
+#include "src/scribe.h"
 #include "src/simple.h"
 #include "src/simple_builder.h"
 #include "src/stemmer.h"

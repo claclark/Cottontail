@@ -12,8 +12,11 @@ cc_test(
         "-lz -pthread"
     ],
     data = [
-        "test0.txt",
         "ranking.txt",
+        "sonnet0.txt",
+        "sonnet1.txt",
+        "sonnet2.txt",
+        "test0.txt",
         "test.qrels",
     ],
 )
