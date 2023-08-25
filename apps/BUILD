@@ -78,6 +78,20 @@ cc_binary(
 )
 
 cc_binary(
+    name = "dynamic-test",
+    srcs = [
+      "dynamic-test.cc",
+    ],
+    deps = [
+      "//src:cottontail",
+      "walk",
+    ],
+    linkopts = [
+      "-L/usr/local/lib -lboost_system -lboost_filesystem -pthread",
+    ],
+)
+
+cc_binary(
     name = "fast-id",
     srcs = [
       "fast-id.cc",

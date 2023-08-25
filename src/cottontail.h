@@ -3,6 +3,7 @@
 
 #include "src/annotator.h"
 #include "src/appender.h"
+#include "src/bigwig.h"
 #include "src/builder.h"
 #include "src/compressor.h"
 #include "src/core.h"
