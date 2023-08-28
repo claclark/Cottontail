@@ -36,6 +36,10 @@ private:
                       std::string *error) final;
   bool get_parameter_(const std::string &key, std::string *value,
                       std::string *error) final;
+  bool transaction_(std::string *error) final;
+  bool ready_() final;
+  void commit_() final;
+  void abort_() final;
 };
 
 } // namespace cottontail

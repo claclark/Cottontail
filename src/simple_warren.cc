@@ -158,4 +158,28 @@ bool SimpleWarren::get_parameter_(const std::string &key, std::string *value,
     *value = it->second;
   return true;
 }
+
+bool SimpleWarren::transaction_(std::string *error) {
+  if (!appender_->transaction(error))
+    return false;
+  if (!annotator()->transaction(error)) {
+    appender_->abort();
+    return false;
+  }
+  return true;
+}
+
+bool SimpleWarren::ready_() {
+  return appender_->ready() && annotator_->ready();
+}
+
+void SimpleWarren::commit_() {
+  appender_->commit();
+  annotator_->commit();
+}
+
+void SimpleWarren::abort_() {
+  appender_->abort();
+  annotator_->abort();
+}
 } // namespace cottontail

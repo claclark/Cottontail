@@ -732,7 +732,7 @@ bool tf_df_annotations(std::shared_ptr<Warren> warren, std::string *error) {
       TaggingFeaturizer::make(warren->featurizer(), "total", error);
   if (total_featurizer == nullptr)
     return false;
-  if (!warren->annotator()->transaction(error))
+  if (!warren->transaction(error))
     return false;
   std::map<addr, addr> df;
   addr HUGE = 1014 * 1024;
@@ -752,12 +752,12 @@ bool tf_df_annotations(std::shared_ptr<Warren> warren, std::string *error) {
       for (size_t i = 0; i < ps.size(); i++) {
         std::map<std::string, addr> tf;
         for (addr j = ps[i]; j <= qs[i]; j++) {
-          std::string token = tokens[j - ps[0]];
-          std::string stem = warren->stemmer()->stem(token);
-          if (tf.find(stem) == tf.end())
+          std::string stem = warren->stemmer()->stem(tokens[j - ps[0]]);
+          auto it = tf.find(stem);
+          if (it == tf.end())
             tf[stem] = 1;
           else
-            tf[stem]++;
+            it->second++;
         }
         for (auto &token : tf) {
           addr tf_feature = tf_featurizer->featurize(token.first);
@@ -765,10 +765,11 @@ bool tf_df_annotations(std::shared_ptr<Warren> warren, std::string *error) {
                                              token.second, error))
             return false;
           addr df_feature = df_featurizer->featurize(token.first);
-          if (df.find(df_feature) == df.end())
+          auto it = df.find(df_feature);
+          if (it == df.end())
             df[df_feature] = 1;
           else
-            df[df_feature]++;
+            it->second++;
         }
       }
       ps.clear();
@@ -789,12 +790,12 @@ bool tf_df_annotations(std::shared_ptr<Warren> warren, std::string *error) {
   if (!warren->annotator()->annotate(total_featurizer->featurize("length"), 0,
                                      0, total_length, error))
     return false;
-  if (!warren->annotator()->ready()) {
-    warren->annotator()->abort();
+  if (!warren->ready()) {
+    warren->abort();
     safe_set(error) = "tf_df_annotations can't commit changes";
     return false;
   }
-  warren->annotator()->commit();
+  warren->commit();
   std::string stats_key = "statistics";
   std::string stats_name = "df";
   if (!warren->set_parameter(stats_key, stats_name, error))
@@ -808,7 +809,7 @@ bool tf_idf_annotations(std::shared_ptr<Warren> warren, std::string *error,
                         bool include_rsj) {
   if (!(include_idf || include_rsj))
     return true; // weird, but whatever
-  if (!warren->annotator()->transaction(error))
+  if (!warren->transaction(error))
     return false;
   std::string working_filename = warren->working()->make_temp("idf");
   std::ofstream anf(working_filename, std::ios::binary);
@@ -912,12 +913,12 @@ bool tf_idf_annotations(std::shared_ptr<Warren> warren, std::string *error,
   if (!warren->annotator()->annotate(working_filename, error))
     return false;
   std::remove(working_filename.c_str());
-  if (!warren->annotator()->ready()) {
-    warren->annotator()->abort();
+  if (!warren->ready()) {
+    warren->abort();
     safe_set(error) = "tf_idf_annotations can't commit changes";
     return false;
   }
-  warren->annotator()->commit();
+  warren->commit();
   std::string key, value;
   key = "unstemmed";
   value = okay(include_unstemmed);

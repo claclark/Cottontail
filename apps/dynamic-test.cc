@@ -66,6 +66,20 @@ int main(int argc, char **argv) {
       cottontail::Bigwig::make(nullptr, featurizer, tokenizer);
   ASSERT_NE(bigwig, nullptr);
 
+  bigwig->start();
+  std::string stemmer_name = "porter";
+  std::string stemmer_recipe = "";
+  std::shared_ptr<cottontail::Stemmer> stemmer =
+      cottontail::Stemmer::make(stemmer_name, stemmer_recipe);
+  ASSERT_NE(stemmer, nullptr);
+  ASSERT_TRUE(bigwig->set_stemmer(stemmer));
+  std::string container_query = "(... <DOC> </DOC>)";
+  ASSERT_TRUE(bigwig->set_default_container(container_query));
+  std::string id_key = "id";
+  std::string id_query = "(... <DOCNO> </DOCNO>)";
+  ASSERT_TRUE(bigwig->set_parameter(id_key, id_query));
+  bigwig->end();
+
   std::mutex docq_mutex;
   std::mutex output_mutex;
   auto worker = [&]() {
@@ -97,6 +111,10 @@ int main(int argc, char **argv) {
   for (auto &worker : workers)
     worker.join();
 
+std::cout << "hello\n";
+  sleep(2);
+std::cout << "world\n";
+#if 0
   bigwig->start();
   std::unique_ptr<cottontail::Hopper> h =
       bigwig->hopper_from_gcl("(... \"<DOCNO>\" \"</DOCNO>\")");
@@ -106,6 +124,12 @@ int main(int argc, char **argv) {
        h->tau(p + 1, &p, &q))
     std::cout << bigwig->txt()->translate(p, q) << "\n";
   bigwig->end();
+#endif
+
+  std::shared_ptr<cottontail::Warren> warren = bigwig->clone();
+  warren->start();
+  ASSERT_TRUE(cottontail::tf_df_annotations(warren));
+  warren->end();
 
   return 0;
 }
