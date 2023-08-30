@@ -11,6 +11,7 @@
 #include "apps/walk.h"
 #include "src/cottontail.h"
 
+#define ASSERT_EQ(a, b) (assert((a) == (b)))
 #define ASSERT_NE(a, b) (assert((a) != (b)))
 #define ASSERT_TRUE(a) (assert((a)))
 
@@ -80,9 +81,10 @@ int main(int argc, char **argv) {
   ASSERT_TRUE(bigwig->set_parameter(id_key, id_query));
   bigwig->end();
 
+  bool stop = false;
   std::mutex docq_mutex;
   std::mutex output_mutex;
-  auto worker = [&]() {
+  auto scribe_worker = [&]() {
     std::shared_ptr<cottontail::Warren> warren = bigwig->clone();
     ASSERT_NE(warren, nullptr);
     for (;;) {
@@ -100,36 +102,42 @@ int main(int argc, char **argv) {
         return;
       ASSERT_TRUE(
           cottontail::scribe_files(doc, cottontail::Scribe::make(warren)));
-      output_mutex.lock();
-      std::cout << doc[0] << "\n";
-      output_mutex.unlock();
     }
   };
-  std::vector<std::thread> workers;
+  auto search_worker = [&](std::string query) {
+    std::shared_ptr<cottontail::Warren> warren = bigwig->clone();
+    bool done = false;
+    cottontail::addr last = cottontail::minfinity;
+    while (!done) {
+      done = stop;
+      warren->start();
+      std::unique_ptr<cottontail::Hopper> h = warren->hopper_from_gcl(query);
+      cottontail::addr p, q;
+      h->uat(cottontail::maxfinity - 1, &p, &q);
+      if (p > last) {
+        last = p;
+        std::vector<std::string> tokens =
+            warren->tokenizer()->split(warren->txt()->translate(p, q));
+        output_mutex.lock();
+        ASSERT_EQ(tokens.size(), 1);
+        std::cout << p << ", " << q << ": " << tokens[0] << "\n";
+        output_mutex.unlock();
+      }
+      warren->end();
+    }
+  };
+  std::vector<std::thread> searchers;
+  searchers.emplace_back(std::thread(search_worker, "black"));
+  searchers.emplace_back(std::thread(search_worker, "bear"));
+  searchers.emplace_back(std::thread(search_worker, "attacks"));
+  std::vector<std::thread> scribers;
   for (size_t i = 0; i < threads; i++)
-    workers.emplace_back(std::thread(worker));
-  for (auto &worker : workers)
-    worker.join();
-
-std::cout << "hello\n";
-  sleep(2);
-std::cout << "world\n";
-#if 0
-  bigwig->start();
-  std::unique_ptr<cottontail::Hopper> h =
-      bigwig->hopper_from_gcl("(... \"<DOCNO>\" \"</DOCNO>\")");
-  ASSERT_NE(h, nullptr);
-  cottontail::addr p, q;
-  for (h->tau(cottontail::minfinity + 1, &p, &q); p < cottontail::maxfinity;
-       h->tau(p + 1, &p, &q))
-    std::cout << bigwig->txt()->translate(p, q) << "\n";
-  bigwig->end();
-#endif
-
-  std::shared_ptr<cottontail::Warren> warren = bigwig->clone();
-  warren->start();
-  ASSERT_TRUE(cottontail::tf_df_annotations(warren));
-  warren->end();
+    scribers.emplace_back(std::thread(scribe_worker));
+  for (auto &scriber : scribers)
+    scriber.join();
+  stop = true;
+  for (auto &searcher : searchers)
+    searcher.join();
 
   return 0;
 }
