@@ -140,7 +140,7 @@ int main(int argc, char **argv) {
       if (done)
         return;
       std::vector<cottontail::RankingResult> results =
-          icover_ranking(warren, query, container, 1000);
+          icover_ranking(warren, query, container, 10);
       // tiered_ranking(warren, query, container, 1000);
       output_mutex.lock();
       size_t rank = 1;
