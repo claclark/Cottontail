@@ -14,7 +14,7 @@ bool scribe_sonnets(std::shared_ptr<cottontail::Scribe> scribe,
                     std::string *error) {
   std::vector<std::string> sonnets = {"test/sonnet0.txt", "test/sonnet1.txt",
                                       "test/sonnet2.txt"};
-  if (cottontail::scribe_files(sonnets, scribe, true, error))
+  if (cottontail::scribe_files(sonnets, scribe, error, false))
     return scribe->finalize(error);
   else
     return false;

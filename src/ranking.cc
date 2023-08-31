@@ -704,6 +704,91 @@ std::vector<std::string> kld_prf(std::shared_ptr<Warren> warren,
   return expansion_terms;
 }
 
+// Generate term frequency annotations over a range.
+bool tf_annotations(std::shared_ptr<Warren> warren, std::string *error,
+                    addr start, addr end) {
+  std::string content_key = "container";
+  std::string content_query = "";
+  if (!warren->get_parameter(content_key, &content_query, error))
+    content_query = warren->default_container();
+  if (content_query == "") {
+    safe_set(error) = "tf_annotations can't find a definition for item content";
+  }
+  std::unique_ptr<cottontail::Hopper> hopper =
+      warren->hopper_from_gcl(content_query, error);
+  if (hopper == nullptr)
+    return false;
+  std::shared_ptr<Featurizer> tf_featurizer =
+      TaggingFeaturizer::make(warren->featurizer(), "tf", error);
+  if (tf_featurizer == nullptr)
+    return false;
+  std::shared_ptr<Featurizer> total_featurizer =
+      TaggingFeaturizer::make(warren->featurizer(), "total", error);
+  if (total_featurizer == nullptr)
+    return false;
+  if (!warren->transaction(error))
+    return false;
+  std::map<addr, addr> df;
+  addr HUGE = 1014 * 1024;
+  std::vector<addr> ps, qs;
+  addr p = start, q, total_items = 0, total_length = 0;
+  if (p == minfinity)
+    p += 1;
+  for (hopper->tau(p, &p, &q); q <= end && q < maxfinity;
+       hopper->tau(p + 1, &p, &q)) {
+    if (q <= end && q < maxfinity) {
+      total_items++;
+      total_length += q - p + 1;
+      ps.push_back(p);
+      qs.push_back(q);
+    }
+    if (ps.size() > 0 &&
+        (q == maxfinity || q > end || qs.back() - ps.front() > HUGE)) {
+      std::string text = warren->txt()->translate(ps.front(), qs.back());
+      std::vector<std::string> tokens = warren->tokenizer()->split(text);
+      for (size_t i = 0; i < ps.size(); i++) {
+        std::map<addr, addr> tf;
+        for (addr j = ps[i]; j <= qs[i]; j++) {
+          addr feature = tf_featurizer->featurize(
+              warren->stemmer()->stem(tokens[j - ps[0]]));
+          auto it = tf.find(feature);
+          if (it == tf.end())
+            tf[feature] = 1;
+          else
+            it->second++;
+        }
+        for (auto &feature : tf)
+          if (!warren->annotator()->annotate(feature.first, ps[i], ps[i],
+                                             feature.second, error))
+            return false;
+      }
+      ps.clear();
+      qs.clear();
+    }
+  }
+  if (total_items == 0) {
+    safe_set(error) = "tf_annotations can't find any items for ranking";
+    return false;
+  }
+  if (!warren->annotator()->annotate(total_featurizer->featurize("items"),
+                                     start, start, total_items, error))
+    return false;
+  if (!warren->annotator()->annotate(total_featurizer->featurize("length"),
+                                     start, start, total_length, error))
+    return false;
+  if (!warren->ready()) {
+    warren->abort();
+    safe_set(error) = "tf_annotations can't commit changes";
+    return false;
+  }
+  warren->commit();
+  std::string stats_key = "statistics";
+  std::string stats_name = "tf";
+  if (!warren->set_parameter(stats_key, stats_name, error))
+    return false;
+  return true;
+}
+
 // Generate term frequency and document frequency annotations.
 // Should be an improvement over tf_idf_annotations
 bool tf_df_annotations(std::shared_ptr<Warren> warren, std::string *error) {

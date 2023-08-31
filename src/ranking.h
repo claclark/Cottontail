@@ -149,6 +149,11 @@ kld_prf(std::shared_ptr<Warren> warren,
   return kld_prf(warren, ranking, parameters);
 }
 
+// Generate term frequency annotations over a range.
+bool tf_annotations(std::shared_ptr<Warren> warren,
+                    std::string *error = nullptr, addr start = minfinity,
+                    addr end = maxfinity);
+
 // Generate term frequency and document frequency annotations.
 bool tf_df_annotations(std::shared_ptr<Warren> warren,
                        std::string *error = nullptr);

@@ -50,8 +50,8 @@ private:
 };
 
 bool scribe_files(const std::vector<std::string> &filesnames,
-                  std::shared_ptr<Scribe> scribe, bool verbose = false,
-                  std::string *error = nullptr);
+                  std::shared_ptr<Scribe> scribe, std::string *error = nullptr,
+                  bool verbose = false, addr *p = nullptr, addr *q = nullptr);
 
 } // namespace cottontail
 #endif // COTTONTAIL_SRC_SCRIBE_H_

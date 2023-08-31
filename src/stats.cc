@@ -40,7 +40,7 @@ std::shared_ptr<Stats> Stats::make(const std::string &name,
     if (stats == nullptr)
       return nullptr;
     stats->name_ = name;
-  } else if (name == "df") {
+  } else if (name == "df" || name == "tf") {
     stats = DfStats::make(recipe, warren, error);
     if (stats == nullptr)
       return nullptr;
@@ -58,7 +58,7 @@ bool Stats::check(const std::string &name, const std::string &recipe,
     return true;
   } else if (name == "idf") {
     return IdfStats::check(recipe, error);
-  } else if (name == "df") {
+  } else if (name == "df" || name == "tf") {
     return DfStats::check(recipe, error);
   } else {
     safe_set(error) = "No Stats named: " + name;
