@@ -52,25 +52,29 @@ std::shared_ptr<Stats> DfStats::make(const std::string &recipe,
     safe_set(error) = "No global statistics in warren";
     return nullptr;
   }
-  addr p, q, items;
-  hopper->tau(minfinity + 1, &p, &q, &items);
-  if (p == maxfinity || items < 1) {
+  addr p, q, n, items = 0;
+  for (hopper->tau(minfinity + 1, &p, &q, &n); p < maxfinity;
+       hopper->tau(p + 1, &p, &q, &n))
+    items += n;
+  if (items < 1) {
     safe_set(error) = "No global statistics in warren";
     return nullptr;
   }
   stats->items_ = items;
   hopper = warren->idx()->hopper(featurizer->featurize("length"));
-  addr length;
-  hopper->tau(minfinity + 1, &p, &q, &length);
-  if (p == maxfinity || length < 1) {
+  if (hopper == nullptr) {
+    safe_set(error) = "No global statistics in warren";
+    return nullptr;
+  }
+  addr length = 0;
+  for (hopper->tau(minfinity + 1, &p, &q, &n); p < maxfinity;
+       hopper->tau(p + 1, &p, &q, &n))
+    length += n;
+  if (length < 1) {
     safe_set(error) = "No global statistics in warren";
     return nullptr;
   }
   stats->average_length_ = length / stats->items_;
-  stats->df_featurizer_ =
-      TaggingFeaturizer::make(warren->featurizer(), "df", error);
-  if (stats->df_featurizer_ == nullptr)
-    return nullptr;
   stats->tf_featurizer_ =
       TaggingFeaturizer::make(warren->featurizer(), "tf", error);
   if (stats->tf_featurizer_ == nullptr)
@@ -99,6 +103,8 @@ namespace {
 inline addr load_df(std::shared_ptr<Warren> warren,
                     std::shared_ptr<Featurizer> featurizer,
                     const std::string &term) {
+  return warren->idx()->count(featurizer->featurize(term));
+#if 0
   addr p, q, df;
   std::unique_ptr<Hopper> hopper =
       warren->idx()->hopper(featurizer->featurize(term));
@@ -109,21 +115,22 @@ inline addr load_df(std::shared_ptr<Warren> warren,
     return 0;
   else
     return df;
+#endif
 }
 } // namespace
 
 fval DfStats::idf_(const std::string &term) {
-  fval df = (fval)load_df(warren_, df_featurizer_, term);
+  fval df = (fval)load_df(warren_, tf_featurizer_, term);
   if (df == 0.0)
     return 0.0;
-  fval idf = std::log((1.0 * items_));
+  fval idf = std::log(items_ / df);
   if (idf < 0.0)
     return 0.0;
   return idf;
 }
 
 fval DfStats::rsj_(const std::string &term) {
-  fval df = (fval)load_df(warren_, df_featurizer_, term);
+  fval df = (fval)load_df(warren_, tf_featurizer_, term);
   if (df == 0.0)
     return 0.0;
   fval rsj = std::log((items_ - df + 0.5) / (df + 0.5));

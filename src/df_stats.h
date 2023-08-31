@@ -36,7 +36,6 @@ private:
   virtual std::unique_ptr<Hopper> tf_hopper_(const std::string &term) final;
   fval items_;
   fval average_length_;
-  std::shared_ptr<Featurizer> df_featurizer_;
   std::shared_ptr<Featurizer> tf_featurizer_;
 };
 
