@@ -113,7 +113,6 @@ int main(int argc, char **argv) {
       }
       std::string query = "(>> file: (<< (>> filename: \"" + doc[0] + "\") \"" +
                           doc[0] + "\"))";
-      std::shared_ptr<cottontail::Warren> BAD = bigwig->clone();
       warren->start();
       std::unique_ptr<cottontail::Hopper> hopper =
           warren->hopper_from_gcl(query);
@@ -121,9 +120,7 @@ int main(int argc, char **argv) {
       cottontail::addr p, q;
       hopper->tau(cottontail::minfinity + 1, &p, &q);
       ASSERT_NE(p, cottontail::maxfinity);
-      BAD->start();
-      cottontail::tf_annotations(BAD, nullptr, p, q);
-      BAD->end();
+      cottontail::tf_annotations(warren, nullptr, p, q);
       warren->end();
       if (verbose) {
         output_mutex.lock();
@@ -133,10 +130,13 @@ int main(int argc, char **argv) {
     }
   };
   auto search_worker = [&](std::string query) {
+    bool verbose = true;
     std::shared_ptr<cottontail::Warren> warren = bigwig->clone();
-    output_mutex.lock();
-    std::cout << "Seaching " << query << "\n" << std::flush;
-    output_mutex.unlock();
+    if (verbose) {
+      output_mutex.lock();
+      std::cout << "Seaching " << query << "\n" << std::flush;
+      output_mutex.unlock();
+    }
     bool done = false;
     cottontail::addr last = cottontail::minfinity;
     while (!done) {
@@ -150,27 +150,29 @@ int main(int argc, char **argv) {
         std::vector<std::string> tokens =
             warren->tokenizer()->split(warren->txt()->translate(p, q));
         ASSERT_EQ(tokens.size(), 1);
-        output_mutex.lock();
-        if (v == 0)
-          std::cout << p << ", " << q << ": " << tokens[0] << "\n"
-                    << std::flush;
-        else
-          std::cout << p << ", " << q << ", " << v << ": " << query << "\n"
-                    << std::flush;
-        output_mutex.unlock();
+        if (verbose) {
+          output_mutex.lock();
+          if (v == 0)
+            std::cout << p << ", " << q << ": " << tokens[0] << "\n"
+                      << std::flush;
+          else
+            std::cout << p << ", " << q << ", " << v << ": " << query << "\n"
+                      << std::flush;
+          output_mutex.unlock();
+        }
       }
       warren->end();
     }
   };
 
-#if 1
   std::vector<std::thread> searchers;
+
+#if 0
   searchers.emplace_back(std::thread(search_worker, "tf:it"));
   searchers.emplace_back(std::thread(search_worker, "black"));
 #endif
 
 #if 0
-  std::vector<std::thread> searchers;
   std::string black = "tf:" + stemmer->stem("black");
   searchers.emplace_back(std::thread(search_worker, black));
   std::string bear = "tf:" + stemmer->stem("bear");
@@ -185,11 +187,8 @@ int main(int argc, char **argv) {
   for (auto &scriber : scribers)
     scriber.join();
   stop = true;
-
-#if 1
   for (auto &searcher : searchers)
     searcher.join();
-#endif
 
   return 0;
 }
