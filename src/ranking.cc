@@ -743,7 +743,7 @@ bool tf_annotations(std::shared_ptr<Warren> warren, std::string *error,
       qs.push_back(q);
     }
     if (ps.size() > 0 &&
-        (q == maxfinity || q > end || qs.back() - ps.front() > HUGE)) {
+        (q == maxfinity || q >= end || qs.back() - ps.front() > HUGE)) {
       std::string text = warren->txt()->translate(ps.front(), qs.back());
       std::vector<std::string> tokens = warren->tokenizer()->split(text);
       for (size_t i = 0; i < ps.size(); i++) {
