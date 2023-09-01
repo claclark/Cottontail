@@ -759,8 +759,10 @@ bool tf_annotations(std::shared_ptr<Warren> warren, std::string *error,
         }
         for (auto &feature : tf)
           if (!warren->annotator()->annotate(feature.first, ps[i], ps[i],
-                                             feature.second, error))
+                                             feature.second, error)) {
+            warren->abort();
             return false;
+          }
       }
       ps.clear();
       qs.clear();
@@ -768,14 +770,19 @@ bool tf_annotations(std::shared_ptr<Warren> warren, std::string *error,
   }
   if (total_items == 0) {
     safe_set(error) = "tf_annotations can't find any items for ranking";
+    warren->abort();
     return false;
   }
   if (!warren->annotator()->annotate(total_featurizer->featurize("items"),
-                                     start, start, total_items, error))
+                                     start, start, total_items, error)) {
+    warren->abort();
     return false;
+  }
   if (!warren->annotator()->annotate(total_featurizer->featurize("length"),
-                                     start, start, total_length, error))
+                                     start, start, total_length, error)) {
+    warren->abort();
     return false;
+  }
   if (!warren->ready()) {
     warren->abort();
     safe_set(error) = "tf_annotations can't commit changes";
@@ -847,8 +854,10 @@ bool tf_df_annotations(std::shared_ptr<Warren> warren, std::string *error) {
         for (auto &token : tf) {
           addr tf_feature = tf_featurizer->featurize(token.first);
           if (!warren->annotator()->annotate(tf_feature, ps[i], ps[i],
-                                             token.second, error))
+                                             token.second, error)) {
+            warren->abort();
             return false;
+          }
           addr df_feature = df_featurizer->featurize(token.first);
           auto it = df.find(df_feature);
           if (it == df.end())
@@ -862,19 +871,26 @@ bool tf_df_annotations(std::shared_ptr<Warren> warren, std::string *error) {
     }
   }
   if (total_items == 0) {
+    warren->abort();
     safe_set(error) = "tf_df_annotations can't find any items for ranking";
     return false;
   }
   for (auto &feature : df)
     if (!warren->annotator()->annotate(feature.first, 0, 0, feature.second,
-                                       error))
+                                       error)) {
+      warren->abort();
       return false;
+    }
   if (!warren->annotator()->annotate(total_featurizer->featurize("items"), 0, 0,
-                                     total_items, error))
+                                     total_items, error)) {
+    warren->abort();
     return false;
+  }
   if (!warren->annotator()->annotate(total_featurizer->featurize("length"), 0,
-                                     0, total_length, error))
+                                     0, total_length, error)) {
+    warren->abort();
     return false;
+  }
   if (!warren->ready()) {
     warren->abort();
     safe_set(error) = "tf_df_annotations can't commit changes";
@@ -899,6 +915,7 @@ bool tf_idf_annotations(std::shared_ptr<Warren> warren, std::string *error,
   std::string working_filename = warren->working()->make_temp("idf");
   std::ofstream anf(working_filename, std::ios::binary);
   if (anf.fail()) {
+    warren->abort();
     safe_set(error) =
         "Cannot create file for tf-idf annotations: " + working_filename;
     return false;
@@ -906,14 +923,18 @@ bool tf_idf_annotations(std::shared_ptr<Warren> warren, std::string *error,
   std::string container = warren->default_container();
   std::unique_ptr<cottontail::Hopper> hopper =
       warren->hopper_from_gcl(container, error);
-  if (hopper == nullptr)
+  if (hopper == nullptr) {
+    warren->abort();
     return false;
+  }
   addr p, q, N = 0, total_length = 0;
   std::map<std::string, addr> df;
   std::shared_ptr<Featurizer> tf_featurizer =
       TaggingFeaturizer::make(warren->featurizer(), "tf", error);
-  if (tf_featurizer == nullptr)
+  if (tf_featurizer == nullptr) {
+    warren->abort();
     return false;
+  }
   for (hopper->tau(0, &p, &q); p < maxfinity; hopper->tau(p + 1, &p, &q)) {
     N++;
     total_length += q - p + 1;
@@ -960,16 +981,22 @@ bool tf_idf_annotations(std::shared_ptr<Warren> warren, std::string *error,
   }
   std::shared_ptr<Featurizer> idf_featurizer =
       TaggingFeaturizer::make(warren->featurizer(), "idf", error);
-  if (idf_featurizer == nullptr)
+  if (idf_featurizer == nullptr) {
+    warren->abort();
     return false;
+  }
   std::shared_ptr<Featurizer> rsj_featurizer =
       TaggingFeaturizer::make(warren->featurizer(), "rsj", error);
-  if (rsj_featurizer == nullptr)
+  if (rsj_featurizer == nullptr) {
+    warren->abort();
     return false;
+  }
   std::shared_ptr<Featurizer> avgl_featurizer =
       TaggingFeaturizer::make(warren->featurizer(), "avgl", error);
-  if (avgl_featurizer == nullptr)
+  if (avgl_featurizer == nullptr) {
+    warren->abort();
     return false;
+  }
   Annotation a;
   a.p = a.q = 0; // arbitrarily location for global statistics
   a.feature = avgl_featurizer->featurize("avgl");
@@ -995,8 +1022,10 @@ bool tf_idf_annotations(std::shared_ptr<Warren> warren, std::string *error,
     }
   }
   anf.close();
-  if (!warren->annotator()->annotate(working_filename, error))
+  if (!warren->annotator()->annotate(working_filename, error)) {
+    warren->abort();
     return false;
+  }
   std::remove(working_filename.c_str());
   if (!warren->ready()) {
     warren->abort();

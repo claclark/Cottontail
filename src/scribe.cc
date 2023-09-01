@@ -223,7 +223,7 @@ std::shared_ptr<Scribe> Scribe::make(std::shared_ptr<Builder> builder,
 
 bool scribe_files(const std::vector<std::string> &filenames,
                   std::shared_ptr<Scribe> scribe, std::string *error,
-                  bool verbose, addr *p, addr *q) {
+                  bool verbose) {
   if (scribe == nullptr) {
     safe_set(error) = "Function scribe_files passed null scribe";
     return false;
@@ -231,9 +231,8 @@ bool scribe_files(const std::vector<std::string> &filenames,
   addr file_feature = scribe->featurizer()->featurize("file:");
   addr filename_feature = scribe->featurizer()->featurize("filename:");
   addr content_feature = scribe->featurizer()->featurize("content:");
-  addr start = minfinity, end = minfinity;
   for (auto &filename : filenames) {
-    if (!scribe->transaction())
+    if (!scribe->transaction(error))
       return false;
     if (verbose)
       std::cout << "scribe_files inhaling: " << filename << "\n";
@@ -260,15 +259,10 @@ bool scribe_files(const std::vector<std::string> &filenames,
         return false;
       }
       scribe->commit();
-      if (start == minfinity)
-        start = name_q;
-      end = content_q;
     }
   }
   if (verbose)
     std::cout << "scribe_files done\n";
-  safe_set(p) = start;
-  safe_set(q) = end;
   return true;
 }
 
