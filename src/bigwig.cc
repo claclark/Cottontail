@@ -207,9 +207,18 @@ std::shared_ptr<Bigwig> Bigwig::make(
 }
 
 std::shared_ptr<Warren> Bigwig::clone_(std::string *error) {
-  return Bigwig::make(working_, featurizer_, tokenizer_, fluffle_, error,
-                      posting_compressor_, fvalue_compressor_,
-                      text_compressor_);
+  std::shared_ptr<Warren> bigwig =
+      Bigwig::make(working_, featurizer_, tokenizer_, fluffle_, error,
+                   posting_compressor_, fvalue_compressor_, text_compressor_);
+  if (bigwig == nullptr)
+    return nullptr;
+  std::shared_ptr<cottontail::Stemmer> the_stemmer =
+      cottontail::Stemmer::make(stemmer_->name(), stemmer_->recipe(), error);
+  if (the_stemmer == nullptr)
+    return nullptr;
+  if (!bigwig->set_stemmer(the_stemmer, error))
+    return nullptr;
+  return bigwig;
 }
 
 void Bigwig::start_() {
@@ -236,9 +245,10 @@ bool Bigwig::set_parameter_(const std::string &key, const std::string &value,
       std::make_shared<std::map<std::string, std::string>>();
   fluffle_->lock.lock();
   if (fluffle_->parameters != nullptr)
-    (*parameters) = *(fluffle_->parameters);
+    parameters = fluffle_->parameters;
+  else
+    fluffle_->parameters = parameters;
   (*parameters)[key] = value;
-  fluffle_->parameters = parameters;
   fluffle_->lock.unlock();
   return true;
 }

@@ -266,6 +266,8 @@ int main(int argc, char **argv) {
     }
   };
 
+  sleep(3);
+
   std::vector<std::thread> rankers;
   for (size_t i = 0; i < threads; i++)
     rankers.emplace_back(std::thread(ranking_worker));
