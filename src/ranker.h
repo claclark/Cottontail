@@ -27,7 +27,7 @@ public:
 
   static std::shared_ptr<Ranker> from_pipeline(const std::string &pipeline,
                                                std::shared_ptr<Warren> warren,
-                                               std::string *error);
+                                               std::string *error = nullptr);
 
 protected:
   Ranker() = default;

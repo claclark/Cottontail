@@ -14,6 +14,7 @@
 #define ASSERT_EQ(a, b) (assert((a) == (b)))
 #define ASSERT_NE(a, b) (assert((a) != (b)))
 #define ASSERT_TRUE(a) (assert((a)))
+#define ASSERT_FALSE(a) (assert(!(a)))
 
 void usage(std::string program_name) {
   std::cerr << "usage: " << program_name
@@ -129,6 +130,7 @@ int main(int argc, char **argv) {
       }
     }
   };
+
   auto search_worker = [&](std::string query) {
     bool verbose = true;
     std::shared_ptr<cottontail::Warren> warren = bigwig->clone();
@@ -189,6 +191,86 @@ int main(int argc, char **argv) {
   stop = true;
   for (auto &searcher : searchers)
     searcher.join();
+
+  std::string pipeline =
+      "stem bm25:b=0.298514 bm25:k1=0.786383 bm25 rsj:depth=19.2284 "
+      "rsj:expansions=20.8663 rsj:gamma=0.186011 rsj bm25:b=0.362828 "
+      "bm25:k1=0.711716 bm25";
+  std::ifstream queriesf(queries_filename);
+  ASSERT_FALSE(queriesf.fail());
+  std::string line;
+  std::queue<std::string> topics;
+  std::map<std::string, std::string> queries;
+  while (std::getline(queriesf, line)) {
+    std::string separator = "\t";
+    if (line.find(separator) == std::string::npos)
+      separator = " ";
+    if (line.find(separator) == std::string::npos) {
+      std::cerr << program_name << ": weird query input: " << line;
+      return 1;
+    }
+    std::string topic = line.substr(0, line.find(separator));
+    std::string query = line.substr(line.find(separator));
+    if (topic == "" || query == "") {
+      std::cerr << program_name << ": weird query input: " << line;
+      return 1;
+    }
+    queries[topic] = query;
+    topics.push(topic);
+  }
+
+  std::mutex topic_mutex;
+  auto ranking_worker = [&]() {
+    std::shared_ptr<cottontail::Warren> warren = bigwig->clone();
+    ASSERT_NE(warren, nullptr);
+    for (;;) {
+      std::string topic;
+      topic_mutex.lock();
+      if (topics.empty()) {
+        topic_mutex.unlock();
+        return;
+      } else {
+        topic = topics.front();
+        topics.pop();
+        topic_mutex.unlock();
+      }
+      std::string query = queries[topic];
+      warren->start();
+      std::shared_ptr<cottontail::Ranker> rank =
+          cottontail::Ranker::from_pipeline(pipeline, warren);
+      ASSERT_NE(rank, nullptr);
+      std::unique_ptr<cottontail::Hopper> hopper =
+          warren->hopper_from_gcl(id_query);
+      ASSERT_NE(hopper, nullptr);
+      std::vector<cottontail::RankingResult> ranking = (*rank)(query);
+      std::vector<std::string> docno;
+      for (size_t i = 0; i < ranking.size(); i++) {
+        cottontail::addr p, q;
+        hopper->tau(ranking[i].container_p(), &p, &q);
+        docno.emplace_back(
+            cottontail::trec_docno(warren->txt()->translate(p, q)));
+      }
+      warren->end();
+      output_mutex.lock();
+      if (ranking.size() == 0) {
+        std::cerr << program_name << ": no results for topic \"" << topic
+                  << "\" (creating a fake one)\n";
+        std::cout << topic << " Q0 FAKE 1 1 cottontail\n";
+      } else {
+        for (size_t i = 0; i < ranking.size(); i++)
+          std::cout << topic << " Q0 " << docno[i] << " " << i + 1 << " "
+                    << ranking[i].score() << " cottontail\n";
+      }
+      std::flush(std::cout);
+      output_mutex.unlock();
+    }
+  };
+
+  std::vector<std::thread> rankers;
+  for (size_t i = 0; i < threads; i++)
+    rankers.emplace_back(std::thread(ranking_worker));
+  for (auto &ranker : rankers)
+    ranker.join();
 
   return 0;
 }
