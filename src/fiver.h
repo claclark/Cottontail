@@ -49,9 +49,7 @@ private:
       : Warren(working, featurizer, tokenizer, idx, txt) {
     name_ = "kitten";
   };
-  std::string recipe_() final {
-    return identifier_;
-  }
+  std::string recipe_() final;
   bool set_parameter_(const std::string &key, const std::string &value,
                       std::string *error) final {
     safe_set(error) = "Fiver can't set its parameters";
@@ -76,7 +74,7 @@ private:
   void abort_() final;
   bool built_;
   addr where_;
-  std::string identifier_;
+  addr sequence_start_, sequence_end_;
   std::shared_ptr<std::map<std::string, std::string>> parameters_;
   std::shared_ptr<Compressor> posting_compressor_;
   std::shared_ptr<Compressor> fvalue_compressor_;

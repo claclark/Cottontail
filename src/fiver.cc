@@ -411,7 +411,8 @@ Fiver::merge(const std::vector<std::shared_ptr<Fiver>> &fivers,
   fiver->built_ = true;
   fiver->where_ = 0;
   fiver->name_ = "fiver";
-  fiver->identifier_ = fivers[0]->identifier_;
+  fiver->sequence_start_ = fivers[0]->sequence_start_;
+  fiver->sequence_end_ = fivers[fivers.size() - 1]->sequence_end_;
   fiver->parameters_ = fivers[0]->parameters_;
   fiver->text_ = text;
   fiver->index_ = index;
@@ -429,13 +430,21 @@ addr Fiver::relocate(addr where) {
   return where + fiver_appender->appended();
 };
 
-void Fiver::sequence(addr number) {
+void Fiver::sequence(addr number) { sequence_start_ = sequence_end_ = number; };
+
+namespace {
+std::string seq2str(addr sequence) {
   std::stringstream ss;
   ss.fill('0');
   ss.width(20);
-  ss << number;
-  identifier_ = ss.str();
-};
+  ss << sequence;
+  return ss.str();
+}
+} // namespace
+
+std::string Fiver::recipe_() {
+  return seq2str(sequence_start_) + "." + seq2str(sequence_end_);
+}
 
 bool Fiver::transaction_(std::string *error = nullptr) {
   if (built_) {
