@@ -32,6 +32,15 @@ public:
         std::shared_ptr<Compressor> posting_compressor = nullptr,
         std::shared_ptr<Compressor> fvalue_compressor = nullptr,
         std::shared_ptr<Compressor> text_compressor = nullptr);
+  bool pickle(const std::string &filename, std::string *error);
+  static std::shared_ptr<Fiver> unpickle(
+      const std::string &filename, std::shared_ptr<Working> working,
+      std::shared_ptr<Featurizer> featurizer,
+      std::shared_ptr<Tokenizer> tokenizer, std::string *error = nullptr,
+      std::shared_ptr<std::map<std::string, std::string>> parameters = nullptr,
+      std::shared_ptr<Compressor> posting_compressor = nullptr,
+      std::shared_ptr<Compressor> fvalue_compressor = nullptr,
+      std::shared_ptr<Compressor> text_compressor = nullptr);
   addr relocate(addr where);
   void sequence(addr number);
 

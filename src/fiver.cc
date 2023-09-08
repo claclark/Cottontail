@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cassert>
 #include <cstring>
+#include <fstream>
 #include <iostream>
 #include <map>
 #include <mutex>
@@ -515,5 +516,137 @@ void Fiver::abort_() {
     name_ = "remove";
   }
 };
+
+bool Fiver::pickle(const std::string &filename, std::string *error) {
+  if (!built_) {
+    safe_set(error) = "Fiver must finish building before being pickled";
+    return false;
+  }
+  if (text_compressor_->destructive()) {
+    safe_set(error) = "Fiver's text compressor can't be destructive";
+    return false;
+  }
+  if (working() == nullptr) {
+    safe_set(error) = "Fiver must have a working directory to be pickled";
+    return false;
+  }
+  std::string jarname = working()->make_name(filename);
+  std::fstream jar;
+  jar.open(jarname, std::ios::binary | std::ios::out);
+  if (jar.fail()) {
+    safe_set(error) = "Fiver can't create pickle jar: " + jarname;
+    return false;
+  }
+  jar.write(reinterpret_cast<char *>(&sequence_start_),
+            sizeof(sequence_start_));
+  assert(!jar.fail());
+  jar.write(reinterpret_cast<char *>(&sequence_end_), sizeof(sequence_end_));
+  assert(!jar.fail());
+  addr n = text_->length() + 1;
+  jar.write(reinterpret_cast<char *>(&n), sizeof(n));
+  addr m = n + text_compressor_->extra(n);
+  std::unique_ptr<char[]> buffer = std::unique_ptr<char[]>(new char[m]);
+  m = text_compressor_->crush((char *)(text_->c_str()), n, buffer.get(), m);
+  jar.write(reinterpret_cast<char *>(&m), sizeof(m));
+  assert(!jar.fail());
+  jar.write(buffer.get(), m);
+  assert(!jar.fail());
+  for (auto &posting : *index_)
+    posting.second->write(&jar);
+  jar.close();
+  return true;
+}
+
+std::shared_ptr<Fiver>
+Fiver::unpickle(const std::string &filename, std::shared_ptr<Working> working,
+                std::shared_ptr<Featurizer> featurizer,
+                std::shared_ptr<Tokenizer> tokenizer, std::string *error,
+                std::shared_ptr<std::map<std::string, std::string>> parameters,
+                std::shared_ptr<Compressor> posting_compressor,
+                std::shared_ptr<Compressor> fvalue_compressor,
+                std::shared_ptr<Compressor> text_compressor) {
+  if (featurizer == nullptr) {
+    safe_set(error) = "Fiver needs a featurizer (got nullptr)";
+    return nullptr;
+  }
+  if (tokenizer == nullptr) {
+    safe_set(error) = "Fiver needs a tokenizer (got nullptr)";
+    return nullptr;
+  }
+  if (working == nullptr) {
+    safe_set(error) =
+        "Fiver must have a working directory to unpickle (got nullptr)";
+    return nullptr;
+  }
+  std::string jarname = working->make_name(filename);
+  std::fstream jar;
+  jar.open(jarname, std::ios::binary | std::ios::in);
+  if (jar.fail()) {
+    safe_set(error) = "Fiver can't open pickle jar: " + jarname;
+    return nullptr;
+  }
+  std::shared_ptr<Fiver> fiver = std::shared_ptr<Fiver>(
+      new Fiver(working, featurizer, tokenizer, nullptr, nullptr));
+  if (fiver == nullptr)
+    return nullptr;
+  fiver->built_ = true;
+  fiver->where_ = 0;
+  fiver->parameters_ = parameters;
+  std::shared_ptr<Compressor> null_compressor = nullptr;
+  if (posting_compressor == nullptr || fvalue_compressor == nullptr ||
+      text_compressor == nullptr)
+    null_compressor = Compressor::make("null", "");
+  if (posting_compressor == nullptr)
+    fiver->posting_compressor_ = null_compressor;
+  else
+    fiver->posting_compressor_ = posting_compressor;
+  if (fvalue_compressor == nullptr)
+    fiver->fvalue_compressor_ = null_compressor;
+  else
+    fiver->fvalue_compressor_ = fvalue_compressor;
+  if (text_compressor == nullptr)
+    fiver->text_compressor_ = null_compressor;
+  else
+    fiver->text_compressor_ = text_compressor;
+  jar.read(reinterpret_cast<char *>(&fiver->sequence_start_),
+           sizeof(fiver->sequence_start_));
+  assert(!jar.fail());
+  jar.read(reinterpret_cast<char *>(&fiver->sequence_end_),
+           sizeof(fiver->sequence_end_));
+  assert(!jar.fail());
+  addr n;
+  jar.read(reinterpret_cast<char *>(&n), sizeof(n));
+  assert(!jar.fail());
+  n += fiver->text_compressor_->extra(n);
+  std::unique_ptr<char[]> uncompressed = std::unique_ptr<char[]>(new char[n]);
+  addr m;
+  jar.read(reinterpret_cast<char *>(&m), sizeof(m));
+  assert(!jar.fail());
+  std::unique_ptr<char[]> compressed = std::unique_ptr<char[]>(new char[m]);
+  jar.read(reinterpret_cast<char *>(compressed.get()), sizeof(m));
+  fiver->text_compressor_->tang(compressed.get(), m, uncompressed.get(), n);
+  std::shared_ptr<std::string> text =
+      std::make_shared<std::string>(uncompressed.get());
+  std::shared_ptr<SimplePostingFactory> factory = SimplePostingFactory::make(
+      fiver->posting_compressor_, fiver->fvalue_compressor_);
+  std::make_shared<std::map<addr, std::shared_ptr<SimplePosting>>>();
+  fiver->index_ =
+      std::make_shared<std::map<addr, std::shared_ptr<SimplePosting>>>();
+  for (;;) {
+    std::shared_ptr<SimplePosting> posting = factory->posting_from_file(&jar);
+    if (posting == nullptr)
+      break;
+    (*fiver->index_)[posting->feature()] = posting;
+  }
+  jar.close();
+  fiver->idx_ = FiverIdx::make(fiver->index_, error);
+  if (fiver->idx_ == nullptr)
+    return nullptr;
+  fiver->txt_ =
+      FiverTxt::make(featurizer, tokenizer, fiver->idx_, fiver->text_, error);
+  if (fiver->txt_ == nullptr)
+    return nullptr;
+  return fiver;
+}
 
 } // namespace cottontail
