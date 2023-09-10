@@ -102,14 +102,14 @@ int main(int argc, char **argv) {
         return;
       if (verbose) {
         output_mutex.lock();
-        std::cout << "Scribing: " << doc[0] << "\n";
+        std::cout << "Scribing: " << doc[0] << "\n" << std::flush;
         output_mutex.unlock();
       }
       ASSERT_TRUE(
           cottontail::scribe_files(doc, cottontail::Scribe::make(warren)));
       if (verbose) {
         output_mutex.lock();
-        std::cout << "Annotating: " << doc[0] << "\n";
+        std::cout << "Annotating: " << doc[0] << "\n" << std::flush;
         output_mutex.unlock();
       }
       std::string query = "(>> file: (<< (>> filename: \"" + doc[0] + "\") \"" +
@@ -125,7 +125,7 @@ int main(int argc, char **argv) {
       warren->end();
       if (verbose) {
         output_mutex.lock();
-        std::cout << "Done: " << doc[0] << "\n";
+        std::cout << "Done: " << doc[0] << "\n" << std::flush;
         output_mutex.unlock();
       }
     }
