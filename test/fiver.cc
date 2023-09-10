@@ -471,3 +471,84 @@ TEST(Fiver, NoText) {
   ASSERT_NE(hopper, nullptr);
   fiver->end();
 }
+
+TEST(Fiver, Pickling) {
+  const char *helena[] = {
+      "How happy some o’er other some can be",
+      "Through Athens I am thought as fair as she.",
+      "But what of that? Demetrius thinks not so;",
+      "He will not know what all but he do know.",
+      "And as he errs, doting on Hermia’s eyes,",
+      "So I, admiring of his qualities.",
+      "Things base and vile, holding no quantity,",
+      "Love can transpose to form and dignity.",
+      "Love looks not with the eyes, but with the mind;",
+      "And therefore is wing’d Cupid painted blind.",
+      "Nor hath love’s mind of any judgment taste.",
+      "Wings, and no eyes, figure unheedy haste.",
+      "And therefore is love said to be a child,",
+      "Because in choice he is so oft beguil’d.",
+      "As waggish boys in game themselves forswear,",
+      "So the boy Love is perjur’d everywhere.",
+      "For, ere Demetrius look’d on Hermia’s eyne,",
+      "He hail’d down oaths that he was only mine;",
+      "And when this hail some heat from Hermia felt,",
+      "So he dissolv’d, and showers of oaths did melt.",
+      "I will go tell him of fair Hermia’s flight.",
+      "Then to the wood will he tomorrow night",
+      "Pursue her; and for this intelligence",
+      "If I have thanks, it is a dear expense.",
+      "But herein mean I to enrich my pain,",
+      "To have his sight thither and back again.",
+  };
+  cottontail::addr n = sizeof(helena) / sizeof(char *);
+  std::shared_ptr<cottontail::Featurizer> featurizer =
+      cottontail::Featurizer::make("hashing", "");
+  EXPECT_NE(featurizer, nullptr);
+  std::shared_ptr<cottontail::Tokenizer> tokenizer =
+      cottontail::Tokenizer::make("ascii", "");
+  ASSERT_NE(tokenizer, nullptr);
+  {
+    std::shared_ptr<cottontail::Fiver> fiver =
+        cottontail::Fiver::make(nullptr, featurizer, tokenizer);
+    ASSERT_NE(fiver, nullptr);
+    ASSERT_TRUE(fiver->transaction());
+    cottontail::addr line = featurizer->featurize("line:");
+    for (int i = 0; i < n; i++) {
+      cottontail::addr p, q;
+      ASSERT_TRUE(fiver->appender()->append(helena[i], &p, &q));
+      ASSERT_TRUE(
+          fiver->annotator()->annotate(line, p, q, (cottontail::addr)(i + 1)));
+    }
+    ASSERT_TRUE(fiver->ready());
+    fiver->commit();
+    fiver->start();
+    fiver->pickle("fiver.pickle");
+    fiver->end();
+  }
+  std::shared_ptr<cottontail::Fiver> fiver = cottontail::Fiver::unpickle(
+      "fiver.pickle", nullptr, featurizer, tokenizer);
+  ASSERT_NE(fiver, nullptr);
+  fiver->start();
+  EXPECT_EQ(fiver->txt()->translate(16, 24),
+            "as she.\nBut what of that? Demetrius thinks not ");
+  EXPECT_EQ(fiver->txt()->translate(212, 224),
+            "have his sight thither and back again.\n");
+  EXPECT_EQ(fiver->txt()->translate(-10, 3), "How happy some o’");
+  std::unique_ptr<cottontail::Hopper> h = fiver->hopper_from_gcl("line:");
+  cottontail::addr p, q, v, i = 0;
+  for (h->tau(0, &p, &q, &v); p < cottontail::maxfinity;
+       h->tau(p + 1, &p, &q, &v)) {
+    i++;
+    ASSERT_EQ(i, v);
+  }
+  ASSERT_EQ(i, n);
+  std::string love = "Love looks not with the eyes, but with the mind;\n";
+  h = fiver->hopper_from_gcl("\"" + love + "\"");
+  h->ohr(cottontail::maxfinity - 1, &p, &q);
+  ASSERT_EQ(fiver->txt()->translate(p, q), love);
+  ASSERT_EQ(
+      fiver->txt()->translate(cottontail::maxfinity, cottontail::maxfinity),
+      "");
+  fiver->end();
+}

@@ -236,10 +236,14 @@ private:
   FiverTxt(){};
   std::string recipe_() final { return ""; };
   std::string translate_(addr p, addr q) final {
+    if (p < 0)
+      p = 0;
+    if (p == maxfinity || q < p)
+      return "";
     std::lock_guard<std::mutex> lock(mutex_);
     addr p0, q0, i;
     hopper_->rho(p, &p0, &q0, &i);
-    if (p0 > q)
+    if (p0 == maxfinity || p0 > q)
       return "";
     const char *t = text_->c_str();
     const char *s = t + i;
@@ -526,11 +530,11 @@ bool Fiver::pickle(const std::string &filename, std::string *error) {
     safe_set(error) = "Fiver's text compressor can't be destructive";
     return false;
   }
-  if (working() == nullptr) {
-    safe_set(error) = "Fiver must have a working directory to be pickled";
-    return false;
-  }
-  std::string jarname = working()->make_name(filename);
+  std::string jarname;
+  if (working() == nullptr)
+    jarname = filename;
+  else
+    jarname = working()->make_name(filename);
   std::fstream jar;
   jar.open(jarname, std::ios::binary | std::ios::out);
   if (jar.fail()) {
@@ -573,12 +577,11 @@ Fiver::unpickle(const std::string &filename, std::shared_ptr<Working> working,
     safe_set(error) = "Fiver needs a tokenizer (got nullptr)";
     return nullptr;
   }
-  if (working == nullptr) {
-    safe_set(error) =
-        "Fiver must have a working directory to unpickle (got nullptr)";
-    return nullptr;
-  }
-  std::string jarname = working->make_name(filename);
+  std::string jarname;
+  if (working == nullptr)
+    jarname = filename;
+  else
+    jarname = working->make_name(filename);
   std::fstream jar;
   jar.open(jarname, std::ios::binary | std::ios::in);
   if (jar.fail()) {
@@ -591,6 +594,7 @@ Fiver::unpickle(const std::string &filename, std::shared_ptr<Working> working,
     return nullptr;
   fiver->built_ = true;
   fiver->where_ = 0;
+  fiver->name_ = "fiver";
   fiver->parameters_ = parameters;
   std::shared_ptr<Compressor> null_compressor = nullptr;
   if (posting_compressor == nullptr || fvalue_compressor == nullptr ||
@@ -623,9 +627,9 @@ Fiver::unpickle(const std::string &filename, std::shared_ptr<Working> working,
   jar.read(reinterpret_cast<char *>(&m), sizeof(m));
   assert(!jar.fail());
   std::unique_ptr<char[]> compressed = std::unique_ptr<char[]>(new char[m]);
-  jar.read(reinterpret_cast<char *>(compressed.get()), sizeof(m));
+  jar.read(reinterpret_cast<char *>(compressed.get()), m);
   fiver->text_compressor_->tang(compressed.get(), m, uncompressed.get(), n);
-  std::shared_ptr<std::string> text =
+  fiver->text_ =
       std::make_shared<std::string>(uncompressed.get());
   std::shared_ptr<SimplePostingFactory> factory = SimplePostingFactory::make(
       fiver->posting_compressor_, fiver->fvalue_compressor_);
