@@ -5,6 +5,7 @@
 #include <cstring>
 #include <fstream>
 #include <memory>
+#include <queue>
 #include <string>
 #include <vector>
 
@@ -135,6 +136,8 @@ std::shared_ptr<SimplePosting> SimplePostingFactory::posting_from_merge(
     const std::vector<std::shared_ptr<SimplePosting>> &postings) {
   if (postings.size() == 0)
     return nullptr;
+  if (postings.size() == 1)
+    return postings[0];
   addr feature = postings[0]->feature();
   bool can_append = true;
   for (size_t i = 1; can_append && i < postings.size(); i++) {
@@ -151,34 +154,79 @@ std::shared_ptr<SimplePosting> SimplePostingFactory::posting_from_merge(
   }
   std::shared_ptr<SimplePosting> merged_posting = posting_from_feature(feature);
   if (can_append) {
-    for (auto posting : postings)
-      merged_posting->append(posting);
+    for (auto &posting : postings) {
+      addr p, q;
+      fval v;
+      size_t n = posting->size();
+      for (size_t i = 0; i < n; i++) {
+        posting->get(i, &p, &q, &v);
+        merged_posting->push(p, q, v);
+      }
+    }
   } else {
-    std::vector<size_t> index(postings.size(), 0);
-    for (;;) {
-      addr p0, q0, p = maxfinity, q = maxfinity, minq = maxfinity;
-      fval v0, v = 0.0;
-      for (size_t i = 0; i < postings.size(); i++) {
-        addr p0, q0;
-        fval v0;
-        if (postings[i]->get(index[i], &p0, &q0, &v0)) {
-          if (q0 < minq)
-            minq = q0;
-          if (p0 < p || (p0 == p && q0 <= q)) {
-            p = p0;
-            q = q0;
-            v = v0;
-          }
+    std::queue<std::shared_ptr<SimplePosting>> merging;
+    std::queue<std::shared_ptr<SimplePosting>> waiting;
+    for (auto &posting : postings)
+      if (posting->size() > 0)
+        merging.push(posting);
+    if (merging.size() == 0)
+      return nullptr;
+    while ((merging.size() + waiting.size()) > 1) {
+      if (merging.size() < 2) {
+        if (merging.size() == 1) {
+          waiting.push(merging.front());
+          merging.pop();
+        }
+        std::swap(waiting, merging);
+      }
+      std::shared_ptr<SimplePosting> in0 = merging.front();
+      merging.pop();
+      size_t size0 = in0->size();
+      std::shared_ptr<SimplePosting> in1 = merging.front();
+      merging.pop();
+      size_t size1 = in1->size();
+      std::shared_ptr<SimplePosting> out = posting_from_feature(feature);
+      size_t i = 0, j = 0;
+      while (i < size0 && j < size1) {
+        addr p0, p1, q0, q1;
+        fval v0, v1;
+        in0->get(i, &p0, &q0, &v0);
+        in1->get(j, &p1, &q1, &v1);
+        if (p0 < p1) {
+          if (q0 < q1)
+            out->push(p0, q0, v0);
+          i++;
+        } else if (p0 > p1) {
+          if (q0 > q1)
+            out->push(p1, q1, v1);
+          j++;
+        } else {
+          if (q0 < q1)
+            out->push(p0, q0, v0);
+          else
+            out->push(p1, q1, v1);
+          i++;
+          j++;
         }
       }
-      if (p == maxfinity)
-        break;
-      if (q == minq)
-        merged_posting->push(p, q, v);
-      for (size_t i = 0; i < postings.size(); i++)
-        if (postings[i]->get(index[i], &p0, &q0, &v0) && p == p0)
-          index[i]++;
+      while (i < size0) {
+        addr p0, q0;
+        fval v0;
+        in0->get(i++, &p0, &q0, &v0);
+        out->push(p0, q0, v0);
+      }
+      while (j < size1) {
+        addr p1, q1;
+        fval v1;
+        in1->get(j++, &p1, &q1, &v1);
+        out->push(p1, q1, v1);
+      }
+      waiting.push(out);
     }
+    if (merging.size() == 1)
+      merged_posting = merging.front();
+    else
+      merged_posting = waiting.front();
   }
   return merged_posting;
 }

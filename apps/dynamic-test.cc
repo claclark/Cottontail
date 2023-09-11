@@ -266,13 +266,18 @@ int main(int argc, char **argv) {
     }
   };
 
-  sleep(3);
+  std::cerr << "Sleeping to let merge finish...\n";
+  sleep(5 * 60);
 
+  std::cerr << "Release the rankers...\n" << std::flush;
+  time_t t0 = time(NULL);
   std::vector<std::thread> rankers;
   for (size_t i = 0; i < threads; i++)
     rankers.emplace_back(std::thread(ranking_worker));
   for (auto &ranker : rankers)
     ranker.join();
+  time_t t1 = time(NULL);
+  std::cerr << "Ranking took: " << (t1 - t0) << " second(s) \n" << std::flush;
 
   return 0;
 }
