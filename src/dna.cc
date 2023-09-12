@@ -1,4 +1,4 @@
-#include "src/simple.h"
+#include "src/dna.h"
 
 #include <fstream>
 #include <memory>
@@ -35,13 +35,16 @@ bool read_dna(std::shared_ptr<Working> working, std::string *dna,
 bool write_dna(std::shared_ptr<Working> working, const std::string &dna,
                std::string *error) {
   std::string dna_filename = working->make_name(DNA_NAME);
-  std::fstream out(dna_filename, std::ios::out);
+  std::string temp_filename = working->make_temp(".dna");
+  std::fstream out(temp_filename, std::ios::out);
   if (out.fail()) {
     safe_set(error) = "Can't write configuration to: " + dna_filename;
     return false;
   }
   out << HEADER << "\n";
   out << dna;
+  out.close();
+  std::rename(temp_filename.c_str(), dna_filename.c_str());
   return true;
 }
 } // namespace cottontail

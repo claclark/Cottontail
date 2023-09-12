@@ -6,12 +6,11 @@
 #include <map>
 #include <string>
 
+#include "src/dna.h"
 #include "src/core.h"
 #include "src/working.h"
 
 namespace cottontail {
-
-const std::string DEFAULT_BURROW = "the.burrow";
 
 // Some of these file names are traditional.
 const std::string RAW_NAME = "raw"; // raw text (compressed)
@@ -19,7 +18,6 @@ const std::string MAP_NAME = "map"; // chunk map for raw text io
 const std::string TXT_NAME = "txt"; // token map for text
 const std::string IDX_NAME = "idx"; // dictionary for inverted index
 const std::string PST_NAME = "pst"; // postings lists (compressed)
-const std::string DNA_NAME = "dna"; // parameters
 
 static const addr TEXT_COMPRESSOR_CHUNK_SIZE = 1024 * 1024;
 static const addr TXT_BLOCKING = 1024;
@@ -58,11 +56,6 @@ struct TxtRecord {
   TxtRecord(addr pq, addr start, addr end) : pq(pq), start(start), end(end){};
   addr pq, start, end;
 };
-
-bool read_dna(std::shared_ptr<Working> working, std::string *dna,
-              std::string *error = nullptr);
-bool write_dna(std::shared_ptr<Working> working, const std::string &dna,
-               std::string *error = nullptr);
 
 } // namespace cottontail
 
