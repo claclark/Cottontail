@@ -13,6 +13,12 @@ bool read_dna(std::shared_ptr<Working> working, std::string *dna,
               std::string *error = nullptr);
 bool write_dna(std::shared_ptr<Working> working, const std::string &dna,
                std::string *error = nullptr);
+bool get_parameter_from_dna(std::shared_ptr<Working> working,
+                            const std::string &key, std::string *value,
+                            std::string *error = nullptr);
+bool set_parameter_in_dna(std::shared_ptr<Working> working,
+                          const std::string &key, const std::string &value,
+                          std::string *error = nullptr);
 
 } // namespace cottontail
 

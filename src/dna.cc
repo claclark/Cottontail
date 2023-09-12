@@ -5,6 +5,7 @@
 #include <string>
 
 #include "src/core.h"
+#include "src/recipe.h"
 
 namespace cottontail {
 namespace {
@@ -47,4 +48,53 @@ bool write_dna(std::shared_ptr<Working> working, const std::string &dna,
   std::rename(temp_filename.c_str(), dna_filename.c_str());
   return true;
 }
+
+bool get_parameter_from_dna(std::shared_ptr<Working> working,
+                            const std::string &key, std::string *value,
+                            std::string *error) {
+  std::string dna;
+  if (!read_dna(working, &dna, error))
+    return false;
+  std::map<std::string, std::string> dna_parameters;
+  if (!cook(dna, &dna_parameters, error))
+    return false;
+  std::map<std::string, std::string> parameters;
+  std::map<std::string, std::string>::iterator it =
+      dna_parameters.find("parameters");
+  if (it == dna_parameters.end()) {
+    *value = "";
+    return true;
+  }
+  if (!cook(it->second, &parameters, error))
+    return false;
+  it = parameters.find(key);
+  if (it == parameters.end())
+    *value = "";
+  else
+    *value = it->second;
+  return true;
+}
+
+bool set_parameter_in_dna(std::shared_ptr<Working> working,
+                          const std::string &key, const std::string &value,
+                          std::string *error) {
+  std::string dna;
+  if (!read_dna(working, &dna, error))
+    return false;
+  std::map<std::string, std::string> dna_parameters;
+  if (!cook(dna, &dna_parameters, error))
+    return false;
+  std::map<std::string, std::string> parameters;
+  std::map<std::string, std::string>::iterator it =
+      dna_parameters.find("parameters");
+  if (it != dna_parameters.end() && !cook(it->second, &parameters, error))
+    return false;
+  parameters[key] = value;
+  dna_parameters["parameters"] = freeze(parameters);
+  dna = freeze(dna_parameters);
+  if (!write_dna(working, dna, error))
+    return false;
+  return true;
+}
+
 } // namespace cottontail
