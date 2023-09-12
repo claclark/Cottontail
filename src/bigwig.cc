@@ -341,6 +341,9 @@ void merge_worker(std::shared_ptr<Fluffle> fluffle) {
     fluffle->lock.unlock();
     std::shared_ptr<Fiver> merged = Fiver::merge(fivers);
     fluffle->lock.lock();
+    merged->pickle();
+    for (auto &fiver : fivers)
+      fiver->discard();
     std::vector<std::shared_ptr<Warren>> warrens;
     for (size_t i = 0; i < start; i++)
       warrens.push_back(fluffle->warrens[i]);

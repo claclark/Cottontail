@@ -57,7 +57,6 @@ public:
   }
   inline void started() { assert(started_); }
   inline std::shared_ptr<Working> working() {
-    assert(started_);
     return working_;
   };
   inline std::shared_ptr<Featurizer> featurizer() {

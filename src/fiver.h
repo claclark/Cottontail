@@ -33,6 +33,8 @@ public:
         std::shared_ptr<Compressor> fvalue_compressor = nullptr,
         std::shared_ptr<Compressor> text_compressor = nullptr);
   bool pickle(const std::string &filename, std::string *error = nullptr);
+  bool pickle(std::string *error = nullptr);
+  bool discard(std::string *error = nullptr);
   static std::shared_ptr<Fiver> unpickle(
       const std::string &filename, std::shared_ptr<Working> working,
       std::shared_ptr<Featurizer> featurizer,

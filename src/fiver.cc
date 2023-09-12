@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cstdio>
 #include <cstring>
 #include <fstream>
 #include <iostream>
@@ -495,10 +496,7 @@ bool Fiver::ready_() {
         posting_factory->posting_from_annotations(&it, annotations_->end());
     (*index_)[posting->feature()] = posting;
   }
-  if (working_ != nullptr) {
-    std::string tempname = name() + "." + recipe();
-    assert(pickle(tempname));
-  }
+  assert(pickle());
   return true;
 };
 
@@ -513,10 +511,11 @@ void Fiver::commit_() {
     assert(txt_ != nullptr);
     built_ = true;
     if (working_ != nullptr) {
-      std::string tempname = working()->make_name(name() + "." + recipe());
-      std::string filename = working()->make_name(name() + "." + recipe());
-      assert(link(tempname.c_str(), filename.c_str()) != 0);
-      std::remove(tempname.c_str());
+      std::string ready_name = working()->make_name(name() + "." + recipe());
+      name_ = "fiver";
+      std::string final_name = working()->make_name(name() + "." + recipe());
+      assert(link(ready_name.c_str(), final_name.c_str()) == 0);
+      std::remove(ready_name.c_str());
     } else {
       name_ = "fiver";
     }
@@ -532,32 +531,47 @@ void Fiver::abort_() {
     index_->clear();
     where_ = 0;
     built_ = true;
-    if (working_ != nullptr) {
-      std::string tempname = working_->make_name(name() + "." + recipe());
-      std::remove(tempname.c_str());
-    }
+    discard();
     name_ = "remove";
   }
 };
 
+bool Fiver::discard(std::string *error) {
+  if (working() != nullptr) {
+    std::string jarname = working()->make_name(name() + "." + recipe());
+    std::remove(jarname.c_str());
+  }
+  return true;
+}
+
+bool Fiver::pickle(std::string *error) {
+  if (working() != nullptr) {
+    std::string tempname = working()->make_temp();
+    if (!pickle(tempname, error))
+      return false;
+    std::string jarname = working()->make_name(name() + "." + recipe());
+    if (link(tempname.c_str(), jarname.c_str()) != 0) {
+      safe_set(error) = "Fiver can't link pickle jar";
+      return false;
+    }
+    std::remove(tempname.c_str());
+  }
+  return true;
+}
+
 bool Fiver::pickle(const std::string &filename, std::string *error) {
-  if (!built_) {
-    safe_set(error) = "Fiver must finish building before being pickled";
+  if (idx_ == nullptr || txt_ == nullptr) {
+    safe_set(error) = "Fiver must have Idx and Txt before pickling";
     return false;
   }
   if (text_compressor_->destructive()) {
     safe_set(error) = "Fiver's text compressor can't be destructive";
     return false;
   }
-  std::string jarname;
-  if (working() == nullptr)
-    jarname = filename;
-  else
-    jarname = working()->make_name(filename);
   std::fstream jar;
-  jar.open(jarname, std::ios::binary | std::ios::out);
+  jar.open(filename, std::ios::binary | std::ios::out);
   if (jar.fail()) {
-    safe_set(error) = "Fiver can't create pickle jar: " + jarname;
+    safe_set(error) = "Fiver can't create pickle jar: " + filename;
     return false;
   }
   jar.write(reinterpret_cast<char *>(&sequence_start_),

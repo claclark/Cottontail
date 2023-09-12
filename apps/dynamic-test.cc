@@ -23,7 +23,6 @@ void usage(std::string program_name) {
 
 int main(int argc, char **argv) {
   std::string program_name = argv[0];
-  std::string burrow;
   if (argc == 2 && argv[1] == std::string("--help")) {
     usage(program_name);
     return 0;
@@ -55,6 +54,10 @@ int main(int argc, char **argv) {
   std::queue<std::string> docq;
   for (auto &document : documents)
     docq.push(document);
+  std::string burrow = "fiver.burrow";
+  std::shared_ptr<cottontail::Working> working =
+      cottontail::Working::mkdir(burrow);
+  ASSERT_NE(working, nullptr);
 
   std::shared_ptr<cottontail::Featurizer> featurizer =
       cottontail::Featurizer::make("hashing", "");
@@ -63,7 +66,7 @@ int main(int argc, char **argv) {
       cottontail::Tokenizer::make("ascii", "xml");
   ASSERT_NE(tokenizer, nullptr);
   std::shared_ptr<cottontail::Bigwig> bigwig =
-      cottontail::Bigwig::make(nullptr, featurizer, tokenizer);
+      cottontail::Bigwig::make(working, featurizer, tokenizer);
   ASSERT_NE(bigwig, nullptr);
 
   bigwig->start();
