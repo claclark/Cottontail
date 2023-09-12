@@ -8,6 +8,7 @@
 #include <map>
 #include <mutex>
 #include <sstream>
+#include <unistd.h>
 
 #include "src/annotator.h"
 #include "src/appender.h"
@@ -494,6 +495,10 @@ bool Fiver::ready_() {
         posting_factory->posting_from_annotations(&it, annotations_->end());
     (*index_)[posting->feature()] = posting;
   }
+  if (working_ != nullptr) {
+    std::string tempname = name() + "." + recipe();
+    assert(pickle(tempname));
+  }
   return true;
 };
 
@@ -507,7 +512,14 @@ void Fiver::commit_() {
     txt_ = FiverTxt::make(featurizer_, tokenizer_, idx_, text_);
     assert(txt_ != nullptr);
     built_ = true;
-    name_ = "fiver";
+    if (working_ != nullptr) {
+      std::string tempname = working()->make_name(name() + "." + recipe());
+      std::string filename = working()->make_name(name() + "." + recipe());
+      assert(link(tempname.c_str(), filename.c_str()) != 0);
+      std::remove(tempname.c_str());
+    } else {
+      name_ = "fiver";
+    }
   }
 };
 
@@ -520,6 +532,10 @@ void Fiver::abort_() {
     index_->clear();
     where_ = 0;
     built_ = true;
+    if (working_ != nullptr) {
+      std::string tempname = working_->make_name(name() + "." + recipe());
+      std::remove(tempname.c_str());
+    }
     name_ = "remove";
   }
 };
