@@ -22,6 +22,8 @@ public:
                                           std::string *error = nullptr);
   static bool check(const std::string &name, const std::string &recipe,
                     std::string *error = nullptr);
+  std::string name() { return name_; };
+  std::string recipe() { return recipe_; };
   size_t crush(char *in, size_t length, char *out, size_t available) {
     // could die mysteriously elsewhere if not true
     assert(available >= length + extra(length));
@@ -47,8 +49,12 @@ public:
 
 protected:
   Compressor(){};
+  Compressor(std::string &name, std::string &recipe)
+      : name_(name), recipe_(recipe){};
 
 private:
+  std::string name_ = "";
+  std::string recipe_ = "";
   virtual size_t crush_(char *in, size_t length, char *out,
                         size_t available) = 0;
   virtual size_t tang_(char *in, size_t length, char *out,

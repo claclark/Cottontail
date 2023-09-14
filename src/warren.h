@@ -122,7 +122,6 @@ public:
                             std::string *error = nullptr) {
     return get_parameter_(key, value, error);
   }
-  std::string base_dna();
 
   virtual ~Warren(){};
   Warren(const Warren &) = delete;

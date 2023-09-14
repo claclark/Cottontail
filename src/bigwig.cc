@@ -14,6 +14,7 @@
 #include "src/featurizer.h"
 #include "src/fluffle.h"
 #include "src/hopper.h"
+#include "src/recipe.h"
 #include "src/warren.h"
 
 namespace cottontail {
@@ -392,4 +393,60 @@ void Bigwig::abort_() {
   annotator_ = nullptr;
   fiver_ = nullptr;
 }
+
+std::string Bigwig::recipe_() {
+  std::map<std::string, std::string> warren_parameters;
+  warren_parameters["warren"] = name();
+  if (tokenizer() != nullptr) {
+    std::map<std::string, std::string> tokenizer_parameters;
+    tokenizer_parameters["name"] = tokenizer_->name();
+    tokenizer_parameters["recipe"] = tokenizer_->recipe();
+    warren_parameters["tokenizer"] = freeze(tokenizer_parameters);
+  }
+  if (featurizer() != nullptr) {
+    std::map<std::string, std::string> featurizer_parameters;
+    featurizer_parameters["name"] = featurizer()->name();
+    featurizer_parameters["recipe"] = featurizer()->recipe();
+    warren_parameters["featurizer"] = freeze(featurizer_parameters);
+  }
+  {
+    std::map<std::string, std::string> txt_parameters;
+    txt_parameters["name"] = "bigwig";
+    {
+      std::map<std::string, std::string> txt_recipe_parameters;
+      if (text_compressor_ != nullptr) {
+        txt_recipe_parameters["compressor"] = text_compressor_->name();
+        txt_recipe_parameters["compressor_recipe"] = text_compressor_->recipe();
+      }
+      txt_parameters["recipe"] = freeze(txt_recipe_parameters);
+    }
+    warren_parameters["txt"] = freeze(txt_parameters);
+  }
+  {
+    std::map<std::string, std::string> idx_parameters;
+    idx_parameters["name"] = "bigwig";
+    {
+      std::map<std::string, std::string> idx_recipe_parameters;
+      if (fvalue_compressor_ != nullptr) {
+        idx_recipe_parameters["fvalue_compressor"] = fvalue_compressor_->name();
+        idx_recipe_parameters["fvalue_compressor_recipe"] =
+            fvalue_compressor_->recipe();
+      }
+      if (posting_compressor_ != nullptr) {
+        idx_recipe_parameters["posting_compressor"] =
+            posting_compressor_->name();
+        idx_recipe_parameters["posting_compressor_recipe"] =
+            posting_compressor_->recipe();
+      }
+      idx_parameters["recipe"] = freeze(idx_recipe_parameters);
+    }
+    warren_parameters["idx"] = freeze(idx_parameters);
+  }
+  fluffle_->lock.lock();
+  std::map<std::string, std::string> extra_parameters = *(fluffle_->parameters);
+  fluffle_->lock.unlock();
+  warren_parameters["parameters"] = freeze(extra_parameters);
+  return freeze(warren_parameters);
+}
+
 } // namespace cottontail

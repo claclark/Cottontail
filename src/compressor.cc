@@ -15,20 +15,26 @@ namespace cottontail {
 std::shared_ptr<Compressor> Compressor::make(const std::string &name,
                                              const std::string &recipe,
                                              std::string *error) {
+  std::shared_ptr<Compressor> compressor = nullptr;
   if (name == "" || name == "zlib") {
-    return ZlibCompressor::make(recipe, error);
+    compressor =  ZlibCompressor::make(recipe, error);
   } else if (name == "null") {
-    return NullCompressor::make(recipe, error);
+    compressor =  NullCompressor::make(recipe, error);
   } else if (name == "post") {
-    return PostCompressor::make(recipe, error);
+    compressor =  PostCompressor::make(recipe, error);
   } else if (name == "tfdf") {
-    return TfdfCompressor::make(recipe, error);
+    compressor =  TfdfCompressor::make(recipe, error);
   } else if (name == "bad") {
-    return BadCompressor::make(recipe, error);
+    compressor =  BadCompressor::make(recipe, error);
   } else {
     safe_set(error) = "No Compressor named: " + name;
     return nullptr;
   }
+  if (compressor == nullptr)
+    return nullptr;
+  compressor->name_ = name;
+  compressor->recipe_ = recipe;
+  return compressor;
 }
 
 bool Compressor::check(const std::string &name, const std::string &recipe,
