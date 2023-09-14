@@ -1,6 +1,7 @@
 #include "src/warren.h"
 
 #include "src/core.h"
+#include "src/recipe.h"
 #include "src/simple_warren.h"
 #include "src/stats.h"
 
@@ -38,5 +39,35 @@ std::shared_ptr<Warren> Warren::make(const std::string &name,
   }
   warren->end();
   return warren;
+}
+
+std::string Warren::base_dna() {
+  std::map<std::string, std::string> warren_parameters;
+  warren_parameters["warren"] = name();
+  if (tokenizer() != nullptr) {
+    std::map<std::string, std::string> tokenizer_parameters;
+    tokenizer_parameters["name"] = tokenizer_->name();
+    tokenizer_parameters["recipe"] = tokenizer_->recipe();
+    warren_parameters["tokenizer"] = freeze(tokenizer_parameters);
+  }
+  if (featurizer() != nullptr) {
+    std::map<std::string, std::string> featurizer_parameters;
+    featurizer_parameters["name"] = featurizer()->name();
+    featurizer_parameters["recipe"] = featurizer()->recipe();
+    warren_parameters["featurizer"] = freeze(featurizer_parameters);
+  }
+  if (txt() != nullptr) {
+    std::map<std::string, std::string> txt_parameters;
+    txt_parameters["name"] = txt()->name();
+    txt_parameters["recipe"] = txt()->recipe();
+    warren_parameters["txt"] = freeze(txt_parameters);
+  }
+  if (idx() != nullptr) {
+    std::map<std::string, std::string> idx_parameters;
+    idx_parameters["name"] = idx()->name();
+    idx_parameters["recipe"] = idx()->recipe();
+    warren_parameters["idx"] = freeze(idx_parameters);
+  }
+  return freeze(warren_parameters);
 }
 } // namespace cottontail
