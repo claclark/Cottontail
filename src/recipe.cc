@@ -81,6 +81,8 @@ const char *parse(const char *s,
   for (;;) {
     for (; isspace(*s); s++)
       ;
+    if (*s == ']')
+      break;
     if (!identifier(*s))
       return s;
     const char *start = s;
@@ -139,6 +141,10 @@ void dump(std::ostream *out, std::string value, size_t depth) {
 
 void dump(std::ostream *out,
           const std::map<std::string, std::string> &parameters, size_t depth) {
+  if (parameters.size() == 0) {
+    *out << "[]";
+    return;
+  }
   *out << "[\n";
   for (auto &parameter : parameters) {
     for (size_t i = 0; i <= depth; i++)

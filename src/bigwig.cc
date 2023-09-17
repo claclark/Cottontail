@@ -204,6 +204,8 @@ std::shared_ptr<Bigwig> Bigwig::make(
     bigwig->text_compressor_ = null_compressor;
   else
     bigwig->text_compressor_ = text_compressor;
+  if (working != nullptr && !write_dna(working, bigwig->recipe(), error))
+    return nullptr;
   return bigwig;
 }
 
