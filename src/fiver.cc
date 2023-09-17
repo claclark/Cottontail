@@ -291,7 +291,6 @@ std::shared_ptr<Fiver>
 Fiver::make(std::shared_ptr<Working> working,
             std::shared_ptr<Featurizer> featurizer,
             std::shared_ptr<Tokenizer> tokenizer, std::string *error,
-            std::shared_ptr<std::map<std::string, std::string>> parameters,
             std::shared_ptr<Compressor> posting_compressor,
             std::shared_ptr<Compressor> fvalue_compressor,
             std::shared_ptr<Compressor> text_compressor) {
@@ -328,7 +327,6 @@ Fiver::make(std::shared_ptr<Working> working,
     return nullptr;
   fiver->built_ = false;
   fiver->where_ = 0;
-  fiver->parameters_ = parameters;
   std::shared_ptr<Compressor> null_compressor = nullptr;
   if (posting_compressor == nullptr || fvalue_compressor == nullptr ||
       text_compressor == nullptr)
@@ -423,7 +421,6 @@ Fiver::merge(const std::vector<std::shared_ptr<Fiver>> &fivers,
   fiver->name_ = "fiver";
   fiver->sequence_start_ = fivers[0]->sequence_start_;
   fiver->sequence_end_ = fivers[fivers.size() - 1]->sequence_end_;
-  fiver->parameters_ = fivers[0]->parameters_;
   fiver->text_ = text;
   fiver->index_ = index;
   fiver->idx_ = FiverIdx::make(fiver->index_);
@@ -598,7 +595,6 @@ std::shared_ptr<Fiver>
 Fiver::unpickle(const std::string &filename, std::shared_ptr<Working> working,
                 std::shared_ptr<Featurizer> featurizer,
                 std::shared_ptr<Tokenizer> tokenizer, std::string *error,
-                std::shared_ptr<std::map<std::string, std::string>> parameters,
                 std::shared_ptr<Compressor> posting_compressor,
                 std::shared_ptr<Compressor> fvalue_compressor,
                 std::shared_ptr<Compressor> text_compressor) {
@@ -628,7 +624,6 @@ Fiver::unpickle(const std::string &filename, std::shared_ptr<Working> working,
   fiver->built_ = true;
   fiver->where_ = 0;
   fiver->name_ = "fiver";
-  fiver->parameters_ = parameters;
   std::shared_ptr<Compressor> null_compressor = nullptr;
   if (posting_compressor == nullptr || fvalue_compressor == nullptr ||
       text_compressor == nullptr)

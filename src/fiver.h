@@ -22,7 +22,6 @@ public:
   static std::shared_ptr<Fiver>
   make(std::shared_ptr<Working> working, std::shared_ptr<Featurizer> featurizer,
        std::shared_ptr<Tokenizer> tokenizer, std::string *error = nullptr,
-       std::shared_ptr<std::map<std::string, std::string>> parameters = nullptr,
        std::shared_ptr<Compressor> posting_compressor = nullptr,
        std::shared_ptr<Compressor> fvalue_compressor = nullptr,
        std::shared_ptr<Compressor> text_compressor = nullptr);
@@ -35,14 +34,13 @@ public:
   bool pickle(const std::string &filename, std::string *error = nullptr);
   bool pickle(std::string *error = nullptr);
   bool discard(std::string *error = nullptr);
-  static std::shared_ptr<Fiver> unpickle(
-      const std::string &filename, std::shared_ptr<Working> working,
-      std::shared_ptr<Featurizer> featurizer,
-      std::shared_ptr<Tokenizer> tokenizer, std::string *error = nullptr,
-      std::shared_ptr<std::map<std::string, std::string>> parameters = nullptr,
-      std::shared_ptr<Compressor> posting_compressor = nullptr,
-      std::shared_ptr<Compressor> fvalue_compressor = nullptr,
-      std::shared_ptr<Compressor> text_compressor = nullptr);
+  static std::shared_ptr<Fiver>
+  unpickle(const std::string &filename, std::shared_ptr<Working> working,
+           std::shared_ptr<Featurizer> featurizer,
+           std::shared_ptr<Tokenizer> tokenizer, std::string *error = nullptr,
+           std::shared_ptr<Compressor> posting_compressor = nullptr,
+           std::shared_ptr<Compressor> fvalue_compressor = nullptr,
+           std::shared_ptr<Compressor> text_compressor = nullptr);
   addr relocate(addr where);
   void sequence(addr number);
 
@@ -68,16 +66,8 @@ private:
   };
   bool get_parameter_(const std::string &key, std::string *value,
                       std::string *error) final {
-    if (parameters_ == nullptr) {
-      *value = "";
-      return true;
-    }
-    std::map<std::string, std::string>::iterator item = parameters_->find(key);
-    if (item != parameters_->end())
-      *value = item->second;
-    else
-      *value = "";
-    return true;
+    safe_set(error) = "Fiver can't get its parameters";
+    return false;
   };
   bool transaction_(std::string *error) final;
   bool ready_() final;
@@ -86,7 +76,6 @@ private:
   bool built_;
   addr where_;
   addr sequence_start_, sequence_end_;
-  std::shared_ptr<std::map<std::string, std::string>> parameters_;
   std::shared_ptr<Compressor> posting_compressor_;
   std::shared_ptr<Compressor> fvalue_compressor_;
   std::shared_ptr<Compressor> text_compressor_;

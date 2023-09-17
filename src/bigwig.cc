@@ -245,6 +245,8 @@ bool Bigwig::set_parameter_(const std::string &key, const std::string &value,
   std::shared_ptr<std::map<std::string, std::string>> parameters =
       std::make_shared<std::map<std::string, std::string>>();
   fluffle_->lock.lock();
+  if (working_ != nullptr && !set_parameter_in_dna(working_, key, value, error))
+    return false;
   if (fluffle_->parameters != nullptr)
     parameters = fluffle_->parameters;
   else
@@ -278,8 +280,8 @@ bool Bigwig::transaction_(std::string *error) {
       fluffle_->parameters;
   fluffle_->lock.unlock();
   fiver_ =
-      Fiver::make(working_, featurizer_, tokenizer_, error, parameters,
-                  posting_compressor_, fvalue_compressor_, text_compressor_);
+      Fiver::make(working_, featurizer_, tokenizer_, error, posting_compressor_,
+                  fvalue_compressor_, text_compressor_);
   if (fiver_ == nullptr)
     return false;
   annotator_ = BigwigAnnotator::make(fiver_, error);
