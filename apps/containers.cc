@@ -6,10 +6,10 @@ int main(int argc, char **argv) {
   std::string error;
   std::string simple = "simple";
   std::shared_ptr<cottontail::Warren> warren;
+  std::string burrow = "";
   if (argc > 1)
-    warren = cottontail::Warren::make(simple, argv[1], &error);
-  else
-    warren = cottontail::Warren::make(simple, &error);
+    burrow = argv[1];
+  warren = cottontail::Warren::make(simple, burrow, &error);
   if (warren == nullptr) {
     std::cerr << argv[0] << ": " << error << "\n";
     return 1;

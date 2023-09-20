@@ -27,11 +27,6 @@ public:
   static std::shared_ptr<Warren> make(const std::string &name,
                                       const std::string &burrow,
                                       std::string *error = nullptr);
-  static std::shared_ptr<Warren> make(const std::string &name,
-                                      std::string *error = nullptr) {
-    std::string empty = "";
-    return make(name, empty, error);
-  }
   Warren(std::shared_ptr<Working> working,
          std::shared_ptr<Featurizer> featurizer,
          std::shared_ptr<Tokenizer> tokenizer, std::shared_ptr<Idx> idx,

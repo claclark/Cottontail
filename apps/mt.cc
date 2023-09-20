@@ -47,10 +47,7 @@ int main(int argc, char **argv) {
   }
   std::string error;
   std::shared_ptr<cottontail::Warren> warren;
-  if (burrow == "")
-    warren = cottontail::Warren::make("simple", &error);
-  else
-    warren = cottontail::Warren::make("simple", burrow, &error);
+  warren = cottontail::Warren::make("simple", burrow, &error);
   warren->start();
   std::string docnos;
   std::string id_key = "id";

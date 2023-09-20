@@ -116,7 +116,7 @@ void usage(std::string program_name) {
 
 int main(int argc, char **argv) {
   std::string program_name = argv[0];
-  std::string burrow;
+  std::string burrow = "";
   if (argc == 2 && argv[1] == std::string("--help")) {
     usage(program_name);
     return 0;
@@ -145,10 +145,7 @@ int main(int argc, char **argv) {
   std::string error;
   std::string simple = "simple";
   std::shared_ptr<cottontail::Warren> warren;
-  if (burrow == "")
-    warren = cottontail::Warren::make(simple, &error);
-  else
-    warren = cottontail::Warren::make(simple, burrow, &error);
+  warren = cottontail::Warren::make(simple, burrow, &error);
   if (warren == nullptr) {
     std::cerr << program_name << ": " << error << "\n";
     return 1;

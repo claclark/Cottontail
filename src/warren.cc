@@ -1,6 +1,7 @@
 #include "src/warren.h"
 
 #include "src/core.h"
+#include "src/dna.h"
 #include "src/recipe.h"
 #include "src/simple_warren.h"
 #include "src/stats.h"
@@ -10,8 +11,13 @@ std::shared_ptr<Warren> Warren::make(const std::string &name,
                                      const std::string &burrow,
                                      std::string *error) {
   std::shared_ptr<Warren> warren;
+  std::string the_burrow;
+  if (burrow == "")
+    the_burrow = DEFAULT_BURROW;
+  else
+    the_burrow = burrow;
   if (name == "" || name == "simple") {
-    warren = SimpleWarren::make(burrow, error);
+    warren = SimpleWarren::make(the_burrow, error);
     if (warren == nullptr)
       return nullptr;
   } else {
