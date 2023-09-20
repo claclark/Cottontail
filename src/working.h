@@ -9,6 +9,7 @@
 #include <mutex>
 #include <set>
 #include <sstream>
+#include <vector>
 
 #include "src/core.h"
 
@@ -130,6 +131,7 @@ public:
     load_.insert(name);
     lock_.unlock();
   };
+  std::vector<std::string> ls(const std::string &prefix);
   std::shared_ptr<Reader> reader(const std::string &name,
                                  std::string *error = nullptr) {
     std::string fullname = make_name(name);

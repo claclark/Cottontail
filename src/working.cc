@@ -4,6 +4,8 @@
 #include <cstring>
 #include <fstream>
 #include <memory>
+#include <regex>
+#include <vector>
 
 #include "src/compressor.h"
 #include "src/core.h"
@@ -30,7 +32,7 @@ public:
     }
   };
 
-  virtual ~FileReader() {};
+  virtual ~FileReader(){};
   FileReader(const FileReader &) = delete;
   FileReader &operator=(const FileReader &) = delete;
   FileReader(FileReader &&) = delete;
@@ -93,7 +95,7 @@ public:
     return fullreader;
   }
 
-  virtual ~FullReader() {};
+  virtual ~FullReader(){};
   FullReader(const FullReader &) = delete;
   FullReader &operator=(const FullReader &) = delete;
   FullReader(FullReader &&) = delete;
@@ -148,7 +150,7 @@ public:
     return reader;
   };
 
-  virtual ~CompressReader() {};
+  virtual ~CompressReader(){};
   CompressReader(const CompressReader &) = delete;
   CompressReader &operator=(const CompressReader &) = delete;
   CompressReader(CompressReader &&) = delete;
@@ -231,7 +233,7 @@ public:
     }
   };
 
-  virtual ~FileWriter() {};
+  virtual ~FileWriter(){};
   FileWriter(const FileWriter &) = delete;
   FileWriter &operator=(const FileWriter &) = delete;
   FileWriter(FileWriter &&) = delete;
@@ -334,5 +336,38 @@ std::shared_ptr<Writer> Writer::make(const std::string &name,
     return nullptr;
   }
 };
+
+std::vector<std::string> Working::ls(const std::string &prefix) {
+  std::string ls_command;
+  FILE *fp = fopen("/usr/bin/ls", "r");
+  if (fp) {
+    fclose(fp);
+    ls_command = "/usr/bin/ls " + working_;
+  } else {
+    fp = fopen("/bin/ls", "r");
+    assert(fp);
+    fclose(fp);
+    ls_command = "/bin/ls " + working_;
+  }
+  FILE *pipe = popen(ls_command.c_str(), "r");
+  assert(pipe);
+  std::string pattern = "^" + prefix + "\\.*";
+  std::regex r(pattern);
+  std::vector<std::string> names;
+  const size_t buffer_size = 256;
+  std::array<char, buffer_size> buffer;
+  while (fgets(buffer.data(), buffer_size, pipe) != NULL) {
+    if (!std::regex_search(buffer.data(), r))
+      continue;
+    for (char *s = buffer.data(); *s != '\0'; s++)
+      if (*s == '\n') {
+        *s = '\0';
+        break;
+      }
+    names.emplace_back(buffer.data());
+  }
+  pclose(pipe);
+  return names;
+}
 
 } // namespace cottontail
