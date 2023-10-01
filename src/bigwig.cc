@@ -1,5 +1,6 @@
 #include "src/bigwig.h"
 
+#include <algorithm>
 #include <map>
 #include <memory>
 #include <set>
@@ -208,6 +209,69 @@ std::shared_ptr<Bigwig> Bigwig::make(
     return nullptr;
   return bigwig;
 }
+
+namespace {
+bool fiver_files(std::shared_ptr<Working> working,
+                 std::vector<std::string> *name, std::string *error) {
+  if (working == nullptr) {
+    if (name != nullptr)
+      name->clear();
+    return true;
+  }
+  std::vector<std::string> fivers = working->ls("fiver");
+  struct FiverFile {
+    FiverFile(addr start, cottontail::addr end, const std::string &name)
+        : start(start), end(end), name(name){};
+    addr start;
+    addr end;
+    std::string name;
+  };
+  std::vector<FiverFile> found;
+  for (auto &fiver : fivers) {
+    std::string suffix = fiver.substr(fiver.find(".") + 1);
+    try {
+      addr start = std::stol(suffix.substr(0, suffix.find(".")));
+      addr end = std::stol(suffix.substr(suffix.find(".") + 1));
+      if (start < 0 || end < 0 || start > end) {
+        safe_set(error) = "fiver filename range error: " + fiver;
+        return false;
+      }
+      found.emplace_back(start, end, fiver);
+    } catch (const std::invalid_argument &e) {
+      safe_set(error) = "fiver filename format error: " + fiver;
+      return false;
+    }
+  }
+  std::sort(found.begin(), found.end(),
+            [](const auto &a, const auto &b) -> bool {
+              return a.start < b.start || (a.start == b.start && a.end > b.end);
+            });
+  std::vector<FiverFile> living;
+  std::vector<FiverFile> dead;
+  for (auto &fiver : found)
+    if (living.empty() || living.back().end < fiver.start) {
+      living.emplace_back(fiver);
+    } else if (living.back().end >= fiver.end) {
+      dead.emplace_back(fiver);
+    } else {
+      safe_set(error) = "fiver filename sequence error: " + fiver.name;
+      return false;
+    }
+  // can't see a situation when it isn't okay to remove
+  // uncommited transactions ("kittens")
+  std::vector<std::string> kittens = working->ls("kitten");
+  for (auto &kitten : kittens)
+    std::remove(working->make_name(kitten).c_str());
+  for (auto &fiver : dead)
+    std::remove(working->make_name(fiver.name).c_str());
+  if (name != nullptr) {
+    name->clear();
+    for (auto &fiver : living)
+      name->push_back(working->make_name(fiver.name));
+  }
+  return true;
+}
+} // namespace
 
 std::shared_ptr<Warren> Bigwig::clone_(std::string *error) {
   std::shared_ptr<Warren> bigwig =
