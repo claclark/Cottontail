@@ -14,6 +14,8 @@ namespace cottontail {
 
 class Bigwig final : public Warren {
 public:
+  static std::shared_ptr<Bigwig> make(const std::string &burrow,
+                                      std::string *error = nullptr);
   static std::shared_ptr<Bigwig>
   make(std::shared_ptr<Working> working, std::shared_ptr<Featurizer> featurizer,
        std::shared_ptr<Tokenizer> tokenizer, std::shared_ptr<Fluffle> fluffle,

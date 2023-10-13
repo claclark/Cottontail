@@ -168,48 +168,6 @@ private:
   std::vector<std::shared_ptr<Warren>> warrens_;
 };
 
-std::shared_ptr<Bigwig> Bigwig::make(
-    std::shared_ptr<Working> working, std::shared_ptr<Featurizer> featurizer,
-    std::shared_ptr<Tokenizer> tokenizer, std::shared_ptr<Fluffle> fluffle,
-    std::string *error, std::shared_ptr<Compressor> posting_compressor,
-    std::shared_ptr<Compressor> fvalue_compressor,
-    std::shared_ptr<Compressor> text_compressor) {
-  if (featurizer == nullptr) {
-    safe_set(error) = "Bigwig needs a featurizer (got nullptr)";
-    return nullptr;
-  }
-  if (tokenizer == nullptr) {
-    safe_set(error) = "Bigwig needs a tokenizer (got nullptr)";
-    return nullptr;
-  }
-  std::shared_ptr<Bigwig> bigwig = std::shared_ptr<Bigwig>(
-      new Bigwig(working, featurizer, tokenizer, nullptr, nullptr));
-  bigwig->fiver_ = nullptr;
-  if (fluffle == nullptr)
-    bigwig->fluffle_ = Fluffle::make();
-  else
-    bigwig->fluffle_ = fluffle;
-  std::shared_ptr<Compressor> null_compressor = nullptr;
-  if (posting_compressor == nullptr || fvalue_compressor == nullptr ||
-      text_compressor == nullptr)
-    null_compressor = Compressor::make("null", "");
-  if (posting_compressor == nullptr)
-    bigwig->posting_compressor_ = null_compressor;
-  else
-    bigwig->posting_compressor_ = posting_compressor;
-  if (fvalue_compressor == nullptr)
-    bigwig->fvalue_compressor_ = null_compressor;
-  else
-    bigwig->fvalue_compressor_ = fvalue_compressor;
-  if (text_compressor == nullptr)
-    bigwig->text_compressor_ = null_compressor;
-  else
-    bigwig->text_compressor_ = text_compressor;
-  if (working != nullptr && !write_dna(working, bigwig->recipe(), error))
-    return nullptr;
-  return bigwig;
-}
-
 namespace {
 bool fiver_files(std::shared_ptr<Working> working,
                  std::vector<std::string> *name, std::string *error) {
@@ -272,6 +230,137 @@ bool fiver_files(std::shared_ptr<Working> working,
   return true;
 }
 } // namespace
+
+std::shared_ptr<Bigwig> Bigwig::make(const std::string &burrow,
+                                     std::string *error) {
+  std::string the_burrow = burrow;
+  if (the_burrow == "")
+    the_burrow = DEFAULT_BURROW;
+  std::shared_ptr<Working> working = Working::make(the_burrow, error);
+  if (working == nullptr)
+    return nullptr;
+  std::string dna;
+  if (!read_dna(working, &dna, error))
+    return nullptr;
+  std::map<std::string, std::string> parameters;
+  if (!cook(dna, &parameters, error))
+    return nullptr;
+  std::map<std::string, std::string> featurizer_parameters;
+  if (!cook(parameters["featurizer"], &featurizer_parameters, error))
+    return nullptr;
+  std::shared_ptr<Featurizer> featurizer =
+      Featurizer::make(featurizer_parameters["name"],
+                       featurizer_parameters["recipe"], error, working);
+  if (featurizer == nullptr)
+    return nullptr;
+  std::map<std::string, std::string> tokenizer_parameters;
+  if (!cook(parameters["tokenizer"], &tokenizer_parameters, error))
+    return nullptr;
+  std::shared_ptr<Tokenizer> tokenizer = Tokenizer::make(
+      tokenizer_parameters["name"], tokenizer_parameters["recipe"], error);
+  if (tokenizer == nullptr)
+    return nullptr;
+  std::map<std::string, std::string> idx_parameters;
+  if (!cook(parameters["idx"], &idx_parameters, error))
+    return nullptr;
+  std::map<std::string, std::string> idx_recipe_parameters;
+  if (!cook(idx_parameters["recipe"], &idx_recipe_parameters, error))
+    return nullptr;
+  std::shared_ptr<Compressor> posting_compressor = Compressor::make(
+      idx_recipe_parameters["posting_compressor"],
+      idx_recipe_parameters["posting_compressor_recipe"], error);
+  if (posting_compressor == nullptr)
+    return nullptr;
+  std::shared_ptr<Compressor> fvalue_compressor = Compressor::make(
+      idx_recipe_parameters["fvalue_compressor"],
+      idx_recipe_parameters["fvalue_compressor_recipe"], error);
+  if (fvalue_compressor == nullptr)
+    return nullptr;
+  std::map<std::string, std::string> txt_parameters;
+  if (!cook(parameters["txt"], &txt_parameters, error))
+    return nullptr;
+  std::map<std::string, std::string> txt_recipe_parameters;
+  if (!cook(txt_parameters["recipe"], &txt_recipe_parameters, error))
+    return nullptr;
+  std::shared_ptr<Compressor> text_compressor =
+      Compressor::make(idx_recipe_parameters["compressor"],
+                       idx_recipe_parameters["compressor_recipe"], error);
+  if (text_compressor == nullptr)
+    return nullptr;
+  std::string container_query;
+  std::shared_ptr<Stemmer> stemmer;
+  if (parameters.find("parameters") != parameters.end()) {
+    std::map<std::string, std::string> extra_parameters;
+    if (!cook(parameters["parameters"], &extra_parameters, error))
+      return nullptr;
+    auto container_element = extra_parameters.find("container");
+    if (container_element != extra_parameters.end())
+      container_query = container_element->second;
+    std::string stemmer_name, stemmer_recipe;
+    auto stemmer_element = extra_parameters.find("stemmer");
+    if (stemmer_element != extra_parameters.end()) {
+      std::string stemmer_name, stemmer_recipe;
+      stemmer_name = stemmer_element->second;
+    }
+    if (stemmer_name != "") {
+      stemmer = Stemmer::make(stemmer_name, stemmer_recipe, error);
+      if (stemmer == nullptr)
+        return nullptr;
+    }
+  }
+  std::shared_ptr<Fluffle> fluffle = Fluffle::make();
+  std::vector<std::string> fivers;
+  if (!fiver_files(working, &fivers, error))
+    return nullptr;
+  std::shared_ptr<Bigwig> bigwig =
+      Bigwig::make(working, featurizer, tokenizer, nullptr, fluffle,
+                   posting_compressor, fvalue_compressor, text_compressor);
+  bigwig->set_stemmer(stemmer);
+  bigwig->set_default_container(container_query);
+  return bigwig;
+}
+
+std::shared_ptr<Bigwig> Bigwig::make(
+    std::shared_ptr<Working> working, std::shared_ptr<Featurizer> featurizer,
+    std::shared_ptr<Tokenizer> tokenizer, std::shared_ptr<Fluffle> fluffle,
+    std::string *error, std::shared_ptr<Compressor> posting_compressor,
+    std::shared_ptr<Compressor> fvalue_compressor,
+    std::shared_ptr<Compressor> text_compressor) {
+  if (featurizer == nullptr) {
+    safe_set(error) = "Bigwig needs a featurizer (got nullptr)";
+    return nullptr;
+  }
+  if (tokenizer == nullptr) {
+    safe_set(error) = "Bigwig needs a tokenizer (got nullptr)";
+    return nullptr;
+  }
+  std::shared_ptr<Bigwig> bigwig = std::shared_ptr<Bigwig>(
+      new Bigwig(working, featurizer, tokenizer, nullptr, nullptr));
+  bigwig->fiver_ = nullptr;
+  if (fluffle == nullptr)
+    bigwig->fluffle_ = Fluffle::make();
+  else
+    bigwig->fluffle_ = fluffle;
+  std::shared_ptr<Compressor> null_compressor = nullptr;
+  if (posting_compressor == nullptr || fvalue_compressor == nullptr ||
+      text_compressor == nullptr)
+    null_compressor = Compressor::make("null", "");
+  if (posting_compressor == nullptr)
+    bigwig->posting_compressor_ = null_compressor;
+  else
+    bigwig->posting_compressor_ = posting_compressor;
+  if (fvalue_compressor == nullptr)
+    bigwig->fvalue_compressor_ = null_compressor;
+  else
+    bigwig->fvalue_compressor_ = fvalue_compressor;
+  if (text_compressor == nullptr)
+    bigwig->text_compressor_ = null_compressor;
+  else
+    bigwig->text_compressor_ = text_compressor;
+  if (working != nullptr && !write_dna(working, bigwig->recipe(), error))
+    return nullptr;
+  return bigwig;
+}
 
 std::shared_ptr<Warren> Bigwig::clone_(std::string *error) {
   std::shared_ptr<Warren> bigwig =
