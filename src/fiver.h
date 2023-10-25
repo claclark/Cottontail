@@ -42,7 +42,8 @@ public:
            std::shared_ptr<Compressor> fvalue_compressor = nullptr,
            std::shared_ptr<Compressor> text_compressor = nullptr);
   addr relocate(addr where);
-  void sequence(addr number);
+  void set_sequence(addr number);
+  void get_sequence(addr *start, addr *end);
 
   virtual ~Fiver(){};
   Fiver(const Fiver &) = delete;

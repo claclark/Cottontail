@@ -17,6 +17,7 @@
 
 #define TEST(a, b) void test_##b()
 
+#include <algorithm>
 #include <cassert>
 #include <cstring>
 #include <fstream>
@@ -33,6 +34,4 @@ void usage(std::string program_name) {
   std::cerr << "usage: " << program_name << "\n";
 }
 
-int main(int argc, char **argv) {
-  return 0;
-}
+int main(int argc, char **argv) { return 0; }

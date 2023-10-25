@@ -165,6 +165,29 @@ private:
       n += warren->txt()->tokens();
     return n;
   };
+  bool range_(addr *p, addr *q) {
+    if (warrens_.size() == 0) {
+      *p = *q = maxfinity;
+      return false;
+    }
+    addr q0;
+    size_t i;
+    for (i = 0; i < warrens_.size(); i++)
+      if (warrens_[i]->txt()->range(p, &q0))
+        break;
+    if (i == warrens_.size()) {
+      *p = *q = maxfinity;
+      return false;
+    }
+    addr p1;
+    size_t j;
+    for (j = warrens_.size() - 1; j > i; --j)
+      if (warrens_[j]->txt()->range(&p1, q))
+        break;
+    if (j == i)
+      *q = q0;
+    return true;
+  };
   std::vector<std::shared_ptr<Warren>> warrens_;
 };
 
@@ -287,10 +310,10 @@ std::shared_ptr<Bigwig> Bigwig::make(const std::string &burrow,
                        idx_recipe_parameters["compressor_recipe"], error);
   if (text_compressor == nullptr)
     return nullptr;
+  std::map<std::string, std::string> extra_parameters;
   std::string container_query;
   std::shared_ptr<Stemmer> stemmer;
   if (parameters.find("parameters") != parameters.end()) {
-    std::map<std::string, std::string> extra_parameters;
     if (!cook(parameters["parameters"], &extra_parameters, error))
       return nullptr;
     auto container_element = extra_parameters.find("container");
@@ -309,12 +332,40 @@ std::shared_ptr<Bigwig> Bigwig::make(const std::string &burrow,
     }
   }
   std::shared_ptr<Fluffle> fluffle = Fluffle::make();
-  std::vector<std::string> fivers;
-  if (!fiver_files(working, &fivers, error))
+  (*fluffle->parameters) = extra_parameters;
+  std::vector<std::string> fivernames;
+  if (!fiver_files(working, &fivernames, error))
     return nullptr;
+  std::vector<std::shared_ptr<Fiver>> fivers;
+  for (auto &fivername : fivernames) {
+    std::shared_ptr<Fiver> fiver =
+        Fiver::unpickle(fivername, working, featurizer, tokenizer, error,
+                        posting_compressor, fvalue_compressor, text_compressor);
+    if (fiver == nullptr)
+      return nullptr;
+    fivers.push_back(fiver);
+    fluffle->warrens.push_back(fiver);
+  }
+  addr address = 0;
+  addr sequence = 0;
+  if (fivers.size() > 0) {
+    addr p, q;
+    for (size_t i = fivers.size(); i > 0; --i) {
+      if (fivers[i - 1]->txt()->range(&p, &q)) {
+        address = q + 1;
+        break;
+      }
+    }
+    fivers.back()->get_sequence(&p, &q);
+    sequence = q + 1;
+  }
+  fluffle->address = address;
+  fluffle->sequence = sequence;
   std::shared_ptr<Bigwig> bigwig =
-      Bigwig::make(working, featurizer, tokenizer, nullptr, fluffle,
+      Bigwig::make(working, featurizer, tokenizer, error, fluffle,
                    posting_compressor, fvalue_compressor, text_compressor);
+  if (bigwig == nullptr)
+    return nullptr;
   bigwig->set_stemmer(stemmer);
   bigwig->set_default_container(container_query);
   return bigwig;
@@ -462,7 +513,7 @@ bool Bigwig::transaction_(std::string *error) {
 bool Bigwig::ready_() {
   fluffle_->lock.lock();
   fluffle_->address = fiver_->relocate(fluffle_->address);
-  fiver_->sequence(fluffle_->sequence);
+  fiver_->set_sequence(fluffle_->sequence);
   fluffle_->sequence++;
   fluffle_->warrens.push_back(fiver_);
   fluffle_->lock.unlock();

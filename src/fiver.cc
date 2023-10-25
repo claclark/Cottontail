@@ -437,7 +437,13 @@ addr Fiver::relocate(addr where) {
   return where + fiver_appender->appended();
 };
 
-void Fiver::sequence(addr number) { sequence_start_ = sequence_end_ = number; };
+void Fiver::set_sequence(addr number) {
+  sequence_start_ = sequence_end_ = number;
+};
+void Fiver::get_sequence(addr *start, addr *end) {
+  *start = sequence_start_;
+  *end  = sequence_end_;
+}
 
 namespace {
 std::string seq2str(addr sequence) {
