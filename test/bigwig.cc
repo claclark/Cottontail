@@ -441,7 +441,7 @@ void love(cottontail::addr n) {
     worker.join();
 }
 
-TEST(bigwig, love) {
+TEST(bigwig, Love) {
   love(1);
   love(5);
   love(18);

@@ -339,10 +339,11 @@ std::shared_ptr<Bigwig> Bigwig::make(const std::string &burrow,
   std::vector<std::shared_ptr<Fiver>> fivers;
   for (auto &fivername : fivernames) {
     std::shared_ptr<Fiver> fiver =
-        Fiver::unpickle(fivername, working, featurizer, tokenizer, error,
+        Fiver::unpickle(fivername, nullptr, featurizer, tokenizer, error,
                         posting_compressor, fvalue_compressor, text_compressor);
     if (fiver == nullptr)
       return nullptr;
+    fiver->start();
     fivers.push_back(fiver);
     fluffle->warrens.push_back(fiver);
   }
@@ -366,8 +367,10 @@ std::shared_ptr<Bigwig> Bigwig::make(const std::string &burrow,
                    posting_compressor, fvalue_compressor, text_compressor);
   if (bigwig == nullptr)
     return nullptr;
-  bigwig->set_stemmer(stemmer);
-  bigwig->set_default_container(container_query);
+  if (stemmer != nullptr)
+    bigwig->set_stemmer(stemmer);
+  if (container_query != "")
+    bigwig->set_default_container(container_query);
   return bigwig;
 }
 
