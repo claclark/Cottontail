@@ -9,7 +9,7 @@
 
 #include "src/cottontail.h"
 
-void basic(bool merge) {
+void basic(bool merge, std::shared_ptr<cottontail::Working> working = nullptr) {
   const char *hamlet[] = {"To be, or not to be, that is the question:",
                           "Whether 'tis nobler in the mind to suffer",
                           "The slings and arrows of outrageous fortune,",
@@ -32,7 +32,8 @@ void basic(bool merge) {
   cottontail::addr line = featurizer->featurize("line:");
   std::shared_ptr<cottontail::Fluffle> fluffle = cottontail::Fluffle::make();
   std::shared_ptr<cottontail::Bigwig> bigwig =
-      cottontail::Bigwig::make(nullptr, featurizer, tokenizer, fluffle);
+      cottontail::Bigwig::make(working, featurizer, tokenizer, fluffle);
+  ASSERT_NE(bigwig, nullptr);
   bigwig->merge(merge);
   ASSERT_TRUE(bigwig->transaction());
   ASSERT_TRUE(bigwig->appender()->append(std::string(hamlet[0]), &p, &q));
@@ -353,7 +354,7 @@ void tiger(cottontail::addr n) {
   bigwig->end();
 }
 
-TEST(Bigwig, Tiger){
+TEST(Bigwig, Tiger) {
   tiger(1);
   tiger(3);
   tiger(11);
@@ -446,4 +447,47 @@ TEST(bigwig, Love) {
   love(5);
   love(18);
   love(113);
+}
+
+TEST(bigwig, Durable) {
+  std::string burrow_name = "bigwig.burrow";
+  {
+    std::shared_ptr<cottontail::Working> working =
+        cottontail::Working::mkdir(burrow_name);
+    ASSERT_NE(working, nullptr);
+    basic(false, working);
+  }
+  std::shared_ptr<cottontail::Bigwig> bigwig =
+      cottontail::Bigwig::make(burrow_name);
+  ASSERT_NE(bigwig, nullptr);
+  bigwig->start();
+  std::unique_ptr<cottontail::Hopper> hopper = bigwig->hopper_from_gcl("sleep");
+  cottontail::addr p, q, v;
+  for (hopper->tau(cottontail::minfinity + 1, &p, &q);
+       p < cottontail::maxfinity; hopper->tau(p + 1, &p, &q))
+    ASSERT_EQ(bigwig->txt()->translate(p, q).substr(0, 5), "sleep");
+  bigwig->end();
+  const char *hamlet[] = {"Alas, poor Yorick! I knew him, Horatio: a fellow",
+                          "of infinite jest, of most excellent fancy: he hath",
+                          "borne me on his back a thousand times"};
+  cottontail::addr line = bigwig->featurizer()->featurize("line:");
+  ASSERT_TRUE(bigwig->transaction());
+  ASSERT_TRUE(bigwig->appender()->append(std::string(hamlet[0]), &p, &q));
+  ASSERT_TRUE(bigwig->annotator()->annotate(line, p, q, (cottontail::addr)12));
+  ASSERT_TRUE(bigwig->appender()->append(std::string(hamlet[1]), &p, &q));
+  ASSERT_TRUE(bigwig->annotator()->annotate(line, p, q, (cottontail::addr)13));
+  ASSERT_TRUE(bigwig->appender()->append(std::string(hamlet[2]), &p, &q));
+  ASSERT_TRUE(bigwig->annotator()->annotate(line, p, q, (cottontail::addr)14));
+  ASSERT_TRUE(bigwig->ready());
+  bigwig->commit();
+  bigwig->start();
+  hopper = bigwig->hopper_from_gcl("line:");
+  cottontail::addr i = 0;
+  for (hopper->tau(cottontail::minfinity + 1, &p, &q, &v);
+       p < cottontail::maxfinity; hopper->tau(p + 1, &p, &q, &v))
+    ASSERT_EQ(++i, v);
+  ASSERT_EQ(i, 14);
+  hopper = bigwig->hopper_from_gcl("\"may come alas poor yorick\"");
+  hopper->ohr(cottontail::maxfinity - 1, &p, &q);
+  ASSERT_EQ(bigwig->txt()->translate(p, q), "may come,\nAlas, poor Yorick! ");
 }

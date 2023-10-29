@@ -306,8 +306,8 @@ std::shared_ptr<Bigwig> Bigwig::make(const std::string &burrow,
   if (!cook(txt_parameters["recipe"], &txt_recipe_parameters, error))
     return nullptr;
   std::shared_ptr<Compressor> text_compressor =
-      Compressor::make(idx_recipe_parameters["compressor"],
-                       idx_recipe_parameters["compressor_recipe"], error);
+      Compressor::make(txt_recipe_parameters["compressor"],
+                       txt_recipe_parameters["compressor_recipe"], error);
   if (text_compressor == nullptr)
     return nullptr;
   std::map<std::string, std::string> extra_parameters;
@@ -362,11 +362,14 @@ std::shared_ptr<Bigwig> Bigwig::make(const std::string &burrow,
   }
   fluffle->address = address;
   fluffle->sequence = sequence;
-  std::shared_ptr<Bigwig> bigwig =
-      Bigwig::make(working, featurizer, tokenizer, error, fluffle,
-                   posting_compressor, fvalue_compressor, text_compressor);
-  if (bigwig == nullptr)
-    return nullptr;
+  std::shared_ptr<Bigwig> bigwig = std::shared_ptr<Bigwig>(
+      new Bigwig(working, featurizer, tokenizer, nullptr, nullptr));
+  assert(bigwig != nullptr);
+  bigwig->fiver_ = nullptr;
+  bigwig->fluffle_ = fluffle;
+  bigwig->posting_compressor_ = posting_compressor;
+  bigwig->fvalue_compressor_ = fvalue_compressor;
+  bigwig->text_compressor_ = text_compressor;
   if (stemmer != nullptr)
     bigwig->set_stemmer(stemmer);
   if (container_query != "")
@@ -380,6 +383,13 @@ std::shared_ptr<Bigwig> Bigwig::make(
     std::string *error, std::shared_ptr<Compressor> posting_compressor,
     std::shared_ptr<Compressor> fvalue_compressor,
     std::shared_ptr<Compressor> text_compressor) {
+  if (working != nullptr) {
+    std::string dna;
+    if (read_dna(working, &dna, error)) {
+      safe_set(error) = "Working directory already has cottontail dna";
+      return nullptr;
+    }
+  }
   if (featurizer == nullptr) {
     safe_set(error) = "Bigwig needs a featurizer (got nullptr)";
     return nullptr;
