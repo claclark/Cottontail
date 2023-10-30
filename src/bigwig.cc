@@ -427,17 +427,23 @@ std::shared_ptr<Bigwig> Bigwig::make(
 }
 
 std::shared_ptr<Warren> Bigwig::clone_(std::string *error) {
-  std::shared_ptr<Warren> bigwig =
-      Bigwig::make(working_, featurizer_, tokenizer_, fluffle_, error,
-                   posting_compressor_, fvalue_compressor_, text_compressor_);
+
+  std::shared_ptr<Bigwig> bigwig = std::shared_ptr<Bigwig>(
+      new Bigwig(working_, featurizer_, tokenizer_, nullptr, nullptr));
   if (bigwig == nullptr)
     return nullptr;
-  std::shared_ptr<cottontail::Stemmer> the_stemmer =
-      cottontail::Stemmer::make(stemmer_->name(), stemmer_->recipe(), error);
-  if (the_stemmer == nullptr)
-    return nullptr;
-  if (!bigwig->set_stemmer(the_stemmer, error))
-    return nullptr;
+  bigwig->fluffle_ = fluffle_;
+  bigwig->posting_compressor_ = posting_compressor_;
+  bigwig->fvalue_compressor_ = fvalue_compressor_;
+  bigwig->text_compressor_ = text_compressor_;
+  bigwig->default_container_ = default_container_;
+  if (stemmer_ != nullptr) {
+    std::shared_ptr<cottontail::Stemmer> the_stemmer =
+        cottontail::Stemmer::make(stemmer_->name(), stemmer_->recipe(), error);
+    if (the_stemmer == nullptr)
+      return nullptr;
+    bigwig->stemmer_ = the_stemmer;
+  }
   return bigwig;
 }
 
