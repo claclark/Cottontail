@@ -1,10 +1,12 @@
 #include "src/warren.h"
 
+#include "src/bigwig.h"
 #include "src/core.h"
 #include "src/dna.h"
 #include "src/recipe.h"
 #include "src/simple_warren.h"
 #include "src/stats.h"
+#include "src/working.h"
 
 namespace cottontail {
 std::shared_ptr<Warren> Warren::make(const std::string &name,
@@ -18,6 +20,10 @@ std::shared_ptr<Warren> Warren::make(const std::string &name,
     the_burrow = burrow;
   if (name == "" || name == "simple") {
     warren = SimpleWarren::make(the_burrow, error);
+    if (warren == nullptr)
+      return nullptr;
+  } else if (name == "bigwig") {
+    warren = Bigwig::make(the_burrow, error);
     if (warren == nullptr)
       return nullptr;
   } else {
@@ -45,5 +51,31 @@ std::shared_ptr<Warren> Warren::make(const std::string &name,
   }
   warren->end();
   return warren;
+}
+
+std::shared_ptr<Warren> Warren::make(const std::string &burrow,
+                                     std::string *error) {
+  std::string the_burrow;
+  if (burrow == "")
+    the_burrow = DEFAULT_BURROW;
+  else
+    the_burrow = burrow;
+  std::shared_ptr<Working> working = Working::make(the_burrow, error);
+  if (working == nullptr)
+    return nullptr;
+  std::string dna;
+  if (!read_dna(working, &dna, error))
+    return nullptr;
+  std::map<std::string, std::string> parameters;
+  if (!cook(dna, &parameters, error))
+    return nullptr;
+  std::string name;
+  if (parameters.find("warren") != parameters.end()) {
+    name = parameters["warren"];
+  } else {
+    safe_set(error) = "No warren name in burrow dna: " + the_burrow;
+    return nullptr;
+  }
+  return Warren::make(name, burrow, error);
 }
 } // namespace cottontail

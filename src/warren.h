@@ -27,16 +27,17 @@ public:
   static std::shared_ptr<Warren> make(const std::string &name,
                                       const std::string &burrow,
                                       std::string *error = nullptr);
+  static std::shared_ptr<Warren> make(const std::string &burrow,
+                                      std::string *error = nullptr);
   Warren(std::shared_ptr<Working> working,
          std::shared_ptr<Featurizer> featurizer,
          std::shared_ptr<Tokenizer> tokenizer, std::shared_ptr<Idx> idx,
          std::shared_ptr<Txt> txt)
       : default_container_(std::string("")),
         stemmer_(std::make_shared<NullStemmer>()), working_(working),
-        featurizer_(featurizer), tokenizer_(tokenizer), idx_(idx), txt_(txt) {
-  };
+        featurizer_(featurizer), tokenizer_(tokenizer), idx_(idx), txt_(txt){};
   inline std::string name() { return name_; }
-  inline std::string recipe() { return recipe_();}
+  inline std::string recipe() { return recipe_(); }
   inline std::shared_ptr<Warren> clone(std::string *error = nullptr) {
     return clone_(error);
   };
@@ -51,15 +52,9 @@ public:
     end_();
   }
   inline void started() { assert(started_); }
-  inline std::shared_ptr<Working> working() {
-    return working_;
-  };
-  inline std::shared_ptr<Featurizer> featurizer() {
-    return featurizer_;
-  };
-  inline std::shared_ptr<Tokenizer> tokenizer() {
-    return tokenizer_;
-  };
+  inline std::shared_ptr<Working> working() { return working_; };
+  inline std::shared_ptr<Featurizer> featurizer() { return featurizer_; };
+  inline std::shared_ptr<Tokenizer> tokenizer() { return tokenizer_; };
   inline std::shared_ptr<Idx> idx() {
     assert(started_);
     return idx_;
@@ -137,7 +132,7 @@ protected:
   std::shared_ptr<Appender> appender_ = nullptr;
 
 private:
-  virtual std::string recipe_() {return "";};;
+  virtual std::string recipe_() { return ""; };
   virtual std::shared_ptr<Warren> clone_(std::string *error) {
     safe_set(error) = "Warren can't be cloned";
     return nullptr;

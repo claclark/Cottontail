@@ -440,6 +440,7 @@ addr Fiver::relocate(addr where) {
 void Fiver::set_sequence(addr number) {
   sequence_start_ = sequence_end_ = number;
 };
+
 void Fiver::get_sequence(addr *start, addr *end) {
   *start = sequence_start_;
   *end  = sequence_end_;
@@ -620,8 +621,14 @@ Fiver::unpickle(const std::string &filename, std::shared_ptr<Working> working,
   std::fstream jar;
   jar.open(jarname, std::ios::binary | std::ios::in);
   if (jar.fail()) {
-    safe_set(error) = "Fiver can't open pickle jar: " + jarname;
-    return nullptr;
+    if (working != nullptr) {
+      jarname = filename;
+      jar.open(jarname, std::ios::binary | std::ios::in);
+    }
+    if (jar.fail()) {
+      safe_set(error) = "Fiver can't open pickle jar: " + jarname;
+      return nullptr;
+    }
   }
   std::shared_ptr<Fiver> fiver = std::shared_ptr<Fiver>(
       new Fiver(working, featurizer, tokenizer, nullptr, nullptr));

@@ -252,6 +252,8 @@ bool fiver_files(std::shared_ptr<Working> working,
   }
   return true;
 }
+
+void try_merge(std::shared_ptr<Fluffle> fluffle);
 } // namespace
 
 std::shared_ptr<Bigwig> Bigwig::make(const std::string &burrow,
@@ -339,7 +341,7 @@ std::shared_ptr<Bigwig> Bigwig::make(const std::string &burrow,
   std::vector<std::shared_ptr<Fiver>> fivers;
   for (auto &fivername : fivernames) {
     std::shared_ptr<Fiver> fiver =
-        Fiver::unpickle(fivername, nullptr, featurizer, tokenizer, error,
+        Fiver::unpickle(fivername, working, featurizer, tokenizer, error,
                         posting_compressor, fvalue_compressor, text_compressor);
     if (fiver == nullptr)
       return nullptr;
@@ -374,6 +376,7 @@ std::shared_ptr<Bigwig> Bigwig::make(const std::string &burrow,
     bigwig->set_stemmer(stemmer);
   if (container_query != "")
     bigwig->set_default_container(container_query);
+  try_merge(fluffle);
   return bigwig;
 }
 
