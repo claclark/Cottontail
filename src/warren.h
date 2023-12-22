@@ -38,6 +38,7 @@ public:
         featurizer_(featurizer), tokenizer_(tokenizer), idx_(idx), txt_(txt){};
   inline std::string name() { return name_; }
   inline std::string recipe() { return recipe_(); }
+  inline bool clonable() { return clonable_(); }
   inline std::shared_ptr<Warren> clone(std::string *error = nullptr) {
     return clone_(error);
   };
@@ -133,6 +134,7 @@ protected:
 
 private:
   virtual std::string recipe_() { return ""; };
+  virtual bool clonable_() { return false; }
   virtual std::shared_ptr<Warren> clone_(std::string *error) {
     safe_set(error) = "Warren can't be cloned";
     return nullptr;

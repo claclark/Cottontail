@@ -19,7 +19,7 @@ std::shared_ptr<Txt> Txt::make(const std::string &name,
       txt->name_ = "simple";
     return txt;
   } else {
-    safe_set(error) = "No Txt named :" + name;
+    safe_set(error) = "No Txt named: " + name;
     return nullptr;
   }
 }
@@ -29,7 +29,7 @@ bool Txt::check(const std::string &name, const std::string &recipe,
   if (name == "" || name == "simple") {
     return SimpleTxt::check(recipe, error);
   } else {
-    safe_set(error) = "No Txt named :" + name;
+    safe_set(error) = "No Txt named: " + name;
     return false;
   }
 }

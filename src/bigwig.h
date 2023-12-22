@@ -49,7 +49,8 @@ private:
       : Warren(working, featurizer, tokenizer, idx, txt) {
     name_ = "bigwig";
   };
-  virtual std::shared_ptr<Warren> clone_(std::string *error) final;
+  bool clonable_() final { return true; };
+  std::shared_ptr<Warren> clone_(std::string *error) final;
   std::string recipe_() final;
   void start_() final;
   void end_() final;
