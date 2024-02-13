@@ -243,22 +243,19 @@ private:
     if (p == maxfinity || q < p)
       return "";
     addr p0, q0, i;
-    addr p1, q1, j;
     {
       std::lock_guard<std::mutex> lock(mutex_);
       hopper_->rho(p, &p0, &q0, &i);
       if (p0 == maxfinity || p0 > q)
         return "";
-      hopper_->ohr(q, &p1, &q1, &j);
     }
     const char *t = text_->c_str();
     const char *s = t + i;
     if (p0 < p)
-      s = tokenizer_->skip(s, text_->length() - (s - t), p - p0);
-    if (q1 < q)
-      return text_->substr(s - t, text_->length() - (s - t));
-    const char *e = t + j;
-    e = tokenizer_->skip(e, text_->length() - (e - t), q - p1 + 1);
+      s = tokenizer_->skip(s, text_->length() - i, p - p0);
+    else if (p0 > p)
+      p = p0;
+    const char *e = tokenizer_->skip(s, text_->length() - (s - t), q - p + 1);
     return text_->substr(s - t, e - s);
   };
   addr tokens_() final {
