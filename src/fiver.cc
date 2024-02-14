@@ -90,6 +90,8 @@ public:
         std::shared_ptr<FiverAppender>(new FiverAppender());
     appender->text_ = text;
     appender->address_ = staging;
+    appender->chunk_address_ = staging;
+    appender->chunk_offset_ = 0;
     appender->featurizer_ = featurizer;
     appender->tokenizer_ = tokenizer;
     appender->annotator_ = annotator;
@@ -114,6 +116,7 @@ private:
     }
     if (text_->length() > 0 && text_->back() != '\n')
       *text_ += "\n";
+    addr offset = text_->length();;
     *text_ += text;
     std::vector<Token> tokens = tokenizer_->tokenize(featurizer_, text);
     if (tokens.size() == 0) {
@@ -127,6 +130,14 @@ private:
       if (!annotator_->annotate(token.feature, token.address, token.address,
                                 error))
         return false;
+      if (token.address - chunk_address_ > CHUNK_SIZE) {
+        if (!annotator_->annotate(featurizer_->featurize(separator),
+                                  chunk_address_, token.address - 1,
+                                  chunk_offset_))
+          return false;
+        chunk_address_ = token.address;
+        chunk_offset_ = offset + token.offset;
+      }
     }
     *p = address_;
     *q = last_address;
@@ -144,9 +155,9 @@ private:
   bool ready_() {
     if (text_->length() > 0 && text_->back() != '\n')
       *text_ += "\n";
-    if (address_ > staging)
-      assert(annotator_->annotate(featurizer_->featurize(separator), staging,
-                                  address_ - 1, (addr)0));
+    if (address_ > chunk_address_)
+      assert(annotator_->annotate(featurizer_->featurize(separator),
+                                  chunk_address_, address_ - 1, chunk_offset_));
     return true;
   }
   void commit_() {
@@ -157,7 +168,10 @@ private:
     address_ = staging;
     (*text_) = "";
   }
+  static const addr CHUNK_SIZE = 1000;
   addr address_;
+  addr chunk_address_;
+  addr chunk_offset_;
   std::shared_ptr<std::string> text_;
   std::shared_ptr<Featurizer> featurizer_;
   std::shared_ptr<Tokenizer> tokenizer_;
@@ -449,7 +463,7 @@ void Fiver::set_sequence(addr number) {
 
 void Fiver::get_sequence(addr *start, addr *end) {
   *start = sequence_start_;
-  *end  = sequence_end_;
+  *end = sequence_end_;
 }
 
 namespace {
