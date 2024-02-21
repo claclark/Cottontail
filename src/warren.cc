@@ -78,4 +78,9 @@ std::shared_ptr<Warren> Warren::make(const std::string &burrow,
   }
   return Warren::make(name, burrow, error);
 }
+
+std::shared_ptr<Warren> Warren::clone_(std::string *error) {
+  safe_set(error) = "Warren type does not support cloning: " + name();
+  return nullptr;
+}
 } // namespace cottontail

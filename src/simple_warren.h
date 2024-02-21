@@ -32,6 +32,7 @@ private:
                std::shared_ptr<Tokenizer> tokenizer, std::shared_ptr<Idx> idx,
                std::shared_ptr<Txt> txt)
       : Warren(working, featurizer, tokenizer, idx, txt){};
+  std::shared_ptr<Warren> clone_(std::string *error) final;
   bool set_parameter_(const std::string &key, const std::string &value,
                       std::string *error) final;
   bool get_parameter_(const std::string &key, std::string *value,

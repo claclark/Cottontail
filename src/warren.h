@@ -38,10 +38,6 @@ public:
         featurizer_(featurizer), tokenizer_(tokenizer), idx_(idx), txt_(txt){};
   inline std::string name() { return name_; }
   inline std::string recipe() { return recipe_(); }
-  inline bool clonable() { return clonable_(); }
-  inline std::shared_ptr<Warren> clone(std::string *error = nullptr) {
-    return clone_(error);
-  };
   inline void start() {
     assert(!started_);
     start_();
@@ -52,7 +48,7 @@ public:
     started_ = false;
     end_();
   }
-  inline void started() { assert(started_); }
+  inline bool started() { return started_; }
   inline std::shared_ptr<Working> working() { return working_; };
   inline std::shared_ptr<Featurizer> featurizer() { return featurizer_; };
   inline std::shared_ptr<Tokenizer> tokenizer() { return tokenizer_; };
@@ -64,14 +60,8 @@ public:
     assert(started_);
     return txt_;
   };
-  inline std::shared_ptr<Annotator> annotator() {
-    assert(annotator_ != nullptr);
-    return annotator_;
-  }
-  inline std::shared_ptr<Appender> appender() {
-    assert(appender_ != nullptr);
-    return appender_;
-  }
+  inline std::shared_ptr<Annotator> annotator() { return annotator_; }
+  inline std::shared_ptr<Appender> appender() { return appender_; }
   inline std::string default_container() {
     assert(started_);
     return default_container_;
@@ -113,7 +103,13 @@ public:
                             std::string *error = nullptr) {
     return get_parameter_(key, value, error);
   }
-
+  inline std::shared_ptr<Warren> clone(std::string *error = nullptr) {
+    if (started_) {
+      safe_set(error) = "Can't clone warren after start of query processing";
+      return nullptr;
+    }
+    return clone_(error);
+  }
   virtual ~Warren(){};
   Warren(const Warren &) = delete;
   Warren &operator=(const Warren &) = delete;
@@ -134,11 +130,7 @@ protected:
 
 private:
   virtual std::string recipe_() { return ""; };
-  virtual bool clonable_() { return false; }
-  virtual std::shared_ptr<Warren> clone_(std::string *error) {
-    safe_set(error) = "Warren can't be cloned";
-    return nullptr;
-  };
+  virtual std::shared_ptr<Warren> clone_(std::string *error);
   virtual void start_(){};
   virtual void end_(){};
   virtual bool set_parameter_(const std::string &key, const std::string &value,

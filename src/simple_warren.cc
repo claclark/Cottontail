@@ -91,6 +91,7 @@ std::shared_ptr<Warren> SimpleWarren::make(const std::string &burrow,
     return nullptr;
   std::shared_ptr<SimpleWarren> warren = std::shared_ptr<SimpleWarren>(
       new SimpleWarren(working, featurizer, tokenizer, idx, txt));
+  assert(warren != nullptr);
   warren->annotator_ = Annotator::make(
       idx_parameters["name"], idx_parameters["recipe"], error, working);
   if (warren->annotator_ == nullptr)
@@ -108,6 +109,21 @@ std::shared_ptr<Warren> SimpleWarren::make(const std::string &burrow,
     if (stemmer == nullptr)
       return nullptr;
     warren->stemmer_ = stemmer;
+  }
+  return warren;
+}
+
+std::shared_ptr<Warren> SimpleWarren::clone_(std::string *error) {
+  std::shared_ptr<SimpleWarren> warren = std::shared_ptr<SimpleWarren>(
+      new SimpleWarren(working_, featurizer_, tokenizer_, idx_, txt_));
+  assert(warren != nullptr);
+  warren->default_container_ = default_container_;
+  if (stemmer_ != nullptr) {
+    std::shared_ptr<cottontail::Stemmer> the_stemmer =
+        cottontail::Stemmer::make(stemmer_->name(), stemmer_->recipe(), error);
+    if (the_stemmer == nullptr)
+      return nullptr;
+    warren->stemmer_ = the_stemmer;
   }
   return warren;
 }

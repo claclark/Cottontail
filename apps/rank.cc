@@ -90,6 +90,7 @@ int main(int argc, char **argv) {
     std::cerr << program_name << ": " << error << "\n";
     return 1;
   }
+  warren->end();
   std::ifstream queriesf(queries_filename);
   if (queriesf.fail()) {
     std::cerr << program_name << ": can't open file: " + queries_filename
@@ -120,19 +121,13 @@ int main(int argc, char **argv) {
   std::string runid = "cottontail";
   auto solver = [&](size_t i) {
     std::string error;
-    std::shared_ptr<cottontail::Warren> larren;
-    if (warren->clonable()) {
-      larren = warren->clone(&error);
-      larren->start();
-    } else {
-      larren = warren;
-    }
+    std::shared_ptr<cottontail::Warren> larren = warren->clone();
+    larren->start();
     if (larren == nullptr) {
       output_lock.lock();
       std::cerr << program_name << ": " << error << "\n" << std::flush;
       output_lock.unlock();
-      if (warren->clonable())
-        larren->end();
+      larren->end();
       return;
     }
     std::string id_key = "id";
@@ -143,8 +138,7 @@ int main(int argc, char **argv) {
       std::cout << program_name << ": " << error << " can't find identifiers\n"
                 << std::flush;
       output_lock.unlock();
-      if (warren->clonable())
-        larren->end();
+      larren->end();
       return;
     }
     std::shared_ptr<cottontail::Ranker> rank =
@@ -153,8 +147,7 @@ int main(int argc, char **argv) {
       output_lock.lock();
       std::cerr << program_name << ": " << error << "\n" << std::flush;
       output_lock.unlock();
-      if (warren->clonable())
-        larren->end();
+      larren->end();
       return;
     }
     for (size_t j = i; j < topics.size(); j += threads) {
@@ -183,8 +176,7 @@ int main(int argc, char **argv) {
         }
       }
     }
-    if (warren->clonable())
-      larren->end();
+    larren->end();
   };
   time_t t0 = 0;
   if (verbose) {
@@ -201,6 +193,5 @@ int main(int argc, char **argv) {
     time_t t1 = time(NULL);
     std::cerr << "Ranking took: " << (t1 - t0) << " second(s) \n" << std::flush;
   }
-  warren->end();
   return 0;
 }

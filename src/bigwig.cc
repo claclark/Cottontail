@@ -30,6 +30,7 @@ public:
     }
     std::shared_ptr<BigwigAnnotator> annotator =
         std::shared_ptr<BigwigAnnotator>(new BigwigAnnotator());
+    assert(annotator != nullptr);
     annotator->fiver_ = fiver;
     return annotator;
   }
@@ -58,10 +59,11 @@ public:
       safe_set(error) = "BigwigAppender got null Fiver";
       return nullptr;
     }
-    std::shared_ptr<BigwigAppender> annotator =
+    std::shared_ptr<BigwigAppender> appender =
         std::shared_ptr<BigwigAppender>(new BigwigAppender());
-    annotator->fiver_ = fiver;
-    return annotator;
+    assert(appender != nullptr);
+    appender->fiver_ = fiver;
+    return appender;
   }
 
   virtual ~BigwigAppender(){};
@@ -85,6 +87,7 @@ public:
   make(const std::vector<std::shared_ptr<Warren>> &warrens) {
     std::shared_ptr<BigwigIdx> idx =
         std::shared_ptr<BigwigIdx>(new BigwigIdx());
+    assert(idx != nullptr);
     idx->warrens_ = warrens;
     return idx;
   };
@@ -140,6 +143,7 @@ public:
   make(const std::vector<std::shared_ptr<Warren>> &warrens) {
     std::shared_ptr<BigwigTxt> txt =
         std::shared_ptr<BigwigTxt>(new BigwigTxt());
+    assert(txt != nullptr);
     txt->warrens_ = warrens;
     return txt;
   };
@@ -403,6 +407,7 @@ std::shared_ptr<Bigwig> Bigwig::make(
   }
   std::shared_ptr<Bigwig> bigwig = std::shared_ptr<Bigwig>(
       new Bigwig(working, featurizer, tokenizer, nullptr, nullptr));
+  assert(bigwig != nullptr);
   bigwig->fiver_ = nullptr;
   if (fluffle == nullptr)
     bigwig->fluffle_ = Fluffle::make();
@@ -430,11 +435,9 @@ std::shared_ptr<Bigwig> Bigwig::make(
 }
 
 std::shared_ptr<Warren> Bigwig::clone_(std::string *error) {
-
   std::shared_ptr<Bigwig> bigwig = std::shared_ptr<Bigwig>(
       new Bigwig(working_, featurizer_, tokenizer_, nullptr, nullptr));
-  if (bigwig == nullptr)
-    return nullptr;
+  assert(bigwig != nullptr);
   bigwig->fluffle_ = fluffle_;
   bigwig->posting_compressor_ = posting_compressor_;
   bigwig->fvalue_compressor_ = fvalue_compressor_;
