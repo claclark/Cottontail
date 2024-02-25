@@ -64,7 +64,7 @@ private:
   std::string nameof_chunk_map_;
   std::streamsize chunk_size_;
   std::shared_ptr<Compressor> compressor_;
-  std::vector<std::streamoff> chunk_map_;
+  std::shared_ptr<std::vector<std::streamoff>> chunk_map_;
   bool chunk_valid_ = false;
   bool last_chunk_synced_ = true;
   bool flushed_ = true;
