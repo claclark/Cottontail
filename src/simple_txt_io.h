@@ -22,6 +22,7 @@ public:
   static void recover(const std::string &nameof_contents,
                       const std::string &nameof_chunk_map, addr chunk_size,
                       std::shared_ptr<Compressor> compressor, bool commit);
+  std::shared_ptr<SimpleTxtIO> clone(std::string *error = nullptr);
   void append(char *text, addr length);
   void flush() {
     if (read_only_)

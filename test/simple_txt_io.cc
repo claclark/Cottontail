@@ -52,6 +52,13 @@ void test_with_compressor(std::string compressor_name,
     std::unique_ptr<char[]> x = io->read(30, 3, &n);
     EXPECT_EQ(n, 3) << explanation;
     EXPECT_STREQ(x.get(), "cat") << explanation;
+    {
+      cottontail::addr m;
+      std::shared_ptr<cottontail::SimpleTxtIO> cl = io->clone();
+      std::unique_ptr<char[]> aaa = cl->read(22, 12, &m);
+      EXPECT_EQ(m, 12) << explanation;
+      EXPECT_STREQ(aaa.get(), "d...The cat ") /* << explanation */;
+    }
     std::unique_ptr<char[]> y = io->read(30, 100, &n);
     EXPECT_EQ(n, 41) << explanation;
     EXPECT_STREQ(y.get(), "cat in the hat...Testing one two three...")
@@ -150,8 +157,14 @@ void test_update(std::string compressor_name, std::streamsize chunk_size) {
     EXPECT_EQ(n, 15);
     EXPECT_STREQ(x.get(), "aliqua. Ut enim");
   }
+  size_t c = sizeof(test0) + sizeof(test1) - 10;
+  io = io->clone();
+  for (size_t i = 0; i < 99; i++) {
+    std::unique_ptr<char[]> x = io->read(i * a + c, 20, &n);
+    EXPECT_EQ(n, 20);
+    EXPECT_STREQ(x.get(), "sequat. Mauris pelle");
+  }
 }
-
 } // namespace
 
 TEST(UpdateTxtIO, Null) {
@@ -243,6 +256,11 @@ void test_transaction(std::string compressor_name, std::streamsize chunk_size) {
         std::unique_ptr<char[]> xyzzy = jo->read(jo->size() - 7, 5, &n);
         EXPECT_EQ(n, 5);
         EXPECT_STREQ(xyzzy.get(), "equal");
+        std::shared_ptr<cottontail::SimpleTxtIO> ko = jo->clone();
+        EXPECT_NE(ko, nullptr);
+        std::unique_ptr<char[]> foobar = ko->read(ko->size() - 7, 5, &n);
+        EXPECT_EQ(n, 5);
+        EXPECT_STREQ(foobar.get(), "equal");
       }
       EXPECT_EQ(expected_size, io->size());
       std::unique_ptr<char[]> y = io->read(expected_size - 4, 3, &n);

@@ -15,7 +15,7 @@
 #define EXPECT_STREQ(a, b) (assert(strcmp((a), (b)) == 0))
 #define ASSERT_STREQ(a, b) (assert(strcmp((a), (b)) == 0))
 
-#define TEST(a, b) void test_##b()
+#define TEST(a, b) void test_##a##_##b()
 
 #include <algorithm>
 #include <cassert>
@@ -34,4 +34,4 @@ void usage(std::string program_name) {
   std::cerr << "usage: " << program_name << "\n";
 }
 
-int main(int argc, char **argv) { return 0; }
+int main(int argc, char **argv) {return 0; }

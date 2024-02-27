@@ -57,6 +57,9 @@ public:
     started_ = readied_ = vote_ = false;
     lock_.unlock();
   }
+  inline bool transacting() {
+    return started_;
+  }
 
 protected:
   Committable(){};

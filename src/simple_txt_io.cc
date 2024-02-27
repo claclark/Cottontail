@@ -176,6 +176,35 @@ SimpleTxtIO::make(const std::string &nameof_contents,
   return thing;
 }
 
+std::shared_ptr<SimpleTxtIO> SimpleTxtIO::clone(std::string *error) {
+  if (transacting()) {
+    safe_set(error) = "Can't clone SimpleTxtIo during transaction";
+    return nullptr;
+  }
+  std::shared_ptr<SimpleTxtIO> io =
+      std::shared_ptr<SimpleTxtIO>(new SimpleTxtIO(
+          nameof_contents_, nameof_chunk_map_, chunk_size_, compressor_));
+  assert(io != nullptr);
+  io->chunk_ = std::unique_ptr<char[]>(new char[io->chunk_size_ + 1]);
+  assert(io->chunk_ != nullptr);
+  io->buffer_size_ = chunk_size_ + io->compressor_->extra(io->chunk_size_) + 1;
+  io->buffer_ = std::unique_ptr<char[]>(new char[io->buffer_size_]);
+  assert(io->buffer_ != nullptr);
+  io->contents_.open(nameof_contents_, std::ios::binary | std::ios::in);
+  if (io->contents_.fail()) {
+    safe_set(error) =
+        "SimpleTxtIO can't open file for cloning: " + io->nameof_contents_;
+    return nullptr;
+  }
+  io->read_only_ = true;
+  io->last_chunk_ = read_limits(nameof_contents_, &(io->chunk_map_limit_),
+                                &(io->last_chunk_end_));
+  io->limited_ = (io->last_chunk_ != nullptr);
+  io->chunk_map_ = chunk_map_;
+  io->size_ = size_;
+  return io;
+}
+
 void SimpleTxtIO::fetch_chunk(size_t chunk_index) {
   assert(chunk_map_->size() > 0 && chunk_index < chunk_map_->size());
   if (chunk_valid_ && chunk_index_ == chunk_index)
