@@ -105,12 +105,14 @@ private:
     std::unique_ptr<cottontail::Hopper> hopper = nullptr;
     for (size_t i = warrens_.size(); i > 0; --i)
       if (warrens_[i - 1] != nullptr) {
-        if (hopper == nullptr)
-          hopper = warrens_[i - 1]->idx()->hopper(feature);
-        else
-          hopper = std::make_unique<gcl::Merge>(
-              std::move(warrens_[i - 1]->idx()->hopper(feature)),
-              std::move(hopper));
+        if (warrens_[i - 1]->idx()->count(feature) > 0) {
+          if (hopper == nullptr)
+            hopper = warrens_[i - 1]->idx()->hopper(feature);
+          else
+            hopper = std::make_unique<gcl::Merge>(
+                std::move(warrens_[i - 1]->idx()->hopper(feature)),
+                std::move(hopper));
+        }
       }
     if (hopper == nullptr)
       return std::make_unique<EmptyHopper>();
