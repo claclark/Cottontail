@@ -121,15 +121,14 @@ int main(int argc, char **argv) {
   std::string runid = "cottontail";
   auto solver = [&](size_t i) {
     std::string error;
-    std::shared_ptr<cottontail::Warren> larren = warren->clone();
-    larren->start();
+    std::shared_ptr<cottontail::Warren> larren = warren->clone(&error);
     if (larren == nullptr) {
       output_lock.lock();
       std::cerr << program_name << ": " << error << "\n" << std::flush;
       output_lock.unlock();
-      larren->end();
       return;
     }
+    larren->start();
     std::string id_key = "id";
     std::unique_ptr<cottontail::Hopper> hopper =
         larren->hopper_from_gcl(docnos, &error);

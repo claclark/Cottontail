@@ -156,6 +156,7 @@ public:
 
 private:
   BigwigTxt(){};
+  std::string name_() final { return "bigwig"; };
   std::string recipe_() final { return ""; };
   std::string translate_(addr p, addr q) final {
     std::string result;

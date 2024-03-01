@@ -28,7 +28,7 @@ bool SimpleTxt::load_map(const std::string &txt_filename, std::string *error) {
     return false;
   }
   map_size_ = txtf_end / sizeof(TxtRecord) + 1;
-  map_ = std::unique_ptr<addr[]>(new addr[map_size_]);
+  map_ = shared_array<addr>(map_size_);
   addr *next = map_.get();
   TxtRecord txt;
   addr last_pq = -1;
@@ -141,6 +141,24 @@ std::string SimpleTxt::recipe_() {
   return freeze(parameters);
 }
 
+std::shared_ptr<Txt> SimpleTxt::clone_(std::string *error) {
+  std::shared_ptr<SimpleTxtIO> io = io_->clone(error);
+  if (io == nullptr)
+    return nullptr;
+  std::shared_ptr<SimpleTxt> txt = std::shared_ptr<SimpleTxt>(new SimpleTxt());
+  assert(txt != nullptr);
+  txt->io_ = io;
+  txt->tokenizer_ = tokenizer_;
+  txt->map_ = map_;
+  txt->map_size_ = map_size_;
+  txt->map_blocking_ = map_blocking_;
+  txt->computed_tokens_ = computed_tokens_;
+  txt->computed_tokens_valid_ = computed_tokens_valid_;
+  txt->compressor_name_ = compressor_name_;
+  txt->compressor_recipe_ = compressor_recipe_;
+  return txt;
+}
+
 std::string SimpleTxt::translate_(addr p, addr q) {
   if (p == maxfinity)
     return "";
@@ -154,12 +172,12 @@ std::string SimpleTxt::translate_(addr p, addr q) {
   if (p_block >= map_size_ - 1) {
     return "";
   }
-  addr offset = map_[p_block];
+  addr offset = map_.get()[p_block];
   addr q_block = (map_blocking_ == -1 ? 1 : q / map_blocking_ + 1);
   if (q_block >= map_size_) {
     q_block = map_size_ - 1;
   }
-  addr size = map_[q_block] - offset;
+  addr size = map_.get()[q_block] - offset;
   io_lock_.lock();
   std::unique_ptr<char[]> buffer_unique_ptr = io_->read(offset, size, &size);
   io_lock_.unlock();

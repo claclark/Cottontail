@@ -107,6 +107,9 @@ TEST(Simple, E2E) {
   {
     std::shared_ptr<cottontail::Txt> txt =
         cottontail::Txt::make(simple, empty_recipe, &error, tokenizer, working);
+    ASSERT_NE(txt, nullptr);
+    txt = txt->clone();
+    ASSERT_NE(txt, nullptr);
     std::string everything =
         txt->translate(cottontail::minfinity, cottontail::maxfinity);
     EXPECT_EQ(everything.size(), (size_t)(CHARACTERS * NUMBER));
@@ -464,12 +467,14 @@ TEST(Simple, Concurrent) {
   warren = cottontail::Warren::make(simple, burrow, &error);
   ASSERT_NE(warren, nullptr);
   auto solver = [&](int i) {
+    std::shared_ptr<cottontail::Warren> larren = warren->clone(); 
+    larren->start();
     sleep(i % 3);
     cottontail::addr p, q;
     if ((i / 3) % 2 == 0) {
       std::string query = "hello";
       std::unique_ptr<cottontail::Hopper> h =
-          warren->hopper_from_gcl(query, &error);
+          larren->hopper_from_gcl(query, &error);
       ASSERT_NE(h, nullptr);
       switch ((i / 6) % 5) {
       case 0:
@@ -493,12 +498,12 @@ TEST(Simple, Concurrent) {
         ASSERT_EQ(p, 5);
         break;
       }
-      std::string word = warren->txt()->translate(p, q);
+      std::string word = larren->txt()->translate(p, q);
       ASSERT_EQ(word.substr(0, 5), "hello");
     } else {
       std::string query = "world";
       std::unique_ptr<cottontail::Hopper> h =
-          warren->hopper_from_gcl(query, &error);
+          larren->hopper_from_gcl(query, &error);
       ASSERT_NE(h, nullptr);
       switch ((i / 6) % 5) {
       case 0:
@@ -522,15 +527,14 @@ TEST(Simple, Concurrent) {
         ASSERT_EQ(p, 30);
         break;
       }
-      std::string word = warren->txt()->translate(p, q);
+      std::string word = larren->txt()->translate(p, q);
       ASSERT_EQ(word.substr(0, 5), "world");
     }
+    larren->end();
   };
-  warren->start();
   std::vector<std::thread> workers;
   for (int i = 0; i < 100; i++)
     workers.emplace_back(std::thread(solver, i));
   for (auto &worker : workers)
     worker.join();
-  warren->end();
 }

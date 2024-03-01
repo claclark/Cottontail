@@ -30,6 +30,7 @@ public:
 
 private:
   FastidTxt(){};
+  std::string name_() final {return FASTID_NAME;};
   std::string recipe_() final;
   std::string translate_(addr p, addr q) final;
   addr tokens_() final;

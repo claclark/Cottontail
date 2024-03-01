@@ -423,6 +423,8 @@ void love(cottontail::addr n) {
   for (cottontail::addr i = 0; i < m; i++)
     workers.emplace_back(std::thread(append_worker, std::string(love[i])));
   workers.emplace_back(std::thread(check_worker, "love", 4 * n));
+  for (auto &worker : workers)
+    worker.join();
   cottontail::addr lines = 0;
   while (lines < n * m) {
     bigwig->start();
@@ -438,18 +440,16 @@ void love(cottontail::addr n) {
     lines = current;
   }
   EXPECT_EQ(lines, n * m);
-  for (auto &worker : workers)
-    worker.join();
 }
 
-TEST(bigwig, Love) {
+TEST(Bigwig, Love) {
   love(1);
   love(5);
   love(18);
   love(113);
 }
 
-TEST(bigwig, Durable) {
+TEST(Bigwig, Durable) {
   std::string burrow_name = "bigwig.burrow";
   {
     std::shared_ptr<cottontail::Working> working =

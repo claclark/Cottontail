@@ -38,6 +38,7 @@ public:
 
 private:
   NullTxt() {};
+  std::string name_() { return "null"; };
   std::string recipe_() { return ""; };
   std::string translate_(addr p, addr q) { return ""; }
   addr tokens_() { return 0; };

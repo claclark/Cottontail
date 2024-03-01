@@ -29,7 +29,9 @@ public:
 
 private:
   SimpleTxt(){};
+  std::string name_() final {return "simple";};
   std::string recipe_() final;
+  std::shared_ptr<Txt> clone_(std::string *error) final;
   std::string translate_(addr p, addr q) final;
   addr tokens_() final;
   bool load_map(const std::string &txt_filename, std::string *error);
@@ -37,7 +39,7 @@ private:
   std::shared_ptr<Tokenizer> tokenizer_;
   std::mutex io_lock_;
   std::shared_ptr<SimpleTxtIO> io_;
-  std::unique_ptr<addr[]> map_;
+  std::shared_ptr<addr> map_;
   addr map_size_;
   addr map_blocking_;
   addr computed_tokens_;

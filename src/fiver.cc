@@ -250,6 +250,7 @@ public:
 
 private:
   FiverTxt(){};
+  std::string name_() final { return "fiver"; };
   std::string recipe_() final { return ""; };
   std::string translate_(addr p, addr q) final {
     if (p < 0)

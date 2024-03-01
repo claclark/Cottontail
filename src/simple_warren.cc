@@ -114,8 +114,11 @@ std::shared_ptr<Warren> SimpleWarren::make(const std::string &burrow,
 }
 
 std::shared_ptr<Warren> SimpleWarren::clone_(std::string *error) {
+  std::shared_ptr<Txt> txt = txt_->clone();
+  if (txt == nullptr)
+    txt = txt_;
   std::shared_ptr<SimpleWarren> warren = std::shared_ptr<SimpleWarren>(
-      new SimpleWarren(working_, featurizer_, tokenizer_, idx_, txt_));
+      new SimpleWarren(working_, featurizer_, tokenizer_, idx_, txt));
   assert(warren != nullptr);
   warren->default_container_ = default_container_;
   if (stemmer_ != nullptr) {
