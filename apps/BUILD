@@ -408,6 +408,18 @@ cc_binary(
 )
 
 cc_binary(
+    name = "utf8-tables",
+    srcs = [
+      "utf8-tables.cc",
+    ],
+    deps = [
+      "//src:cottontail",
+    ] ,
+    linkopts = [
+    ],
+)
+
+cc_binary(
     name = "working",
     srcs = [
       "working.cc",

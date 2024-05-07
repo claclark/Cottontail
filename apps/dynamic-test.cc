@@ -269,8 +269,8 @@ int main(int argc, char **argv) {
     }
   };
 
-  std::cerr << "Sleeping to let merge finish...\n";
-  sleep(5 * 60);
+//  std::cerr << "Sleeping to let merge finish...\n";
+//  sleep(5 * 60);
 
   std::cerr << "Release the rankers...\n" << std::flush;
   time_t t0 = time(NULL);
