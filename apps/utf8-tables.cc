@@ -5,7 +5,7 @@
 #include "src/utf8_tokenizer.h"
 
 void usage(std::string program_name) {
-  std::cerr << "usage: " << program_name << " [unicode [folding]]";
+  std::cerr << "usage: " << program_name << " [unicode [folding [recipe]]]\n";
 }
 
 int main(int argc, char **argv) {
@@ -16,16 +16,19 @@ int main(int argc, char **argv) {
   }
   std::string unicode = "UnicodeData.txt";
   std::string folding = "CaseFolding.txt";
-  if (argc > 3) {
+  std::string recipe = "";
+  if (argc > 4) {
     usage(program_name);
     return 1;
   }
-  if (argc == 3)
+  if (argc == 4)
+    recipe = argv[3];
+  if (argc >= 3)
     folding = argv[2];
   if (argc >= 2)
     unicode = argv[1];
   std::string error;
-  if (!cottontail::utf8_tables(unicode, folding, &error)) {
+  if (!cottontail::utf8_tables(unicode, folding, recipe, &error)) {
     std::cerr << program_name << ": " << error << "\n";
     return 1;
   }

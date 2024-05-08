@@ -11,7 +11,7 @@
 namespace cottontail {
 
 bool utf8_tables(const std::string &unicode_filename,
-                 const std::string &folding_filename,
+                 const std::string &folding_filename, const std::string &recipe,
                  std::string *error = nullptr);
 } // namespace cottontail
 
