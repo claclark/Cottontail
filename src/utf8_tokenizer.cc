@@ -222,4 +222,45 @@ bool utf8_tables(const std::string &unicode_filename,
   write_compressed_folds(foldings, recipe);
   return true;
 }
+
+std::shared_ptr<Tokenizer> Utf8Tokenizer::make(const std::string &recipe,
+                                               std::string *error) {
+  if (recipe == "") {
+    std::shared_ptr<Utf8Tokenizer> tokenizer =
+        std::shared_ptr<Utf8Tokenizer>(new Utf8Tokenizer());
+    return tokenizer;
+  } else {
+    safe_set(error) = "Can't make Utf8Tokenizer from recipe: " + recipe;
+    return nullptr;
+  }
+}
+
+bool Utf8Tokenizer::check(const std::string &recipe,
+                                                std::string *error) {
+  if (recipe == "") {
+    return true;
+  } else {
+    safe_set(error) = "Bad Utf8Tokenizer recipe: " + recipe;
+    return false;
+  }
+}
+
+std::string Utf8Tokenizer::recipe_() { return ""; }
+
+std::vector<Token>
+Utf8Tokenizer::tokenize_(std::shared_ptr<Featurizer> featurizer, char *buffer,
+                         size_t length) {
+  std::vector<Token> tokens;
+  return tokens;
+}
+
+const char *Utf8Tokenizer::skip_(const char *buffer, size_t length, addr n) {
+  return buffer;
+}
+
+std::vector<std::string> Utf8Tokenizer::split_(const std::string &text) {
+  std::vector<std::string> tokens;
+  return tokens;
+}
+
 } // namespace cottontail

@@ -225,7 +225,7 @@ bool AsciiTokenizer::check(const std::string &recipe, std::string *error) {
   if (recipe == "" || recipe == "xml" || recipe == "noxml") {
     return true;
   } else {
-    safe_set(error) = "Bad AsciiTokenizer recipe";
+    safe_set(error) = "Bad AsciiTokenizer recipe: " + recipe;
     return false;
   }
 }
