@@ -3,7 +3,7 @@
 
 namespace {
 
-struct {
+struct CompressedAction {
   size_t n;
   uint8_t action;
 } compressed_actions[] = {
@@ -506,7 +506,7 @@ struct {
     {1506, 0},   {4939, 4}, {5, 0},    {4192, 4}, {712016, 0}, {240, 1},
     {1179152, 0}};
 
-struct {
+struct CompressedFold {
   uint32_t src, dst;
 } compressed_folds[] = {
     {65, 97},         {66, 98},         {67, 99},         {68, 100},

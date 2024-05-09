@@ -4,6 +4,7 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <mutex>
 
 #include "src/core.h"
 #include "src/tokenizer.h"
@@ -23,7 +24,13 @@ public:
   Utf8Tokenizer &operator=(Utf8Tokenizer &&) = delete;
 
 private:
-  Utf8Tokenizer (){};
+  Utf8Tokenizer ();
+  static std::mutex lock_;
+  static uint8_t action_token_;
+  static uint8_t action_unigram_;
+  static uint8_t action_bigram_;
+  static uint8_t **actions_;
+  static uint8_t *folds_;
   std::string recipe_() final;
   std::vector<Token> tokenize_(std::shared_ptr<Featurizer> featurizer,
                                char *buffer, size_t length) final;
