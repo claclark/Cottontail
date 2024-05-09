@@ -217,7 +217,8 @@ bool utf8_tables(const std::string &unicode_filename,
   for (size_t i = 0; i < UTF8_MAX; i++)
     actions.push_back(ACTION_NONTOKEN);
   bool ideograph = false;
-  uint32_t ideograph_start = UTF8_MAX;
+  bool range = false;
+  uint32_t range_start = UTF8_MAX;
   std::string line;
   while (std::getline(unicodef, line)) {
     std::vector<std::string> fields = split(line, ";");
@@ -231,15 +232,19 @@ bool utf8_tables(const std::string &unicode_filename,
     std::string name = fields[1];
     std::string category = fields[2];
     if (action_token(category)) {
-      if (ideograph) {
-        for (size_t i = ideograph_start; i <= codepoint; i++)
-          actions[i] = ACTION_BIGRAM;
-        ideograph = false;
-      } else if (name.find("Ideograph") == std::string::npos) {
-        actions[codepoint] = ACTION_TOKEN;
+      if (range) {
+        for (size_t i = range_start; i <= codepoint; i++)
+          if (ideograph)
+            actions[i] = ACTION_BIGRAM;
+          else
+            actions[i] = ACTION_TOKEN;
+        range = ideograph = false;
+      } else if (name.find("First") != std::string::npos) {
+        range = true;
+        range_start = codepoint;
+        ideograph = (name.find("Ideograph") != std::string::npos);
       } else {
-        ideograph = true;
-        ideograph_start = codepoint;
+        actions[codepoint] = ACTION_TOKEN;
       }
     } else if (action_unigram(category)) {
       actions[codepoint] = ACTION_UNIGRAM;
