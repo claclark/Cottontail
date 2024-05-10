@@ -235,7 +235,7 @@ bool utf8_tables(const std::string &unicode_filename,
       if (range) {
         for (size_t i = range_start; i <= codepoint; i++)
           if (ideograph)
-            actions[i] = ACTION_BIGRAM;
+            actions[i] = ACTION_UNIGRAM;
           else
             actions[i] = ACTION_TOKEN;
         range = ideograph = false;
