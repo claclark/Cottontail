@@ -34,4 +34,8 @@ void usage(std::string program_name) {
   std::cerr << "usage: " << program_name << "\n";
 }
 
-int main(int argc, char **argv) {return 0; }
+int main(int argc, char **argv) {
+  std::string program_name = argv[0];
+  std::string error;
+  return 0;
+}
