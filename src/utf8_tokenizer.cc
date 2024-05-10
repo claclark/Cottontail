@@ -235,7 +235,7 @@ bool utf8_tables(const std::string &unicode_filename,
       if (range) {
         for (size_t i = range_start; i <= codepoint; i++)
           if (ideograph)
-            actions[i] = ACTION_UNIGRAM;
+            actions[i] = ACTION_BIGRAM;
           else
             actions[i] = ACTION_TOKEN;
         range = ideograph = false;
@@ -309,10 +309,8 @@ Utf8Tokenizer::Utf8Tokenizer() {
           actions_[codepoint] = folds_ + offset[codepoint];
           break;
         case ACTION_UNIGRAM:
+        case ACTION_BIGRAM: // bigrams might be useful in a future recipe
           actions_[codepoint] = &action_unigram_;
-          break;
-        case ACTION_BIGRAM:
-          actions_[codepoint] = &action_bigram_;
           break;
         default:
           assert(false);
