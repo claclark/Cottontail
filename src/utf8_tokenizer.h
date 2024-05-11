@@ -36,7 +36,7 @@ private:
                                char *buffer, size_t length) final;
   const char *skip_(const char *buffer, size_t length, addr n) final;
   std::vector<std::string> split_(const std::string &text) final;
-  bool destructive_() final { return true; };
+  bool destructive_() final { return false; };
 };
 
 bool utf8_tables(const std::string &unicode_filename,

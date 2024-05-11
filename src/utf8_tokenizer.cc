@@ -102,13 +102,6 @@ inline bool action_unigram(const std::string &category) {
   return category == "So";
 }
 
-void set_fold_actions(const std::map<uint32_t, uint32_t> &foldings,
-                      std::vector<int8_t> *actions) {
-  for (auto &folding : foldings)
-    if ((*actions)[folding.first] == ACTION_TOKEN)
-      (*actions)[folding.first] = ACTION_FOLD;
-}
-
 void write_compressed_actions(const std::vector<int8_t> &actions,
                               const std::string &recipe) {
   size_t i = 0;
@@ -174,28 +167,53 @@ inline void utf8(uint32_t codepoint, std::vector<uint8_t> *s) {
   }
 }
 
-inline const uint8_t *unicode(const uint8_t *s, uint32_t *codepoint) {
+bool set_fold_actions(const std::map<uint32_t, uint32_t> &foldings,
+                      std::vector<int8_t> *actions, std::string *error) {
+
+  for (auto &folding : foldings)
+    if ((*actions)[folding.first] == ACTION_TOKEN)
+      (*actions)[folding.first] = ACTION_FOLD;
+  return true;
+}
+
+inline const uint8_t *unicode(const uint8_t *s, const uint8_t *e,
+                              uint32_t *codepoint) {
   if ((s[0] & 0x80) == 0x00) {
     *codepoint = s[0];
     return s + 1;
-  } else if (((s[0] & 0xE0) == 0xC0) && ((s[1] & 0xC0) == 0x80)) {
+  }
+  if ((s[0] & 0xE0) == 0xC0) {
+    const uint8_t *t = s + 2;
+    if (t > e) {
+      *codepoint = 0x20;
+      return s + 1;
+    }
     *codepoint = (((uint32_t)(s[0] & 0x1F)) << 6) | ((uint32_t)(s[1] & 0x3F));
-    return s + 2;
-  } else if (((s[0] & 0xF0) == 0XE0) && ((s[1] & 0xC0) == 0x80) &&
-             ((s[2] & 0xC0) == 0x80)) {
+    return t;
+  }
+  if ((s[0] & 0xF0) == 0XE0) {
+    const uint8_t *t = s + 3;
+    if (t > e) {
+      *codepoint = 0x20;
+      return s + 1;
+    }
     *codepoint = (((uint32_t)(s[0] & 0x0F)) << 12) |
                  (((uint32_t)(s[1] & 0x3F)) << 6) | ((uint32_t)(s[2] & 0x3F));
-    return s + 3;
-  } else if (((*s & 0xF8) == 0XF0) && ((s[1] & 0xC0) == 0x80) &&
-             ((s[2] & 0xC0) == 0x80) && ((s[3] & 0xC0) == 0x80)) {
+    return t;
+  }
+  if ((*s & 0xF8) == 0XF0) {
+    const uint8_t *t = s + 4;
+    if (t > e) {
+      *codepoint = 0x20;
+      return s + 1;
+    }
     *codepoint = (((uint32_t)(s[0] & 0x07)) << 18) |
                  (((uint32_t)(s[1] & 0x3F)) << 12) |
                  (((uint32_t)(s[2] & 0x3F)) << 6) | ((uint32_t)(s[3] & 0x3F));
-    return s + 4;
-  } else {
-    *codepoint = 0x20;
-    return s + 1;
+    return t;
   }
+  *codepoint = 0x20;
+  return s + 1;
 }
 
 } // namespace
@@ -265,7 +283,8 @@ bool utf8_tables(const std::string &unicode_filename,
     if (status == "C" || status == "S")
       foldings[source] = target;
   };
-  set_fold_actions(foldings, &actions);
+  if (!set_fold_actions(foldings, &actions, error))
+    return false;
   write_compressed_actions(actions, recipe);
   std::cout << "\n";
   write_compressed_folds(foldings, recipe);
@@ -348,8 +367,123 @@ std::string Utf8Tokenizer::recipe_() { return ""; }
 
 std::vector<Token>
 Utf8Tokenizer::tokenize_(std::shared_ptr<Featurizer> featurizer, char *buffer,
-                         size_t length) {
+                         size_t n) {
   std::vector<Token> tokens;
+  const uint8_t *s = (const uint8_t *)buffer;
+  const uint8_t *e = s + n;
+  addr feature, address = 0;
+  size_t offset, length;
+  std::string token;
+  int state = ACTION_NONTOKEN;
+  while (s < e) {
+    uint32_t codepoint;
+    const uint8_t *t = unicode(s, e, &codepoint);
+    uint8_t *action = actions_[codepoint];
+    switch (state) {
+    case ACTION_NONTOKEN:
+      if (action != nullptr) {
+        if (action == &action_token_) {
+          state = ACTION_TOKEN;
+          token = "";
+          offset = s - (const uint8_t *)buffer;
+          for (const uint8_t *u = s; u < t; u++)
+            token.push_back(*u);
+        } else if (action == &action_bigram_) {
+          state = ACTION_BIGRAM;
+          token = "";
+          offset = s - (const uint8_t *)buffer;
+          for (const uint8_t *u = s; u < t; u++)
+            token.push_back(*u);
+        } else if (action == &action_unigram_) {
+          offset = s - (const uint8_t *)buffer;
+          length = t - s;
+          feature = featurizer->featurize((char *)s, length);
+          tokens.emplace_back(feature, address, offset, length);
+          address++;
+        } else {
+          state = ACTION_TOKEN;
+          token = "";
+          offset = s - (const uint8_t *)buffer;
+          for (token.push_back(*action++); (*action & 0xC0) == 0x80;
+               token.push_back(*action++))
+            ;
+        }
+      }
+      break;
+    case ACTION_TOKEN:
+      if (action == nullptr) {
+        state = ACTION_NONTOKEN;
+        feature = featurizer->featurize(token);
+        tokens.emplace_back(feature, address, offset, token.length());
+        address++;
+      } else if (action == &action_token_) {
+        for (const uint8_t *u = s; u < t; u++)
+          token.push_back(*u);
+      } else if (action == &action_bigram_) {
+        state = ACTION_BIGRAM;
+        feature = featurizer->featurize(token);
+        tokens.emplace_back(feature, address, offset, token.length());
+        address++;
+        token = "";
+        offset = s - (const uint8_t *)buffer;
+        for (const uint8_t *u = s; u < t; u++)
+          token.push_back(*u);
+      } else if (action == &action_unigram_) {
+        state = ACTION_NONTOKEN;
+        feature = featurizer->featurize(token);
+        tokens.emplace_back(feature, address, offset, token.length());
+        address++;
+        offset = s - (const uint8_t *)buffer;
+        length = t - s;
+        feature = featurizer->featurize((char *)s, length);
+        tokens.emplace_back(feature, address, offset, length);
+        address++;
+      } else {
+        for (token.push_back(*action++); (*action & 0xC0) == 0x80;
+             token.push_back(*action++))
+          ;
+      }
+      break;
+    case ACTION_BIGRAM:
+      if (action == nullptr) {
+        state = ACTION_NONTOKEN;
+      } else if (action == &action_token_) {
+        state = ACTION_TOKEN;
+        token = "";
+        offset = s - (const uint8_t *)buffer;
+        for (const uint8_t *u = s; u < t; u++)
+          token.push_back(*u);
+      } else if (action == &action_bigram_) {
+        for (const uint8_t *u = s; u < t; u++)
+          token.push_back(*u);
+        feature = featurizer->featurize(token);
+        tokens.emplace_back(feature, address, offset, token.length());
+        address++;
+        token = "";
+        offset = s - (const uint8_t *)buffer;
+        for (const uint8_t *u = s; u < t; u++)
+          token.push_back(*u);
+      } else if (action == &action_unigram_) {
+        state = ACTION_NONTOKEN;
+        offset = s - (const uint8_t *)buffer;
+        length = t - s;
+        feature = featurizer->featurize((char *)s, length);
+        tokens.emplace_back(feature, address, offset, length);
+        address++;
+      } else {
+        state = ACTION_TOKEN;
+        token = "";
+        offset = s - (const uint8_t *)buffer;
+        for (token.push_back(*action++); (*action & 0xC0) == 0x80;
+             token.push_back(*action++))
+          ;
+      }
+      break;
+    default:
+      assert(false);
+    }
+    s = t;
+  }
   return tokens;
 }
 
@@ -361,10 +495,11 @@ std::vector<std::string> Utf8Tokenizer::split_(const std::string &text) {
   std::vector<std::string> tokens;
   int state = ACTION_NONTOKEN;
   const uint8_t *s = (const uint8_t *)text.c_str();
+  const uint8_t *e = s + text.length();
   std::string token;
   while (*s) {
     uint32_t codepoint;
-    const uint8_t *t = unicode(s, &codepoint);
+    const uint8_t *t = unicode(s, e, &codepoint);
     uint8_t *action = actions_[codepoint];
     switch (state) {
     case ACTION_NONTOKEN:
