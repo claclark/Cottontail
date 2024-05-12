@@ -492,7 +492,61 @@ Utf8Tokenizer::tokenize_(std::shared_ptr<Featurizer> featurizer, char *buffer,
 }
 
 const char *Utf8Tokenizer::skip_(const char *buffer, size_t length, addr n) {
-  return buffer;
+  int state = ACTION_NONTOKEN;
+  const uint8_t *s = (const uint8_t *)buffer;
+  const uint8_t *e = s + length;
+  while (s < e) {
+    uint32_t codepoint;
+    const uint8_t *t = unicode(s, e, &codepoint);
+    uint8_t *action = actions_[codepoint];
+    switch (state) {
+    case ACTION_NONTOKEN:
+      if (action != nullptr) {
+        if (n <= 0)
+          return (const char *)s;
+        if (action == &action_token_) {
+          state = ACTION_TOKEN;
+        } else if (action == &action_bigram_) {
+          state = ACTION_BIGRAM;
+        } else if (action == &action_unigram_) {
+          --n;
+        } else {
+          state = ACTION_TOKEN;
+        }
+      }
+      break;
+    case ACTION_TOKEN:
+      if (action == nullptr) {
+        state = ACTION_NONTOKEN;
+        --n;
+      } else if (action == &action_bigram_) {
+        state = ACTION_BIGRAM;
+        --n;
+      } else if (action == &action_unigram_) {
+        state = ACTION_NONTOKEN;
+        n -= 2;
+      }
+      break;
+    case ACTION_BIGRAM:
+      if (action == nullptr) {
+        state = ACTION_NONTOKEN;
+      } else if (action == &action_token_) {
+        state = ACTION_TOKEN;
+      } else if (action == &action_bigram_) {
+        --n;
+      } else if (action == &action_unigram_) {
+        state = ACTION_NONTOKEN;
+        --n;
+      } else {
+        state = ACTION_TOKEN;
+      }
+      break;
+    default:
+      assert(false);
+    }
+    s = t;
+  }
+  return (const char *)s;
 }
 
 std::vector<std::string> Utf8Tokenizer::split_(const std::string &text) {
