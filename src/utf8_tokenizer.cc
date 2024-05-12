@@ -367,13 +367,13 @@ std::string Utf8Tokenizer::recipe_() { return ""; }
 
 std::vector<Token>
 Utf8Tokenizer::tokenize_(std::shared_ptr<Featurizer> featurizer, char *buffer,
-                         size_t n) {
+                         size_t length) {
   std::vector<Token> tokens;
   const uint8_t *s = (const uint8_t *)buffer;
-  const uint8_t *e = s + n;
-  addr feature, address = 0;
-  size_t offset, length;
+  const uint8_t *e = s + length;
+  size_t offset;
   std::string token;
+  addr feature, address = 0;
   int state = ACTION_NONTOKEN;
   while (s < e) {
     uint32_t codepoint;
@@ -396,9 +396,9 @@ Utf8Tokenizer::tokenize_(std::shared_ptr<Featurizer> featurizer, char *buffer,
             token.push_back(*u);
         } else if (action == &action_unigram_) {
           offset = s - (const uint8_t *)buffer;
-          length = t - s;
-          feature = featurizer->featurize((char *)s, length);
-          tokens.emplace_back(feature, address, offset, length);
+          addr n = t - s;
+          feature = featurizer->featurize((char *)s, n);
+          tokens.emplace_back(feature, address, offset, n);
           address++;
         } else {
           state = ACTION_TOKEN;
@@ -414,7 +414,8 @@ Utf8Tokenizer::tokenize_(std::shared_ptr<Featurizer> featurizer, char *buffer,
       if (action == nullptr) {
         state = ACTION_NONTOKEN;
         feature = featurizer->featurize(token);
-        tokens.emplace_back(feature, address, offset, token.length());
+        addr n = (s - (const uint8_t *)buffer) - offset;
+        tokens.emplace_back(feature, address, offset, n);
         address++;
       } else if (action == &action_token_) {
         for (const uint8_t *u = s; u < t; u++)
@@ -422,7 +423,8 @@ Utf8Tokenizer::tokenize_(std::shared_ptr<Featurizer> featurizer, char *buffer,
       } else if (action == &action_bigram_) {
         state = ACTION_BIGRAM;
         feature = featurizer->featurize(token);
-        tokens.emplace_back(feature, address, offset, token.length());
+        addr n = (s - (const uint8_t *)buffer) - offset;
+        tokens.emplace_back(feature, address, offset, n);
         address++;
         token = "";
         offset = s - (const uint8_t *)buffer;
@@ -431,12 +433,13 @@ Utf8Tokenizer::tokenize_(std::shared_ptr<Featurizer> featurizer, char *buffer,
       } else if (action == &action_unigram_) {
         state = ACTION_NONTOKEN;
         feature = featurizer->featurize(token);
-        tokens.emplace_back(feature, address, offset, token.length());
+        addr n = (s - (const uint8_t *)buffer) - offset;
+        tokens.emplace_back(feature, address, offset, n);
         address++;
         offset = s - (const uint8_t *)buffer;
-        length = t - s;
-        feature = featurizer->featurize((char *)s, length);
-        tokens.emplace_back(feature, address, offset, length);
+        n = t - s;
+        feature = featurizer->featurize((char *)s, n);
+        tokens.emplace_back(feature, address, offset, n);
         address++;
       } else {
         for (token.push_back(*action++); (*action & 0xC0) == 0x80;
@@ -457,7 +460,8 @@ Utf8Tokenizer::tokenize_(std::shared_ptr<Featurizer> featurizer, char *buffer,
         for (const uint8_t *u = s; u < t; u++)
           token.push_back(*u);
         feature = featurizer->featurize(token);
-        tokens.emplace_back(feature, address, offset, token.length());
+        addr n = (t - (const uint8_t *)buffer) - offset;
+        tokens.emplace_back(feature, address, offset, n);
         address++;
         token = "";
         offset = s - (const uint8_t *)buffer;
@@ -466,9 +470,9 @@ Utf8Tokenizer::tokenize_(std::shared_ptr<Featurizer> featurizer, char *buffer,
       } else if (action == &action_unigram_) {
         state = ACTION_NONTOKEN;
         offset = s - (const uint8_t *)buffer;
-        length = t - s;
-        feature = featurizer->featurize((char *)s, length);
-        tokens.emplace_back(feature, address, offset, length);
+        addr n = t - s;
+        feature = featurizer->featurize((char *)s, n);
+        tokens.emplace_back(feature, address, offset, n);
         address++;
       } else {
         state = ACTION_TOKEN;
