@@ -52,6 +52,7 @@ TEST(Utf8Tokenizer, Tokenize) {
   ASSERT_NE(tokenizer, nullptr);
   std::shared_ptr<cottontail::Featurizer> featurizer =
       cottontail::Featurizer::make("hashing", "");
+  ASSERT_NE(featurizer, nullptr);
   tokenize_test(tokenizer, featurizer, "hello world");
   tokenize_test(tokenizer, featurizer, "HeLlO***WoRld");
   tokenize_test(tokenizer, featurizer, "");
@@ -178,4 +179,87 @@ TEST(Utf8Tokenizer, Split) {
   EXPECT_EQ(tokens.size(), 18);
   EXPECT_EQ(tokens[0], "استقبل");
   EXPECT_EQ(tokens[17], "الدكتور");
+}
+
+namespace {
+void skip_test(std::shared_ptr<cottontail::Tokenizer> tokenizer,
+               std::shared_ptr<cottontail::Featurizer> featurizer,
+               const std::string &target) {
+  size_t n = target.length() + 1;
+  std::unique_ptr<char[]> buffer = std::unique_ptr<char[]>(new char[n]);
+  strcpy(buffer.get(), target.c_str());
+  std::vector<cottontail::Token> tokens =
+      tokenizer->tokenize(featurizer, buffer.get(), n);
+  for (size_t i = 0; i < tokens.size(); i++) {
+    const char *remainder = tokenizer->skip(target.c_str(), target.length(), i);
+    EXPECT_EQ(target.length(), tokens[i].offset + strlen(remainder));
+  }
+}
+} // namespace
+
+TEST(Utf8Tokenizer, Skip) {
+  std::shared_ptr<cottontail::Tokenizer> tokenizer =
+      cottontail::Tokenizer::make("utf8", "");
+  ASSERT_NE(tokenizer, nullptr);
+  std::shared_ptr<cottontail::Featurizer> featurizer =
+      cottontail::Featurizer::make("hashing", "");
+  ASSERT_NE(featurizer, nullptr);
+  std::string s;
+  s = "(((((hello ((world)))))))";
+  skip_test(tokenizer, featurizer, std::string(s));
+  EXPECT_STREQ("hello ((world)))))))",
+               tokenizer->skip(s.c_str(), s.length(), 0));
+  EXPECT_STREQ("world)))))))", tokenizer->skip(s.c_str(), s.length(), 1));
+  EXPECT_STREQ("", tokenizer->skip(s.c_str(), s.length(), 2));
+  EXPECT_STREQ("", tokenizer->skip(s.c_str(), s.length(), 3));
+  s = libai[0];
+  skip_test(tokenizer, featurizer, std::string(s));
+  EXPECT_STREQ("自遣 (李白)  Entertaining myself (Li Bai)",
+               tokenizer->skip(s.c_str(), s.length(), 0));
+  EXPECT_STREQ("白)  Entertaining myself (Li Bai)",
+               tokenizer->skip(s.c_str(), s.length(), 3));
+  EXPECT_STREQ("Bai)", tokenizer->skip(s.c_str(), s.length(), 7));
+  EXPECT_STREQ("", tokenizer->skip(s.c_str(), s.length(), 999));
+  skip_test(tokenizer, featurizer, std::string(s));
+  s = "Mixing英语and中文with no spaces";
+  skip_test(tokenizer, featurizer, std::string(s));
+  EXPECT_STREQ("Mixing英语and中文with no spaces",
+               tokenizer->skip(s.c_str(), s.length(), -99));
+  EXPECT_STREQ("Mixing英语and中文with no spaces",
+               tokenizer->skip(s.c_str(), s.length(), 0));
+  EXPECT_STREQ("语and中文with no spaces",
+               tokenizer->skip(s.c_str(), s.length(), 2));
+  EXPECT_STREQ("and中文with no spaces",
+               tokenizer->skip(s.c_str(), s.length(), 3));
+  EXPECT_STREQ("中文with no spaces", tokenizer->skip(s.c_str(), s.length(), 4));
+  EXPECT_STREQ("文with no spaces", tokenizer->skip(s.c_str(), s.length(), 5));
+  EXPECT_STREQ("with no spaces", tokenizer->skip(s.c_str(), s.length(), 6));
+  EXPECT_STREQ("no spaces", tokenizer->skip(s.c_str(), s.length(), 7));
+  EXPECT_STREQ("spaces", tokenizer->skip(s.c_str(), s.length(), 8));
+  EXPECT_STREQ("", tokenizer->skip(s.c_str(), s.length(), 9));
+  EXPECT_STREQ("", tokenizer->skip(s.c_str(), s.length(), 9999));
+  s = "...If you need to find an ATM in order to withdraw 💲 money, then send "
+      "the combination 🆘🏧 — “Where is the ATM?” by combining just two "
+      "emoticons – emoji 🆘 SOS sign and 🏧 ATM sign emojis.";
+  skip_test(tokenizer, featurizer, std::string(s));
+  s = "４月26日、楊宇駐日臨時代理大使は日本創価学会の招きに応じ、間もなく中国を"
+      "訪れる予定の創価学会の代表団に向けてスピーチした。";
+  skip_test(tokenizer, featurizer, std::string(s));
+  s = "Capi was dormido aquí.  The girl say, “¿Qué podemos hacer?” to the boy. "
+      " Hacen una casa.  He was making the house and he cut out a door.  Y él "
+      "tiene su cobija y está happy.";
+  skip_test(tokenizer, featurizer, std::string(s));
+  s = "skip_test(tokenizer, featurizer, std::string(s))";
+  skip_test(tokenizer, featurizer, std::string(s));
+  s = ">>>>Cách đây 70 năm, Hiệp định Geneva về đình chỉ chiến sự ở Việt Nam "
+      "đã được ký kết, mở ra một trang mới trong sự nghiệp đấu tranh giải "
+      "phóng dân tộc, thống nhất đất nước của nhân dân ta. Trải qua 70 năm, "
+      "những bài học từ đàm phán, ký kết và thực thi Hiệp định Geneva vẫn còn "
+      "nguyên giá trị đối với công cuộc xây dựng, phát triển đất nước và bảo "
+      "vệ Tổ quốc ngày nay.<<<<<";
+  skip_test(tokenizer, featurizer, std::string(s));
+  s = "。。。。。สำนักงานฝ่ายกงสุล  สถานทูตจีนจะปิดทำการในวันที่ 1 – 5 พฤษภาคม พ.ศ.2567 "
+      "เนื่องในวันแรงงาน วันที่ 6 พฤษภาคม พ.ศ.2567 เนื่องในวันหยุดชดเชยวันฉัตรมงคล วันที่ 22 "
+      "พฤษภาคม พ.ศ.2567 เนื่องในวันวิสาขบูชา。。。。";
+  skip_test(tokenizer, featurizer, std::string(s));
 }

@@ -5,6 +5,7 @@
 #define EXPECT_EQ(a, b) (assert((a) == (b)))
 #define EXPECT_NE(a, b) (assert((a) != (b)))
 #define EXPECT_GE(a, b) (assert((a) >= (b)))
+#define EXPECT_GT(a, b) (assert((a) > (b)))
 #define EXPECT_TRUE(a) (assert((a)))
 #define EXPECT_FALSE(a) (assert(!(a)))
 

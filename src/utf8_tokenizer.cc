@@ -524,7 +524,10 @@ const char *Utf8Tokenizer::skip_(const char *buffer, size_t length, addr n) {
         --n;
       } else if (action == &action_unigram_) {
         state = ACTION_NONTOKEN;
-        n -= 2;
+        --n;
+        if (n <= 0)
+          return (const char *) s;
+        --n;
       }
       break;
     case ACTION_BIGRAM:
