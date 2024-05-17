@@ -24,11 +24,11 @@ public:
 
 protected:
   VectorHopper(std::vector<std::unique_ptr<Hopper>> *hoppers);
+  addr L_(addr k) final;
+  addr R_(addr k) final;
   std::vector<std::unique_ptr<Hopper>> hoppers_;
   addr tau_k_ = maxfinity;
-  addr rho_k_ = maxfinity;
   addr uat_k_ = minfinity;
-  addr ohr_k_ = minfinity;
 };
 
 } // namespace gcl

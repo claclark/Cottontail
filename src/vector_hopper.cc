@@ -21,9 +21,7 @@ public:
   inline addr q() const { return q_; };
   inline fval v() const { return v_; };
   void tau(addr k) { hopper_->tau(k, &p_, &q_, &v_); }
-  void rho(addr k) { hopper_->rho(k, &p_, &q_, &v_); }
   void uat(addr k) { hopper_->rho(k, &p_, &q_, &v_); }
-  void ohr(addr k) { hopper_->rho(k, &p_, &q_, &v_); }
 
 protected:
   Element(Hopper *hopper, size_t index) : hopper_(hopper), index_(index){};
@@ -41,14 +39,6 @@ public:
   };
 };
 
-class RhoElement : public Element {
-public:
-  RhoElement() = delete;
-  RhoElement(Hopper *hopper, size_t index, addr k) : Element(hopper, index) {
-    rho(k);
-  };
-};
-
 class UatElement : public Element {
 public:
   UatElement() = delete;
@@ -57,15 +47,7 @@ public:
   };
 };
 
-class OhrElement : public Element {
-public:
-  OhrElement() = delete;
-  OhrElement(Hopper *hopper, size_t index, addr k) : Element(hopper, index) {
-    uat(k);
-  };
-};
-
-class InnerTauRhoCompare {
+class InnerTauCompare {
 public:
   bool operator()(const Element &a, const Element &b) {
     return !(
@@ -75,7 +57,7 @@ public:
   };
 };
 
-class InnerUatOhrCompare {
+class InnerUatCompare {
 public:
   bool operator()(const Element &a, const Element &b) {
     return !(
@@ -102,14 +84,10 @@ private:
   void rho_(addr k, addr *p, addr *q, fval *v) final;
   void uat_(addr k, addr *p, addr *q, fval *v) final;
   void ohr_(addr k, addr *p, addr *q, fval *v) final;
-  std::priority_queue<TauElement, std::vector<TauElement>, InnerTauRhoCompare>
+  std::priority_queue<TauElement, std::vector<TauElement>, InnerTauCompare>
       tau_queue_;
-  std::priority_queue<RhoElement, std::vector<RhoElement>, InnerTauRhoCompare>
-      rho_queue_;
-  std::priority_queue<UatElement, std::vector<UatElement>, InnerUatOhrCompare>
+  std::priority_queue<UatElement, std::vector<UatElement>, InnerUatCompare>
       uat_queue_;
-  std::priority_queue<OhrElement, std::vector<OhrElement>, InnerUatOhrCompare>
-      ohr_queue_;
 };
 
 void InnerHopper::tau_(addr k, addr *p, addr *q, fval *v) {
@@ -119,7 +97,7 @@ void InnerHopper::tau_(addr k, addr *p, addr *q, fval *v) {
     return;
   }
   if (k < tau_k_) {
-    std::priority_queue<TauElement, std::vector<TauElement>, InnerTauRhoCompare>
+    std::priority_queue<TauElement, std::vector<TauElement>, InnerTauCompare>
         temp;
     for (size_t i = 0; i < hoppers_.size(); i++)
       temp.emplace(hoppers_[i].get(), i, k);
@@ -139,40 +117,18 @@ void InnerHopper::tau_(addr k, addr *p, addr *q, fval *v) {
 }
 
 void InnerHopper::rho_(addr k, addr *p, addr *q, fval *v) {
-  if (k == maxfinity) {
+  if (k == minfinity) {
+    *p = *q = minfinity;
+    *v = 0.0;
+    return;
+  }
+  addr l = L(k - 1);
+  if (l == maxfinity) {
     *p = *q = maxfinity;
     *v = 0.0;
     return;
   }
-  if (k < rho_k_) {
-    std::priority_queue<RhoElement, std::vector<RhoElement>, InnerTauRhoCompare>
-        temp;
-    for (size_t i = 0; i < hoppers_.size(); i++)
-      temp.emplace(hoppers_[i].get(), i, k);
-    std::swap(temp, rho_queue_);
-  } else {
-    addr p0 = rho_queue_.top().p() + 1;
-    for (;;) {
-      RhoElement e = rho_queue_.top();
-      if (e.q() < k) {
-        rho_queue_.pop();
-        e.rho(k);
-        if (e.p() < p0)
-          e.tau(p0);
-        rho_queue_.push(e);
-      } else if (e.p() < p0) {
-        rho_queue_.pop();
-        e.tau(p0);
-        rho_queue_.push(e);
-      } else {
-        break;
-      }
-    }
-  }
-  rho_k_ = k;
-  *p = rho_queue_.top().p();
-  *q = rho_queue_.top().q();
-  *v = rho_queue_.top().v();
+  tau(l + 1, p, q, v);
 }
 
 void InnerHopper::uat_(addr k, addr *p, addr *q, fval *v) {
@@ -182,7 +138,7 @@ void InnerHopper::uat_(addr k, addr *p, addr *q, fval *v) {
     return;
   }
   if (k > uat_k_) {
-    std::priority_queue<UatElement, std::vector<UatElement>, InnerUatOhrCompare>
+    std::priority_queue<UatElement, std::vector<UatElement>, InnerUatCompare>
         temp;
     for (size_t i = 0; i < hoppers_.size(); i++)
       temp.emplace(hoppers_[i].get(), i, k);
@@ -202,53 +158,57 @@ void InnerHopper::uat_(addr k, addr *p, addr *q, fval *v) {
 }
 
 void InnerHopper::ohr_(addr k, addr *p, addr *q, fval *v) {
-  if (k == minfinity) {
+  if (k == maxfinity) {
+    *p = *q = maxfinity;
+    *v = 0.0;
+    return;
+  }
+  addr r = R(k + 1);
+  if (r == minfinity) {
     *p = *q = minfinity;
     *v = 0.0;
+    return;
   }
-  if (k > ohr_k_) {
-    std::priority_queue<OhrElement, std::vector<OhrElement>, InnerUatOhrCompare>
-        temp;
-    for (size_t i = 0; i < hoppers_.size(); i++)
-      temp.emplace(hoppers_[i].get(), i, k);
-    std::swap(temp, ohr_queue_);
-  } else {
-    addr q0 = ohr_queue_.top().q() - 1;
-    ;
-    for (;;) {
-      OhrElement e = ohr_queue_.top();
-      if (e.p() > k) {
-        ohr_queue_.pop();
-        e.ohr(k);
-        if (e.q() > q0)
-          e.uat(q0);
-        ohr_queue_.push(e);
-      } else if (e.q() > q0) {
-        ohr_queue_.pop();
-        e.uat(q0);
-        ohr_queue_.push(e);
-      } else {
-        break;
-      }
-    }
-  }
-  ohr_k_ = k;
-  *p = ohr_queue_.top().p();
-  *q = ohr_queue_.top().q();
-  *v = ohr_queue_.top().v();
+  uat(r - 1, p, q, v);
 }
 
 VectorHopper::VectorHopper(std::vector<std::unique_ptr<Hopper>> *hoppers) {
   for (auto &hopper : *hoppers)
     hoppers_.push_back(std::move(hopper));
-  hoppers->clear();
 }
 
 std::unique_ptr<Hopper>
 VectorHopper::make(std::vector<std::unique_ptr<Hopper>> *hoppers, bool outer) {
   assert(!outer);
-  std::unique_ptr<InnerHopper> hopper = std::make_unique<InnerHopper>(hoppers);
+  if (hoppers == nullptr)
+    return std::make_unique<EmptyHopper>();
+  std::unique_ptr<Hopper> hopper;
+  if (hoppers->size() == 0)
+    hopper = std::make_unique<EmptyHopper>();
+  else if (hoppers->size() == 1)
+    hopper = std::move((*hoppers)[0]);
+  else
+    return std::make_unique<InnerHopper>(hoppers);
+  hoppers->clear();
   return hopper;
+}
+
+addr VectorHopper::L_(addr k) {
+  addr l_max = minfinity;
+  for (auto &hopper : hoppers_) {
+    addr l = hopper->L(k);
+    l_max = std::max(l_max, l);
+  }
+  return l_max;
+}
+
+addr VectorHopper::R_(addr k) {
+  addr r_min = maxfinity;
+  for (auto &hopper : hoppers_) {
+    addr r = hopper->R(k);
+    r_min = std::min(r_min, r);
+  }
+  return r_min;
 }
 } // namespace gcl
 } // namespace cottontail
