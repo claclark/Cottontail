@@ -14,7 +14,8 @@ namespace gcl {
 class VectorHopper : public Hopper {
 public:
   static std::unique_ptr<Hopper>
-  make(std::vector<std::unique_ptr<Hopper>> *hoppers, bool outer = false);
+  make(std::vector<std::unique_ptr<Hopper>> *hoppers, bool outer,
+       std::string *error = nullptr);
   VectorHopper() = delete;
   virtual ~VectorHopper(){};
   VectorHopper(VectorHopper const &) = delete;

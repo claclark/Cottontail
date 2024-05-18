@@ -21,7 +21,7 @@ public:
   inline addr q() const { return q_; };
   inline fval v() const { return v_; };
   void tau(addr k) { hopper_->tau(k, &p_, &q_, &v_); }
-  void uat(addr k) { hopper_->rho(k, &p_, &q_, &v_); }
+  void uat(addr k) { hopper_->uat(k, &p_, &q_, &v_); }
 
 protected:
   Element(Hopper *hopper, size_t index) : hopper_(hopper), index_(index){};
@@ -178,7 +178,8 @@ VectorHopper::VectorHopper(std::vector<std::unique_ptr<Hopper>> *hoppers) {
 }
 
 std::unique_ptr<Hopper>
-VectorHopper::make(std::vector<std::unique_ptr<Hopper>> *hoppers, bool outer) {
+VectorHopper::make(std::vector<std::unique_ptr<Hopper>> *hoppers, bool outer,
+                   std::string *error) {
   assert(!outer);
   if (hoppers == nullptr)
     return std::make_unique<EmptyHopper>();
@@ -188,7 +189,7 @@ VectorHopper::make(std::vector<std::unique_ptr<Hopper>> *hoppers, bool outer) {
   else if (hoppers->size() == 1)
     hopper = std::move((*hoppers)[0]);
   else
-    return std::make_unique<InnerHopper>(hoppers);
+    hopper =  std::make_unique<InnerHopper>(hoppers);
   hoppers->clear();
   return hopper;
 }

@@ -10,6 +10,7 @@
 #include "src/eval.h"
 #include "src/fastid_txt.h"
 #include "src/featurizer.h"
+#include "src/gcl.h"
 #include "src/hopper.h"
 #include "src/idx.h"
 #include "src/porter.h"
@@ -23,6 +24,7 @@
 #include "src/tagging_featurizer.h"
 #include "src/tokenizer.h"
 #include "src/txt.h"
+#include "src/vector_hopper.h"
 #include "src/warren.h"
 #include "src/working.h"
 
