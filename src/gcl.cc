@@ -253,13 +253,18 @@ void Merge::tau_(addr k, addr *p, addr *q, fval *v) {
 }
 
 void Merge::rho_(addr k, addr *p, addr *q, fval *v) {
-  addr p0, q0;
   if (k == minfinity) {
     *p = *q = minfinity;
     *v = 0.0;
+    return;
   }
-  uat(k - 1, &p0, &q0);
-  tau(p0 + 1, p, q, v);
+  addr l = L(k - 1);
+  if (l == maxfinity) {
+    *p = *q = maxfinity;
+    *v = 0.0;
+    return;
+  }
+  tau(l + 1, p, q, v);
 }
 
 void Merge::uat_(addr k, addr *p, addr *q, fval *v) {
@@ -290,10 +295,15 @@ void Merge::ohr_(addr k, addr *p, addr *q, fval *v) {
   if (k == maxfinity) {
     *p = *q = maxfinity;
     *v = 0.0;
+    return;
   }
-  addr p0, q0;
-  tau(k + 1, &p0, &q0);
-  uat(q0 - 1, p, q, v);
+  addr r = R(k + 1);
+  if (r == minfinity) {
+    *p = *q = minfinity;
+    *v = 0.0;
+    return;
+  }
+  uat(r - 1, p, q, v);
 }
 
 namespace {
