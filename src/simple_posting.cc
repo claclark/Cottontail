@@ -132,6 +132,57 @@ SimplePostingFactory::posting_from_file(std::fstream *f) {
   return posting;
 }
 
+namespace {
+class Element {
+public:
+  Element() = delete;
+  Element(std::shared_ptr<SimplePosting> posting, size_t index)
+      : posting_(posting), index_(index) {
+    current_ = 0;
+    size_ = posting_->size();
+    if (current_ < size_) {
+      posting_->get(current_, &p_, &q_, &v_);
+    } else {
+      p_ = q_ = maxfinity;
+      v_ = 0.0;
+    }
+  };
+  inline size_t index() const { return index_; };
+  inline addr p() const { return p_; };
+  inline addr q() const { return q_; };
+  inline fval v() const { return v_; };
+  bool next() {
+    if (current_ == size_)
+      return false;
+    current_++;
+    if (current_ < size_) {
+      posting_->get(current_, &p_, &q_, &v_);
+      return true;
+    } else {
+      p_ = q_ = maxfinity;
+      v_ = 0.0;
+      return false;
+    }
+  }
+
+private:
+  std::shared_ptr<SimplePosting> posting_;
+  size_t index_, current_, size_;
+  addr p_, q_;
+  fval v_;
+};
+
+class Compare {
+public:
+  bool operator()(const Element &a, const Element &b) {
+    return !(
+        (a.q() < b.q()) ||
+        ((a.q() == b.q()) &&
+         ((a.p() > b.p()) || ((a.p() == b.p()) && (a.index() > b.index())))));
+  };
+};
+} // namespace
+
 std::shared_ptr<SimplePosting> SimplePostingFactory::posting_from_merge(
     const std::vector<std::shared_ptr<SimplePosting>> &postings) {
   if (postings.size() == 0)
@@ -164,69 +215,21 @@ std::shared_ptr<SimplePosting> SimplePostingFactory::posting_from_merge(
       }
     }
   } else {
-    std::queue<std::shared_ptr<SimplePosting>> merging;
-    std::queue<std::shared_ptr<SimplePosting>> waiting;
-    for (auto &posting : postings)
-      if (posting->size() > 0)
-        merging.push(posting);
-    if (merging.size() == 0)
-      return nullptr;
-    while ((merging.size() + waiting.size()) > 1) {
-      if (merging.size() < 2) {
-        if (merging.size() == 1) {
-          waiting.push(merging.front());
-          merging.pop();
-        }
-        std::swap(waiting, merging);
+    std::priority_queue<Element, std::vector<Element>, Compare> queue;
+    for (size_t i = 0; i < postings.size(); i++)
+      if (postings[i]->size() > 0)
+        queue.emplace(postings[i], i);
+    addr k = minfinity;;
+    while(queue.size() > 0) {
+      Element e = queue.top();
+      queue.pop();
+      if (e.p() > k) {
+         merged_posting->push(e.p(), e.q(), e.v());
+         k = e.p();
       }
-      std::shared_ptr<SimplePosting> in0 = merging.front();
-      merging.pop();
-      size_t size0 = in0->size();
-      std::shared_ptr<SimplePosting> in1 = merging.front();
-      merging.pop();
-      size_t size1 = in1->size();
-      std::shared_ptr<SimplePosting> out = posting_from_feature(feature);
-      size_t i = 0, j = 0;
-      while (i < size0 && j < size1) {
-        addr p0, p1, q0, q1;
-        fval v0, v1;
-        in0->get(i, &p0, &q0, &v0);
-        in1->get(j, &p1, &q1, &v1);
-        if (p0 < p1) {
-          if (q0 < q1)
-            out->push(p0, q0, v0);
-          i++;
-        } else if (p0 > p1) {
-          if (q0 > q1)
-            out->push(p1, q1, v1);
-          j++;
-        } else {
-          if (q0 < q1)
-            out->push(p0, q0, v0);
-          else
-            out->push(p1, q1, v1);
-          i++;
-          j++;
-        }
-      }
-      while (i < size0) {
-        addr p0, q0;
-        fval v0;
-        in0->get(i++, &p0, &q0, &v0);
-        out->push(p0, q0, v0);
-      }
-      while (j < size1) {
-        addr p1, q1;
-        fval v1;
-        in1->get(j++, &p1, &q1, &v1);
-        out->push(p1, q1, v1);
-      }
-      waiting.push(out);
+      if (e.next())
+        queue.push(e);
     }
-    if (merging.size() == 1)
-      merged_posting = merging.front();
-    else
-      merged_posting = waiting.front();
   }
   return merged_posting;
 }
