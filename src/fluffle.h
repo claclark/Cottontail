@@ -4,6 +4,7 @@
 #include <map>
 #include <memory>
 #include <mutex>
+#include <thread>
 #include <vector>
 
 #include "src/warren.h"
@@ -16,13 +17,16 @@ struct Fluffle {
     std::shared_ptr<Fluffle> fluffle = std::make_shared<Fluffle>();
     fluffle->parameters =
         std::make_shared<std::map<std::string, std::string>>();
+    fluffle->max_workers =
+        std::max(2*std::thread::hardware_concurrency(), (unsigned int)2);
     return fluffle;
   };
   std::mutex lock;
-  bool merging = false;
+  size_t workers = 0;
+  size_t max_workers;
   addr address = 0;
   addr sequence = 0;
-  std::set<std::shared_ptr<Warren>> active;
+  std::set<std::shared_ptr<Warren>> merging;
   std::vector<std::shared_ptr<Warren>> warrens;
   std::shared_ptr<std::map<std::string, std::string>> parameters;
 };

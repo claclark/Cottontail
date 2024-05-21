@@ -543,7 +543,8 @@ void merge_worker(std::shared_ptr<Fluffle> fluffle) {
   for (;;) {
     fluffle->lock.lock();
     if (fluffle->warrens.size() < 2) {
-      fluffle->merging = false;
+      assert(fluffle->workers > 0);
+      --fluffle->workers;
       fluffle->lock.unlock();
       return;
     }
@@ -561,14 +562,16 @@ void merge_worker(std::shared_ptr<Fluffle> fluffle) {
       fluffle->warrens = warrens;
     }
     if (fluffle->warrens.size() < 2) {
-      fluffle->merging = false;
+      assert(fluffle->workers > 0);
+      --fluffle->workers;
       fluffle->lock.unlock();
       return;
     }
     std::vector<addr> info;
     for (size_t i = 0; i < fluffle->warrens.size(); i++) {
       if (fluffle->warrens[i]->name() == "fiver" &&
-          fluffle->active.find(fluffle->warrens[i]) == fluffle->active.end()) {
+          fluffle->merging.find(fluffle->warrens[i]) ==
+              fluffle->merging.end()) {
         std::shared_ptr<Fiver> fiver =
             std::static_pointer_cast<Fiver>(fluffle->warrens[i]);
         addr a, b;
@@ -620,7 +623,7 @@ void merge_worker(std::shared_ptr<Fluffle> fluffle) {
     if (!have_range) {
       addr gap = maxfinity;
       for (size_t i = info.size() - 1; i > 0; --i)
-        if (info[i] > 0 && info[i - 1] > 0 &&
+        if (info[i] >= 0 && info[i - 1] >= 0 &&
             std::abs(info[i] - info[i - 1]) < gap) {
           have_range = true;
           gap = std::abs(info[i] - info[i - 1]);
@@ -629,27 +632,29 @@ void merge_worker(std::shared_ptr<Fluffle> fluffle) {
         }
     }
     if (!have_range) {
-      fluffle->merging = false;
+      assert(fluffle->workers > 0);
+      --fluffle->workers;
       fluffle->lock.unlock();
       return;
     }
-    std::cerr << "Range: " << start << " " << end << "\n";
     std::vector<std::shared_ptr<Fiver>> fivers;
     for (size_t i = start; i <= end; i++) {
       fivers.push_back(std::static_pointer_cast<Fiver>(fluffle->warrens[i]));
-      fluffle->active.insert(fluffle->warrens[i]);
+      fluffle->merging.insert(fluffle->warrens[i]);
     }
     std::shared_ptr<Warren> start_warren = fluffle->warrens[start];
     std::shared_ptr<Warren> end_warren = fluffle->warrens[end];
+    if (fluffle->workers < fluffle->max_workers) {
+      fluffle->workers++;
+      std::thread t(merge_worker, fluffle);
+      t.detach();
+    }
     fluffle->lock.unlock();
-    time_t t0 = time(NULL);
     std::shared_ptr<Fiver> merged = Fiver::merge(fivers);
-    time_t t1 = time(NULL);
     merged->pickle();
     for (auto &fiver : fivers)
       fiver->discard();
     fluffle->lock.lock();
-    std::cerr << "Merge  took: " << (t1 - t0) << " second(s) \n" << std::flush;
     std::vector<std::shared_ptr<Warren>> warrens;
     size_t i;
     for (i = 0;
@@ -657,17 +662,17 @@ void merge_worker(std::shared_ptr<Fluffle> fluffle) {
          i++)
       warrens.push_back(fluffle->warrens[i]);
     assert(i < fluffle->warrens.size());
-    fluffle->active.erase(fluffle->warrens[i]);
+    fluffle->merging.erase(fluffle->warrens[i]);
     if (merged != nullptr) {
       warrens.push_back(merged);
       merged->start();
     }
     for (i++; i < fluffle->warrens.size() && fluffle->warrens[i] != end_warren;
          i++)
-      fluffle->active.erase(fluffle->warrens[i]);
+      fluffle->merging.erase(fluffle->warrens[i]);
     ;
     assert(i < fluffle->warrens.size());
-    fluffle->active.erase(fluffle->warrens[i]);
+    fluffle->merging.erase(fluffle->warrens[i]);
     for (i++; i < fluffle->warrens.size(); i++)
       warrens.push_back(fluffle->warrens[i]);
     fluffle->warrens = warrens;
@@ -677,8 +682,8 @@ void merge_worker(std::shared_ptr<Fluffle> fluffle) {
 
 void try_merge(std::shared_ptr<Fluffle> fluffle) {
   fluffle->lock.lock();
-  if (!fluffle->merging) {
-    fluffle->merging = true;
+  if (fluffle->workers < fluffle->max_workers) {
+    fluffle->workers++;
     std::thread t(merge_worker, fluffle);
     t.detach();
   }

@@ -116,7 +116,8 @@ private:
     }
     if (text_->length() > 0 && text_->back() != '\n')
       *text_ += "\n";
-    addr offset = text_->length();;
+    addr offset = text_->length();
+    ;
     *text_ += text;
     std::vector<Token> tokens = tokenizer_->tokenize(featurizer_, text);
     if (tokens.size() == 0) {
@@ -428,8 +429,10 @@ Fiver::merge(const std::vector<std::shared_ptr<Fiver>> &fivers,
                                  fiver->fvalue_compressor_);
   std::shared_ptr<std::map<addr, std::shared_ptr<SimplePosting>>> index =
       std::make_shared<std::map<addr, std::shared_ptr<SimplePosting>>>();
-  std::vector<Annotation>::iterator it = ann.begin();
-  (*index)[chunk] = posting_factory->posting_from_annotations(&it, ann.end());
+  if (ann.size() > 0) {
+    std::vector<Annotation>::iterator it = ann.begin();
+    (*index)[chunk] = posting_factory->posting_from_annotations(&it, ann.end());
+  }
   std::map<addr, std::vector<std::shared_ptr<SimplePosting>>> unmerged_index;
   for (auto &f : fivers)
     for (auto &i : *(f->index_))
