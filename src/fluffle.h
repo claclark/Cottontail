@@ -22,6 +22,7 @@ struct Fluffle {
   bool merging = false;
   addr address = 0;
   addr sequence = 0;
+  std::set<std::shared_ptr<Warren>> active;
   std::vector<std::shared_ptr<Warren>> warrens;
   std::shared_ptr<std::map<std::string, std::string>> parameters;
 };
