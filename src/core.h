@@ -15,6 +15,7 @@ typedef int64_t addr; // Address in feature space
 typedef double fval;  // Feature value
 constexpr addr maxfinity = INT64_MAX;
 constexpr addr minfinity = INT64_MIN;
+const std::string transaction_feature = "\034"; // ASCII file separator
 
 inline addr fval2addr(fval v) {
   union {

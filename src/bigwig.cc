@@ -249,8 +249,6 @@ bool fiver_files(std::shared_ptr<Working> working,
   }
   return true;
 }
-
-void try_merge(std::shared_ptr<Fluffle> fluffle);
 } // namespace
 
 std::shared_ptr<Bigwig> Bigwig::make(const std::string &burrow,
@@ -373,7 +371,7 @@ std::shared_ptr<Bigwig> Bigwig::make(const std::string &burrow,
     bigwig->set_stemmer(stemmer);
   if (container_query != "")
     bigwig->set_default_container(container_query);
-  try_merge(fluffle);
+  bigwig->try_merge();
   return bigwig;
 }
 
@@ -425,6 +423,11 @@ std::shared_ptr<Bigwig> Bigwig::make(
   if (working != nullptr && !write_dna(working, bigwig->recipe(), error))
     return nullptr;
   return bigwig;
+}
+
+void Bigwig::merge(bool on) {
+  set_parameter("merge", okay(on));
+  try_merge();
 }
 
 std::shared_ptr<Warren> Bigwig::clone_(std::string *error) {
@@ -679,28 +682,31 @@ void merge_worker(std::shared_ptr<Fluffle> fluffle) {
     fluffle->lock.unlock();
   }
 }
-
-void try_merge(std::shared_ptr<Fluffle> fluffle) {
-  fluffle->lock.lock();
-  if (fluffle->workers < fluffle->max_workers) {
-    fluffle->workers++;
-    std::thread t(merge_worker, fluffle);
-    t.detach();
-  }
-  fluffle->lock.unlock();
-}
 } // namespace
+
+void Bigwig::try_merge() {
+  std::string do_merge;
+  assert(get_parameter("merge", &do_merge));
+  if (do_merge == "" || okay(do_merge)) {
+    fluffle_->lock.lock();
+    if (fluffle_->workers < fluffle_->max_workers) {
+      fluffle_->workers++;
+      std::thread t(merge_worker, fluffle_);
+      t.detach();
+    }
+    fluffle_->lock.unlock();
+  }
+}
 
 void Bigwig::commit_() {
   fluffle_->lock.lock();
   fiver_->commit();
   fiver_->start();
   fluffle_->lock.unlock();
-  if (merge_)
-    try_merge(fluffle_);
   appender_ = nullptr;
   annotator_ = nullptr;
   fiver_ = nullptr;
+  try_merge();
 }
 
 void Bigwig::abort_() {
@@ -708,11 +714,10 @@ void Bigwig::abort_() {
   fiver_->abort();
   fiver_->start();
   fluffle_->lock.unlock();
-  if (merge_)
-    try_merge(fluffle_);
   appender_ = nullptr;
   annotator_ = nullptr;
   fiver_ = nullptr;
+  try_merge();
 }
 
 std::string Bigwig::recipe_() {

@@ -33,7 +33,7 @@ public:
     return make(working, featurizer, tokenizer, fluffle, error,
                 posting_compressor, fvalue_compressor, text_compressor);
   };
-  void merge(bool on = true) { merge_ = on; }
+  void merge(bool on = true);
 
   virtual ~Bigwig(){};
   Bigwig(const Bigwig &) = delete;
@@ -49,6 +49,7 @@ private:
       : Warren(working, featurizer, tokenizer, idx, txt) {
     name_ = "bigwig";
   };
+  void try_merge();
   std::shared_ptr<Warren> clone_(std::string *error) final;
   std::string recipe_() final;
   void start_() final;
@@ -61,7 +62,6 @@ private:
   bool ready_() final;
   void commit_() final;
   void abort_() final;
-  bool merge_ = true;
   std::shared_ptr<Fiver> fiver_;
   std::shared_ptr<Fluffle> fluffle_;
   std::vector<std::shared_ptr<Warren>> warrens_;

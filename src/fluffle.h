@@ -18,7 +18,7 @@ struct Fluffle {
     fluffle->parameters =
         std::make_shared<std::map<std::string, std::string>>();
     fluffle->max_workers =
-        std::max(2*std::thread::hardware_concurrency(), (unsigned int)2);
+        std::max(2 * std::thread::hardware_concurrency(), (unsigned int)2);
     return fluffle;
   };
   std::mutex lock;

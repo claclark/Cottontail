@@ -29,7 +29,7 @@
 namespace cottontail {
 
 constexpr addr staging = maxfinity / 2;
-const std::string separator = "\n";
+const std::string text_chunk_feature = "\035"; // ASCII group separator
 
 class FiverAnnotator : public Annotator {
 public:
@@ -89,7 +89,7 @@ public:
     std::shared_ptr<FiverAppender> appender =
         std::shared_ptr<FiverAppender>(new FiverAppender());
     appender->text_ = text;
-    appender->address_ = staging;
+    appender->first_address_ = appender->address_ = staging;
     appender->chunk_address_ = staging;
     appender->chunk_offset_ = 0;
     appender->featurizer_ = featurizer;
@@ -132,7 +132,7 @@ private:
                                 error))
         return false;
       if (token.address - chunk_address_ > CHUNK_SIZE) {
-        if (!annotator_->annotate(featurizer_->featurize(separator),
+        if (!annotator_->annotate(featurizer_->featurize(text_chunk_feature),
                                   chunk_address_, token.address - 1,
                                   chunk_offset_))
           return false;
@@ -156,9 +156,14 @@ private:
   bool ready_() {
     if (text_->length() > 0 && text_->back() != '\n')
       *text_ += "\n";
+    if (address_ > first_address_)
+      if (!annotator_->annotate(featurizer_->featurize(transaction_feature),
+                                first_address_, address_ - 1))
+        return false;
     if (address_ > chunk_address_)
-      assert(annotator_->annotate(featurizer_->featurize(separator),
-                                  chunk_address_, address_ - 1, chunk_offset_));
+      if (!annotator_->annotate(featurizer_->featurize(text_chunk_feature),
+                                chunk_address_, address_ - 1, chunk_offset_))
+        return false;
     return true;
   }
   void commit_() {
@@ -171,6 +176,7 @@ private:
   }
   static const addr CHUNK_SIZE = 1000;
   addr address_;
+  addr first_address_;
   addr chunk_address_;
   addr chunk_offset_;
   std::shared_ptr<std::string> text_;
@@ -238,7 +244,7 @@ public:
     std::shared_ptr<FiverTxt> txt = std::shared_ptr<FiverTxt>(new FiverTxt());
     txt->count_ = -1;
     txt->tokenizer_ = tokenizer;
-    txt->hopper_ = idx->hopper(featurizer->featurize(separator));
+    txt->hopper_ = idx->hopper(featurizer->featurize(text_chunk_feature));
     txt->text_ = text;
     return txt;
   };
@@ -386,11 +392,11 @@ Fiver::merge(const std::vector<std::shared_ptr<Fiver>> &fivers,
     return fivers[0];
   std::shared_ptr<std::string> text = std::make_shared<std::string>();
   std::vector<Annotation> ann;
-  addr chunk = fivers[0]->featurizer_->featurize(separator);
+  addr chunk = fivers[0]->featurizer_->featurize(text_chunk_feature);
   for (auto &fiver : fivers) {
     if (fiver->text_->length() > 0) {
-      auto posting =
-          fiver->index_->find(fiver->featurizer_->featurize(separator));
+      auto posting = fiver->index_->find(
+          fiver->featurizer_->featurize(text_chunk_feature));
       if (posting != fiver->index_->end()) {
         std::unique_ptr<Hopper> hopper = posting->second->hopper();
         addr p, q, v;
@@ -524,8 +530,10 @@ bool Fiver::ready_() {
         posting_factory->posting_from_annotations(&it, annotations_->end());
     (*index_)[posting->feature()] = posting;
   }
-  assert(pickle());
-  return true;
+  if (pickle())
+    return true;
+  else
+    return false;
 };
 
 void Fiver::commit_() {
