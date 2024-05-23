@@ -22,6 +22,7 @@ struct Fluffle {
     return fluffle;
   };
   std::mutex lock;
+  bool merge = true;
   size_t workers = 0;
   size_t max_workers;
   addr address = 0;

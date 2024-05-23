@@ -25,6 +25,7 @@
 #include "src/simple_posting.h"
 #include "src/stemmer.h"
 #include "src/tokenizer.h"
+#include "src/vector_hopper.h"
 
 namespace cottontail {
 
@@ -457,6 +458,40 @@ Fiver::merge(const std::vector<std::shared_ptr<Fiver>> &fivers,
   fiver->txt_ = FiverTxt::make(fiver->featurizer_, fiver->tokenizer_,
                                fiver->idx_, fiver->text_);
   return fiver;
+}
+
+std::unique_ptr<Hopper>
+Fiver::merge(const std::vector<std::shared_ptr<Fiver>> &fivers, addr feature,
+             std::string *error, std::shared_ptr<Compressor> posting_compressor,
+             std::shared_ptr<Compressor> fvalue_compressor) {
+  if (fivers.size() == 0)
+    return std::make_unique<EmptyHopper>();
+  if (fivers.size() == 1)
+    return fivers[0]->idx()->hopper(feature);
+  if (feature == fivers[0]->featurizer()->featurize(text_chunk_feature)) {
+    std::vector<std::unique_ptr<cottontail::Hopper>> hoppers;
+    for (size_t i = 0; i < fivers.size(); i++)
+      if (fivers[i] != nullptr && fivers[i]->idx()->count(feature) > 0)
+        hoppers.emplace_back(fivers[i]->idx()->hopper(feature));
+    return gcl::VectorHopper::make(&hoppers, false, error);
+  }
+  std::vector<std::shared_ptr<SimplePosting>> postings;
+  for (size_t i = 0; i < fivers.size(); i++) {
+    auto where = fivers[i]->index_->find(feature);
+    if (where != fivers[i]->index_->end())
+      postings.emplace_back(where->second);
+  }
+  if (postings.size() == 0)
+    return std::make_unique<EmptyHopper>();
+  std::shared_ptr<Compressor> the_posting_compressor = posting_compressor;
+  if (the_posting_compressor == nullptr)
+    the_posting_compressor = fivers[0]->posting_compressor_;
+  std::shared_ptr<Compressor> the_fvalue_compressor = fvalue_compressor;
+  if (the_fvalue_compressor == nullptr)
+    the_fvalue_compressor = fivers[0]->fvalue_compressor_;
+  std::shared_ptr<SimplePostingFactory> posting_factory =
+      SimplePostingFactory::make(the_posting_compressor, the_fvalue_compressor);
+  return posting_factory->posting_from_merge(postings)->hopper();
 }
 
 addr Fiver::relocate(addr where) {

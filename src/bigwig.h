@@ -64,7 +64,7 @@ private:
   void abort_() final;
   std::shared_ptr<Fiver> fiver_;
   std::shared_ptr<Fluffle> fluffle_;
-  std::vector<std::shared_ptr<Warren>> warrens_;
+  std::vector<std::shared_ptr<Fiver>> warrens_;
   std::shared_ptr<Compressor> posting_compressor_;
   std::shared_ptr<Compressor> fvalue_compressor_;
   std::shared_ptr<Compressor> text_compressor_;

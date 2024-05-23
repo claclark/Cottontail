@@ -31,6 +31,11 @@ public:
         std::shared_ptr<Compressor> posting_compressor = nullptr,
         std::shared_ptr<Compressor> fvalue_compressor = nullptr,
         std::shared_ptr<Compressor> text_compressor = nullptr);
+  static std::unique_ptr<Hopper>
+  merge(const std::vector<std::shared_ptr<Fiver>> &fivers, addr feature,
+        std::string *error = nullptr,
+        std::shared_ptr<Compressor> posting_compressor = nullptr,
+        std::shared_ptr<Compressor> fvalue_compressor = nullptr);
   bool pickle(const std::string &filename, std::string *error = nullptr);
   bool pickle(std::string *error = nullptr);
   bool discard(std::string *error = nullptr);
