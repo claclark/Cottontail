@@ -45,19 +45,13 @@ load_qrels(const std::string &filename) {
   return qrels;
 }
 
-std::map<cottontail::addr, cottontail::fval>
-locate_qrels(const std::map<std::string, cottontail::fval> &qrels,
-             const std::map<std::string, cottontail::addr> &locations) {
-  std::map<cottontail::addr, cottontail::fval> lrels;
-  cottontail::addr huge = cottontail::maxfinity/2;
-  for (auto &&qrel : qrels) {
-    auto l = locations.find(qrel.first);
-    if (l != locations.end())
-      lrels[l->second] = qrel.second;
-    else
-      lrels[huge++] = qrel.second;
-  }
-  return lrels;
+std::map<std::string, std::map<std::string, cottontail::fval>> invert_qrels(
+    std::map<std::string, std::map<std::string, cottontail::fval>> qrels) {
+  std::map<std::string, std::map<std::string, cottontail::fval>> slerq;
+  for (auto &&topic : qrels)
+    for (auto &&qrel : topic.second)
+      slerq[qrel.first][topic.first] = qrel.second;
+  return slerq;
 }
 
 int main(int argc, char **argv) {
@@ -87,6 +81,8 @@ int main(int argc, char **argv) {
   std::string qrels_filename = argv[2];
   std::map<std::string, std::map<std::string, cottontail::fval>> qrels =
       load_qrels(qrels_filename);
+  std::map<std::string, std::map<std::string, cottontail::fval>> slerq =
+      invert_qrels(qrels);
   std::vector<std::string> documents;
   for (int i = 3; i < argc; i++)
     if (!cottontail::walk_filesystem(argv[i], &documents)) {
@@ -127,8 +123,6 @@ int main(int argc, char **argv) {
 
   std::mutex docq_mutex;
   std::mutex output_mutex;
-  std::mutex location_mutex;
-  std::map<std::string, cottontail::addr> locations;
   auto scribe_worker = [&]() {
     bool verbose = false;
     std::shared_ptr<cottontail::Warren> warren = bigwig->clone();
@@ -174,6 +168,7 @@ int main(int argc, char **argv) {
       std::unique_ptr<cottontail::Hopper> id_hopper =
           warren->hopper_from_gcl(id_query);
       ASSERT_NE(id_hopper, nullptr);
+      bool in_transaction = false;
       cottontail::addr p0, q0;
       for (id_hopper->tau(p, &p0, &q0); q0 < q;
            id_hopper->tau(p0 + 1, &p0, &q0)) {
@@ -181,9 +176,22 @@ int main(int argc, char **argv) {
             cottontail::trec_docno(warren->txt()->translate(p0, q0));
         cottontail::addr p1, q1;
         doc_hopper->rho(p0, &p1, &q1);
-        location_mutex.lock();
-        locations[docno] = p1;
-        location_mutex.unlock();
+        auto where = slerq.find(docno);
+        if (where != slerq.end()) {
+          if (!in_transaction) {
+            ASSERT_TRUE(warren->transaction());
+            in_transaction = true;
+          }
+          for (auto &&qrel : where->second) {
+            std::string label = "qrel:" + qrel.first;
+            warren->annotator()->annotate(
+                warren->featurizer()->featurize(label), p1, q0, qrel.second);
+          }
+        }
+      }
+      if (in_transaction) {
+        ASSERT_TRUE(warren->ready());
+        warren->commit();
       }
       warren->end();
       if (verbose) {
@@ -290,22 +298,17 @@ int main(int argc, char **argv) {
       std::shared_ptr<cottontail::Ranker> rank =
           cottontail::Ranker::from_pipeline(pipeline, warren);
       ASSERT_NE(rank, nullptr);
-      std::unique_ptr<cottontail::Hopper> hopper =
-          warren->hopper_from_gcl(id_query);
-      ASSERT_NE(hopper, nullptr);
       std::vector<cottontail::RankingResult> ranking = (*rank)(query);
-      std::vector<std::string> docno;
-      for (size_t i = 0; i < ranking.size(); i++) {
-        cottontail::addr p, q;
-        hopper->tau(ranking[i].container_p(), &p, &q);
-        docno.emplace_back(
-            cottontail::trec_docno(warren->txt()->translate(p, q)));
-      }
+      std::map<cottontail::addr, cottontail::fval> lrels;
+      std::string label = "qrel:" + topic;
+      std::unique_ptr<cottontail::Hopper> hopper =
+          warren->hopper_from_gcl(label);
+      cottontail::addr p, q;
+      cottontail::fval v;
+      for (hopper->tau(cottontail::minfinity + 1, &p, &q, &v);
+           p < cottontail::maxfinity; hopper->tau(p + 1, &p, &q, &v))
+        lrels[p] = v;
       warren->end();
-      location_mutex.lock();
-      std::map<cottontail::addr, cottontail::fval> lrels =
-          locate_qrels(qrels[topic], locations);
-      location_mutex.unlock();
       std::map<std::string, cottontail::fval> metrics;
       cottontail::eval(lrels, ranking, &metrics);
       output_mutex.lock();
@@ -313,21 +316,8 @@ int main(int argc, char **argv) {
         std::cout << time(NULL) << " " << total_topics << " " << topic << " "
                   << metrics["ap"] << "\n"
                   << std::flush;
-
-#if 0
-      if (ranking.size() == 0) {
-        std::cerr << program_name << ": no results for topic \"" << topic
-                  << "\" (creating a fake one)\n";
-        std::cout << topic << " Q0 FAKE 1 1 cottontail\n";
-      } else {
-        for (size_t i = 0; i < ranking.size(); i++)
-          std::cout << topic << " Q0 " << docno[i] << " " << i + 1 << " "
-                    << ranking[i].score() << " cottontail\n";
-      }
-      std::flush(std::cout);
-#endif
       output_mutex.unlock();
-      //sleep(1);
+      sleep(1);
     }
   };
 
