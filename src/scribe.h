@@ -9,6 +9,7 @@
 #include "src/builder.h"
 #include "src/committable.h"
 #include "src/core.h"
+#include "src/json.h"
 #include "src/warren.h"
 
 namespace cottontail {
@@ -52,6 +53,7 @@ private:
 bool scribe_files(const std::vector<std::string> &filesnames,
                   std::shared_ptr<Scribe> scribe, std::string *error = nullptr,
                   bool verbose = false);
-
+bool scribe_json(json &j, std::shared_ptr<Scribe> scribe,
+                 std::string *error = nullptr);
 } // namespace cottontail
 #endif // COTTONTAIL_SRC_SCRIBE_H_
