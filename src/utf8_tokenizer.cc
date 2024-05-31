@@ -167,6 +167,14 @@ inline void utf8(uint32_t codepoint, std::vector<uint8_t> *s) {
   }
 }
 
+void noncharacters_are_tokens(std::vector<int8_t> *actions) {
+  // "...permanently reserved in the Unicode Standard..."
+  for (size_t i = 0xfdd0; i <= 0xfdef; i++)
+    (*actions)[i] = ACTION_UNIGRAM;
+  (*actions)[0xfffe] = ACTION_UNIGRAM;
+  (*actions)[0xffff] = ACTION_UNIGRAM;
+}
+
 bool set_fold_actions(const std::map<uint32_t, uint32_t> &foldings,
                       std::vector<int8_t> *actions, std::string *error) {
 
@@ -283,6 +291,7 @@ bool utf8_tables(const std::string &unicode_filename,
     if (status == "C" || status == "S")
       foldings[source] = target;
   };
+  noncharacters_are_tokens(&actions);
   if (!set_fold_actions(foldings, &actions, error))
     return false;
   write_compressed_actions(actions, recipe);
