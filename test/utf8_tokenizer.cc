@@ -263,3 +263,25 @@ TEST(Utf8Tokenizer, Skip) {
       "พฤษภาคม พ.ศ.2567 เนื่องในวันวิสาขบูชา。。。。";
   skip_test(tokenizer, featurizer, std::string(s));
 }
+
+TEST(Utf8Tokenizer, Boundary) {
+  std::shared_ptr<cottontail::Featurizer> featurizer =
+      cottontail::Featurizer::make("hashing", "");
+  ASSERT_NE(featurizer, nullptr);
+  std::shared_ptr<cottontail::Tokenizer> tokenizer =
+      cottontail::Tokenizer::make("utf8", "");
+  ASSERT_NE(tokenizer, nullptr);
+  std::string text = "0.5000";
+  std::vector<cottontail::Token> tokens = tokenizer->tokenize(featurizer, text);
+  EXPECT_EQ(tokens.size(), 2);
+  EXPECT_EQ(tokens[0].address, 0);
+  EXPECT_EQ(tokens[0].offset, 0);
+  EXPECT_EQ(tokens[0].length, 1);
+  EXPECT_EQ(tokens[1].address, 1);
+  EXPECT_EQ(tokens[1].offset, 2);
+  EXPECT_EQ(tokens[1].length, 4);
+  std::vector<std::string> splits = tokenizer->split(text);
+  EXPECT_EQ(splits.size(), 2);
+  EXPECT_EQ(splits[0], "0");
+  EXPECT_EQ(splits[1], "5000");
+}

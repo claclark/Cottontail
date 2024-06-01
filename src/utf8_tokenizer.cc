@@ -502,6 +502,11 @@ Utf8Tokenizer::tokenize_(std::shared_ptr<Featurizer> featurizer, char *buffer,
     }
     s = t;
   }
+  if (state == ACTION_TOKEN) {
+    feature = featurizer->featurize(token);
+    addr n = (s - (const uint8_t *)buffer) - offset;
+    tokens.emplace_back(feature, address, offset, n);
+  }
   return tokens;
 }
 
