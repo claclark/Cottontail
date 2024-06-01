@@ -64,7 +64,7 @@ int main(int argc, char **argv) {
       for (size_t i = 0; i < s.length(); i++)
         if (s[i] == '\n')
           s[i] = ' ';
-      return s;
+      return cottontail::scribe_translate_json(s);
     };
 
     warren->start();

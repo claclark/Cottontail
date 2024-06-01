@@ -267,4 +267,7 @@ bool scribe_files(const std::vector<std::string> &filenames,
   return true;
 }
 
+std::string scribe_translate_json(const std::string &s) {
+  return json_translate(s);
+}
 } // namespace cottontail

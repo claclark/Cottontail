@@ -1,5 +1,6 @@
 #include "src/json.h"
 
+#include <cassert>
 #include <memory>
 #include <string>
 
@@ -50,15 +51,8 @@ bool do_number(json &j, std::shared_ptr<Scribe> scribe, const std::string &tag,
 
 bool do_string(json &j, std::shared_ptr<Scribe> scribe, const std::string &tag,
                addr *p, addr *q, std::string *error) {
-  std::string s = j;
-  std::string t = "\"";
-  for (const char *p = s.c_str(); *p; p++)
-    if (*p == '"')
-      t += "\\\"";
-    else
-      t += *p;
-  t += "\"";
-  if (!scribe->appender()->append(t, p, q, error))
+  std::string s = open_string_token + (std::string)j + close_string_token;
+  if (!scribe->appender()->append(s, p, q, error))
     return false;
   return scribe->annotator()->annotate(scribe->featurizer()->featurize(tag), *p,
                                        *q, 0.0, error);
@@ -68,7 +62,7 @@ bool do_array(json &j, std::shared_ptr<Scribe> scribe, const std::string &tag,
               addr *p, addr *q, std::string *error) {
   addr p0, q0;
   addr p_min = maxfinity, q_max = minfinity;
-  if (!scribe->appender()->append("[", &p0, &q0, error))
+  if (!scribe->appender()->append(open_array_token, &p0, &q0, error))
     return false;
   p_min = std::min(p_min, p0);
   q_max = std::max(q_max, q0);
@@ -81,10 +75,10 @@ bool do_array(json &j, std::shared_ptr<Scribe> scribe, const std::string &tag,
     q_max = std::max(q_max, q0);
     index++;
   }
-  if (!scribe->appender()->append("]", &p0, &q0, error))
+  if (!scribe->appender()->append(close_array_token, &p0, &q0, error))
     return false;
-  // p_min = std::min(p_min, p0);
-  // q_max = std::max(q_max, q0);
+  p_min = std::min(p_min, p0);
+  q_max = std::max(q_max, q0);
   if (!scribe->annotator()->annotate(scribe->featurizer()->featurize(tag),
                                      p_min, q_max, (fval)j.size(), error))
     return false;
@@ -97,16 +91,16 @@ bool do_object(json &j, std::shared_ptr<Scribe> scribe, const std::string &tag,
                addr *p, addr *q, std::string *error) {
   addr p0, q0;
   addr p_min = maxfinity, q_max = minfinity;
-  if (!scribe->appender()->append("{", &p0, &q0, error))
+  if (!scribe->appender()->append(open_object_token, &p0, &q0, error))
     return false;
   p_min = std::min(p_min, p0);
   q_max = std::max(q_max, q0);
   for (json::iterator it = j.begin(); it != j.end(); it++) {
     std::string key;
     if (it != j.begin())
-      key = ",\"" + it.key() + "\":";
+      key = "," + open_string_token + it.key() + close_string_token + ":";
     else
-      key = "\"" + it.key() + "\":";
+      key = open_string_token + it.key() + close_string_token + ":";
     if (!scribe->appender()->append(key, &p0, &q0, error))
       return false;
     p_min = std::min(p_min, p0);
@@ -116,10 +110,10 @@ bool do_object(json &j, std::shared_ptr<Scribe> scribe, const std::string &tag,
     p_min = std::min(p_min, p0);
     q_max = std::max(q_max, q0);
   }
-  if (!scribe->appender()->append("}", &p0, &q0, error))
+  if (!scribe->appender()->append(close_object_token, &p0, &q0, error))
     return false;
-  // p_min = std::min(p_min, p0);
-  // q_max = std::max(q_max, q0);
+  p_min = std::min(p_min, p0);
+  q_max = std::max(q_max, q0);
   if (!scribe->annotator()->annotate(scribe->featurizer()->featurize(tag),
                                      p_min, q_max, 0.0, error))
     return false;
@@ -147,18 +141,69 @@ bool do_json(json &j, std::shared_ptr<Scribe> scribe, const std::string &tag,
 }
 } // namespace
 
-bool scribe_json(json &j, std::shared_ptr<Scribe> scribe, std::string *error) {
+bool json_scribe(json &j, std::shared_ptr<Scribe> scribe, std::string *error) {
   if (scribe == nullptr) {
-    safe_set(error) = "Function scribe_json passed null scribe";
+    safe_set(error) = "Null scribe";
     return false;
   }
   if (!j.is_object()) {
-    safe_set(error) = "Function scribe_json can only scribe JSON objects";
+    safe_set(error) = "Can only scribe JSON objects";
     return false;
   }
   addr p, q;
   return do_json(j, scribe, ":", &p, &q, error);
   return true;
+}
+
+namespace {
+inline void sanity_check() { assert(noncharacter_token_length == 3); }
+
+inline bool is_next(const char *c, const std::string token) {
+  const char *t = token.c_str();
+  return c[0] && c[0] == t[0] && c[1] && c[1] == t[1] && c[2] && c[2] == t[2];
+}
+
+inline const char *skip(const char *c) {
+  return c + (noncharacter_token_length - 1);
+}
+} // namespace
+
+std::string json_translate(const std::string &s) {
+  sanity_check();
+  bool inside = false;
+  std::string t;
+  for (const char *c = s.c_str(); *c; c++)
+    if (is_next(c, open_object_token)) {
+      t += "{";
+      c = skip(c);
+    } else if (is_next(c, close_object_token)) {
+      t += "}";
+      c = skip(c);
+    } else if (is_next(c, open_array_token)) {
+      t += "[";
+      c = skip(c);
+    } else if (is_next(c, close_array_token)) {
+      t += "]";
+      c = skip(c);
+    } else if (is_next(c, open_string_token)) {
+      t += "\"";
+      c = skip(c);
+      inside = true;
+    } else if (is_next(c, close_string_token)) {
+      t += "\"";
+      c = skip(c);
+      inside = false;
+    } else if (inside) {
+      if (*c == '"')
+        t += "\\\"";
+      else if (*c == '\\')
+        t += "\\\\";
+      else
+        t += *c;
+    } else {
+      t += *c;
+    }
+  return t;
 }
 
 } // namespace cottontail
