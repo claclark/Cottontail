@@ -169,10 +169,15 @@ inline void utf8(uint32_t codepoint, std::vector<uint8_t> *s) {
 
 void noncharacters_are_tokens(std::vector<int8_t> *actions) {
   // "...permanently reserved in the Unicode Standard..."
-  for (size_t i = 0xfdd0; i <= 0xfdef; i++)
+  // https://www.unicode.org/faq/private_use.html
+  for (size_t i = 0xFDD0; i <= 0xFDEF; i++)
     (*actions)[i] = ACTION_UNIGRAM;
-  (*actions)[0xfffe] = ACTION_UNIGRAM;
-  (*actions)[0xffff] = ACTION_UNIGRAM;
+  size_t e = 0xFFFE;
+  size_t f = 0xFFFF;
+  for (size_t i = 0x0000; i <= 0x100000; i += 0x10000) {
+    (*actions)[i + e] = ACTION_UNIGRAM;
+    (*actions)[i + f] = ACTION_UNIGRAM;
+  }
 }
 
 bool set_fold_actions(const std::map<uint32_t, uint32_t> &foldings,
