@@ -61,64 +61,49 @@ bool do_string(json &j, std::shared_ptr<Scribe> scribe, const std::string &tag,
 bool do_array(json &j, std::shared_ptr<Scribe> scribe, const std::string &tag,
               addr *p, addr *q, std::string *error) {
   addr p0, q0;
-  addr p_min = maxfinity, q_max = minfinity;
-  if (!scribe->appender()->append(open_array_token, &p0, &q0, error))
+  if (!scribe->appender()->append(open_array_token, p, &q0, error))
     return false;
-  p_min = std::min(p_min, p0);
-  q_max = std::max(q_max, q0);
   size_t index = 0;
   for (json::iterator it = j.begin(); it != j.end(); it++) {
+    if (it != j.begin()) {
+      if (!scribe->appender()->append(comma_token, &p0, &q0, error))
+        return false;
+    }
     if (!do_json(it.value(), scribe, tag + std::to_string(index) + ":", &p0,
                  &q0, error))
       return false;
-    p_min = std::min(p_min, p0);
-    q_max = std::max(q_max, q0);
     index++;
   }
-  if (!scribe->appender()->append(close_array_token, &p0, &q0, error))
+  if (!scribe->appender()->append(close_array_token, &p0, q, error))
     return false;
-  p_min = std::min(p_min, p0);
-  q_max = std::max(q_max, q0);
-  if (!scribe->annotator()->annotate(scribe->featurizer()->featurize(tag),
-                                     p_min, q_max, (fval)j.size(), error))
+  if (!scribe->annotator()->annotate(scribe->featurizer()->featurize(tag), *p,
+                                     *q, (fval)j.size(), error))
     return false;
-  *p = p_min;
-  *q = q_max;
   return true;
 }
 
 bool do_object(json &j, std::shared_ptr<Scribe> scribe, const std::string &tag,
                addr *p, addr *q, std::string *error) {
   addr p0, q0;
-  addr p_min = maxfinity, q_max = minfinity;
-  if (!scribe->appender()->append(open_object_token, &p0, &q0, error))
+  if (!scribe->appender()->append(open_object_token, p, &q0, error))
     return false;
-  p_min = std::min(p_min, p0);
-  q_max = std::max(q_max, q0);
   for (json::iterator it = j.begin(); it != j.end(); it++) {
-    std::string key;
-    if (it != j.begin())
-      key = "," + open_string_token + it.key() + close_string_token + ":";
-    else
-      key = open_string_token + it.key() + close_string_token + ":";
+    if (it != j.begin()) {
+      if (!scribe->appender()->append(comma_token, &p0, &q0, error))
+        return false;
+    }
+    std::string key =
+        open_string_token + it.key() + close_string_token + colon_token;
     if (!scribe->appender()->append(key, &p0, &q0, error))
       return false;
-    p_min = std::min(p_min, p0);
-    q_max = std::max(q_max, q0);
     if (!do_json(it.value(), scribe, tag + it.key() + ":", &p0, &q0, error))
       return false;
-    p_min = std::min(p_min, p0);
-    q_max = std::max(q_max, q0);
   }
-  if (!scribe->appender()->append(close_object_token, &p0, &q0, error))
+  if (!scribe->appender()->append(close_object_token, &p0, q, error))
     return false;
-  p_min = std::min(p_min, p0);
-  q_max = std::max(q_max, q0);
-  if (!scribe->annotator()->annotate(scribe->featurizer()->featurize(tag),
-                                     p_min, q_max, 0.0, error))
+  if (!scribe->annotator()->annotate(scribe->featurizer()->featurize(tag), *p,
+                                     *q, 0.0, error))
     return false;
-  *p = p_min;
-  *q = q_max;
   return true;
 }
 
@@ -193,6 +178,12 @@ std::string json_translate(const std::string &s) {
       t += "\"";
       c = skip(c);
       inside = false;
+    } else if (is_next(c, colon_token)) {
+      t += ":";
+      c = skip(c);
+    } else if (is_next(c, comma_token)) {
+      t += ",";
+      c = skip(c);
     } else if (inside) {
       if (*c == '"')
         t += "\\\"";
