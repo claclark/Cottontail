@@ -11,55 +11,75 @@
 namespace cottontail {
 
 namespace {
-bool do_json(json &j, std::shared_ptr<Scribe> scribe, const std::string &tag,
-             addr *p, addr *q, std::string *error);
+bool do_json(json &j, std::shared_ptr<Scribe> scribe, const std::string &path,
+             const std::string &label, addr *p, addr *q, std::string *error);
 
-bool do_null(json &j, std::shared_ptr<Scribe> scribe, const std::string &tag,
-             addr *p, addr *q, std::string *error) {
+bool do_null(json &j, std::shared_ptr<Scribe> scribe, const std::string &path,
+             const std::string &label, addr *p, addr *q, std::string *error) {
   if (!scribe->appender()->append("null", p, q, error))
     return false;
-  return scribe->annotator()->annotate(scribe->featurizer()->featurize(tag), *p,
-                                       *q, NAN, error);
+  if (label != "" &&
+      !scribe->annotator()->annotate(scribe->featurizer()->featurize(label), *p,
+                                     *q, NAN, error))
+    return false;
+  return scribe->annotator()->annotate(scribe->featurizer()->featurize(path),
+                                       *p, *q, NAN, error);
 }
 
-bool do_boolean(json &j, std::shared_ptr<Scribe> scribe, const std::string &tag,
-                addr *p, addr *q, std::string *error) {
+bool do_boolean(json &j, std::shared_ptr<Scribe> scribe,
+                const std::string &path, const std::string &label, addr *p,
+                addr *q, std::string *error) {
   if (j) {
     if (!scribe->appender()->append("true", p, q, error))
       return false;
-    if (!scribe->annotator()->annotate(scribe->featurizer()->featurize(tag), *p,
-                                       *q, 1.0, error))
+    if (label != "" &&
+        !scribe->annotator()->annotate(scribe->featurizer()->featurize(label),
+                                       *p, *q, 1.0, error))
       return false;
+    return scribe->annotator()->annotate(scribe->featurizer()->featurize(path),
+                                         *p, *q, 1.0, error);
   } else {
     if (!scribe->appender()->append("false", p, q, error))
       return false;
-    if (!scribe->annotator()->annotate(scribe->featurizer()->featurize(tag), *p,
-                                       *q, 0.0, error))
+    if (label != "" &&
+        !scribe->annotator()->annotate(scribe->featurizer()->featurize(label),
+                                       *p, *q, 0.0, error))
       return false;
+    return scribe->annotator()->annotate(scribe->featurizer()->featurize(path),
+                                         *p, *q, 0.0, error);
   }
   return true;
 }
 
-bool do_number(json &j, std::shared_ptr<Scribe> scribe, const std::string &tag,
-               addr *p, addr *q, std::string *error) {
+bool do_number(json &j, std::shared_ptr<Scribe> scribe, const std::string &path,
+               const std::string &label, addr *p, addr *q, std::string *error) {
   fval v = j;
-  if (!scribe->appender()->append(std::to_string(v), p, q, error))
+  std::string s = open_number_token + std::to_string(v) + close_number_token;
+  if (!scribe->appender()->append(s, p, q, error))
     return false;
-  return scribe->annotator()->annotate(scribe->featurizer()->featurize(tag), *p,
-                                       *q, v, error);
+  if (label != "" &&
+      !scribe->annotator()->annotate(scribe->featurizer()->featurize(label), *p,
+                                     *q, v, error))
+    return false;
+  return scribe->annotator()->annotate(scribe->featurizer()->featurize(path),
+                                       *p, *q, v, error);
 }
 
-bool do_string(json &j, std::shared_ptr<Scribe> scribe, const std::string &tag,
-               addr *p, addr *q, std::string *error) {
+bool do_string(json &j, std::shared_ptr<Scribe> scribe, const std::string &path,
+               const std::string &label, addr *p, addr *q, std::string *error) {
   std::string s = open_string_token + (std::string)j + close_string_token;
   if (!scribe->appender()->append(s, p, q, error))
     return false;
-  return scribe->annotator()->annotate(scribe->featurizer()->featurize(tag), *p,
-                                       *q, 0.0, error);
+  if (label != "" &&
+      !scribe->annotator()->annotate(scribe->featurizer()->featurize(label), *p,
+                                     *q, 0.0, error))
+    return false;
+  return scribe->annotator()->annotate(scribe->featurizer()->featurize(path),
+                                       *p, *q, 0.0, error);
 }
 
-bool do_array(json &j, std::shared_ptr<Scribe> scribe, const std::string &tag,
-              addr *p, addr *q, std::string *error) {
+bool do_array(json &j, std::shared_ptr<Scribe> scribe, const std::string &path,
+              const std::string &label, addr *p, addr *q, std::string *error) {
   addr p0, q0;
   if (!scribe->appender()->append(open_array_token, p, &q0, error))
     return false;
@@ -69,21 +89,24 @@ bool do_array(json &j, std::shared_ptr<Scribe> scribe, const std::string &tag,
       if (!scribe->appender()->append(comma_token, &p0, &q0, error))
         return false;
     }
-    if (!do_json(it.value(), scribe, tag + std::to_string(index) + ":", &p0,
-                 &q0, error))
+    std::string element = "[" + std::to_string(index) + "]:";
+    if (!do_json(it.value(), scribe, path + element, label + element, &p0, &q0,
+                 error))
       return false;
     index++;
   }
   if (!scribe->appender()->append(close_array_token, &p0, q, error))
     return false;
-  if (!scribe->annotator()->annotate(scribe->featurizer()->featurize(tag), *p,
+  if (label != "" &&
+      !scribe->annotator()->annotate(scribe->featurizer()->featurize(label), *p,
                                      *q, (fval)j.size(), error))
     return false;
-  return true;
+  return scribe->annotator()->annotate(scribe->featurizer()->featurize(path),
+                                       *p, *q, (fval)j.size(), error);
 }
 
-bool do_object(json &j, std::shared_ptr<Scribe> scribe, const std::string &tag,
-               addr *p, addr *q, std::string *error) {
+bool do_object(json &j, std::shared_ptr<Scribe> scribe, const std::string &path,
+               const std::string &label, addr *p, addr *q, std::string *error) {
   addr p0, q0;
   if (!scribe->appender()->append(open_object_token, p, &q0, error))
     return false;
@@ -96,31 +119,34 @@ bool do_object(json &j, std::shared_ptr<Scribe> scribe, const std::string &tag,
         open_string_token + it.key() + close_string_token + colon_token;
     if (!scribe->appender()->append(key, &p0, &q0, error))
       return false;
-    if (!do_json(it.value(), scribe, tag + it.key() + ":", &p0, &q0, error))
+    if (!do_json(it.value(), scribe, path + it.key() + ":", it.key() + ":", &p0,
+                 &q0, error))
       return false;
   }
   if (!scribe->appender()->append(close_object_token, &p0, q, error))
     return false;
-  if (!scribe->annotator()->annotate(scribe->featurizer()->featurize(tag), *p,
+  if (label != "" &&
+      !scribe->annotator()->annotate(scribe->featurizer()->featurize(label), *p,
                                      *q, 0.0, error))
     return false;
-  return true;
+  return scribe->annotator()->annotate(scribe->featurizer()->featurize(path),
+                                       *p, *q, 0.0, error);
 }
 
-bool do_json(json &j, std::shared_ptr<Scribe> scribe, const std::string &tag,
-             addr *p, addr *q, std::string *error) {
+bool do_json(json &j, std::shared_ptr<Scribe> scribe, const std::string &path,
+             const std::string &label, addr *p, addr *q, std::string *error) {
   if (j.is_null())
-    return do_null(j, scribe, tag, p, q, error);
+    return do_null(j, scribe, path, label, p, q, error);
   else if (j.is_boolean())
-    return do_boolean(j, scribe, tag, p, q, error);
+    return do_boolean(j, scribe, path, label, p, q, error);
   else if (j.is_number())
-    return do_number(j, scribe, tag, p, q, error);
+    return do_number(j, scribe, path, label, p, q, error);
   else if (j.is_string())
-    return do_string(j, scribe, tag, p, q, error);
+    return do_string(j, scribe, path, label, p, q, error);
   else if (j.is_array())
-    return do_array(j, scribe, tag, p, q, error);
+    return do_array(j, scribe, path, label, p, q, error);
   else if (j.is_object())
-    return do_object(j, scribe, tag, p, q, error);
+    return do_object(j, scribe, path, label, p, q, error);
   safe_set(error) = "Unknown JSON data type.";
   return false;
 }
@@ -136,7 +162,7 @@ bool json_scribe(json &j, std::shared_ptr<Scribe> scribe, std::string *error) {
     return false;
   }
   addr p, q;
-  return do_json(j, scribe, ":", &p, &q, error);
+  return do_json(j, scribe, ":", "", &p, &q, error);
   return true;
 }
 
@@ -183,6 +209,9 @@ std::string json_translate(const std::string &s) {
       c = skip(c);
     } else if (is_next(c, comma_token)) {
       t += ",";
+      c = skip(c);
+    } else if (is_next(c, open_number_token) ||
+               is_next(c, close_number_token)) {
       c = skip(c);
     } else if (inside) {
       if (*c == '"')

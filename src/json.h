@@ -20,6 +20,8 @@ const std::string open_string_token = "\xEF\xB7\x94";
 const std::string close_string_token = "\xEF\xB7\x95";
 const std::string colon_token = "\xEF\xB7\x96";
 const std::string comma_token = "\xEF\xB7\x97";
+const std::string open_number_token = "\xEF\xB7\x98";
+const std::string close_number_token = "\xEF\xB7\x99";
 
 bool json_scribe(json &j, std::shared_ptr<Scribe> scribe,
                  std::string *error = nullptr);
