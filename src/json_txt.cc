@@ -50,6 +50,8 @@ JsonTxt::wrap(const std::map<std::string, std::string> &parameters,
 
 std::shared_ptr<Txt> JsonTxt::wrap(std::shared_ptr<Txt> txt,
                                    std::string *error) {
+  if (txt == nullptr)
+    return nullptr;
   std::shared_ptr<JsonTxt> jtxt = std::shared_ptr<JsonTxt>(new JsonTxt());
   assert(jtxt != nullptr);
   jtxt->txt_ = txt;

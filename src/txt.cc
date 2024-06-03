@@ -4,6 +4,7 @@
 #include <string>
 
 #include "src/core.h"
+#include "src/json_txt.h"
 #include "src/simple_txt.h"
 
 namespace cottontail {
@@ -14,11 +15,15 @@ std::shared_ptr<Txt> Txt::make(const std::string &name,
                                std::shared_ptr<Working> working) {
   std::shared_ptr<Txt> txt;
   if (name == "" || name == "simple") {
-    return SimpleTxt::make(recipe, tokenizer, working, error);
+    txt = SimpleTxt::make(recipe, tokenizer, working, error);
   } else {
     safe_set(error) = "No Txt named: " + name;
-    return nullptr;
+    txt = nullptr;
   }
+  if (txt != nullptr)
+    return wrap(recipe, txt, error);
+  else
+    return nullptr;
 }
 
 bool Txt::check(const std::string &name, const std::string &recipe,
@@ -29,6 +34,11 @@ bool Txt::check(const std::string &name, const std::string &recipe,
     safe_set(error) = "No Txt named: " + name;
     return false;
   }
+}
+
+std::shared_ptr<Txt> Txt::wrap(const std::string &recipe,
+                               std::shared_ptr<Txt> txt, std::string *error) {
+  return JsonTxt::wrap(recipe, txt, error);
 }
 
 std::shared_ptr<Txt> Txt::clone_(std::string *error) {

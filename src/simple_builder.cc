@@ -213,41 +213,6 @@ bool sort_annotations(std::shared_ptr<Working> working,
 
 namespace {
 
-bool name_and_recipe(const std::string &dna, const std::string &key,
-                     std::string *error = nullptr, std::string *name = nullptr,
-                     std::string *recipe = nullptr) {
-  std::map<std::string, std::string> parameters;
-  if (!cook(dna, &parameters)) {
-    safe_set(error) = "Bad parameters";
-    return false;
-  }
-  std::map<std::string, std::string>::iterator v = parameters.find(key);
-  if (v == parameters.end()) {
-    safe_set(error) = "No " + key + " found";
-    return false;
-  }
-  std::map<std::string, std::string> k_parameters;
-  if (!cook(v->second, &k_parameters)) {
-    safe_set(error) = "Bad " + key + " parameters";
-    return false;
-  }
-  std::map<std::string, std::string>::iterator k_name =
-      k_parameters.find("name");
-  if (k_name == k_parameters.end()) {
-    safe_set(error) = "No " + key + " name found";
-    return false;
-  }
-  safe_set(name) = k_name->second;
-  std::map<std::string, std::string>::iterator k_recipe =
-      k_parameters.find("recipe");
-  if (k_recipe == k_parameters.end()) {
-    safe_set(error) = "No " + key + " recipe found";
-    return false;
-  }
-  safe_set(recipe) = k_recipe->second;
-  return true;
-}
-
 const std::string default_dna = "["
                                 "  featurizer:["
                                 "    name:\"hashing\","

@@ -3,6 +3,7 @@
 #include <fstream>
 #include <memory>
 #include <string>
+#include <unistd.h>
 
 #include "src/core.h"
 #include "src/recipe.h"
@@ -36,10 +37,10 @@ bool read_dna(std::shared_ptr<Working> working, std::string *dna,
 bool write_dna(std::shared_ptr<Working> working, const std::string &dna,
                std::string *error) {
   std::string dna_filename = working->make_name(DNA_NAME);
-  std::string temp_filename = working->make_temp(".dna");
+  std::string temp_filename = working->make_temp("dna");
   std::fstream out(temp_filename, std::ios::out);
   if (out.fail()) {
-    safe_set(error) = "Can't write configuration to: " + dna_filename;
+    safe_set(error) = "Can't write configuration to: " + temp_filename;
     return false;
   }
   out << HEADER << "\n";
@@ -94,6 +95,41 @@ bool set_parameter_in_dna(std::shared_ptr<Working> working,
   dna = freeze(dna_parameters);
   if (!write_dna(working, dna, error))
     return false;
+  return true;
+}
+
+bool name_and_recipe(const std::string &dna, const std::string &key,
+                     std::string *error, std::string *name,
+                     std::string *recipe) {
+  std::map<std::string, std::string> parameters;
+  if (!cook(dna, &parameters)) {
+    safe_set(error) = "Bad parameters";
+    return false;
+  }
+  std::map<std::string, std::string>::iterator v = parameters.find(key);
+  if (v == parameters.end()) {
+    safe_set(error) = "No " + key + " found";
+    return false;
+  }
+  std::map<std::string, std::string> k_parameters;
+  if (!cook(v->second, &k_parameters)) {
+    safe_set(error) = "Bad " + key + " parameters";
+    return false;
+  }
+  std::map<std::string, std::string>::iterator k_name =
+      k_parameters.find("name");
+  if (k_name == k_parameters.end()) {
+    safe_set(error) = "No " + key + " name found";
+    return false;
+  }
+  safe_set(name) = k_name->second;
+  std::map<std::string, std::string>::iterator k_recipe =
+      k_parameters.find("recipe");
+  if (k_recipe == k_parameters.end()) {
+    safe_set(error) = "No " + key + " recipe found";
+    return false;
+  }
+  safe_set(recipe) = k_recipe->second;
   return true;
 }
 

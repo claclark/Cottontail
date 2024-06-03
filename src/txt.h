@@ -17,12 +17,15 @@ public:
        std::shared_ptr<Working> working = nullptr);
   static bool check(const std::string &name, const std::string &recipe,
                     std::string *error = nullptr);
+  static std::shared_ptr<Txt> wrap(const std::string &recipe,
+                                   std::shared_ptr<Txt> txt,
+                                   std::string *error = nullptr);
+
+  inline std::string name() { return name_(); }
+  inline std::string recipe() { return recipe_(); }
   inline std::shared_ptr<Txt> clone(std::string *error = nullptr) {
     return clone_(error);
   }
-  inline std::string name() { return name_(); }
-  inline std::string recipe() { return recipe_(); }
-
   inline std::string translate(addr p, addr q) { return translate_(p, q); }
   inline addr tokens() { return tokens_(); }
   inline bool range(addr *p, addr *q) { return range_(p, q); };

@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <map>
 #include <memory>
+#include <regex>
 #include <set>
 #include <string>
 #include <thread>
@@ -245,7 +246,65 @@ bool fiver_files(std::shared_ptr<Working> working,
   }
   return true;
 }
+
+const std::string default_dna = "["
+                                "  featurizer:["
+                                "    name:\"hashing\","
+                                "    recipe:\"\","
+                                "  ],"
+                                "  idx:["
+                                "    name:\"bigwig\","
+                                "    recipe:["
+                                "      fvalue_compressor:\"null\","
+                                "      fvalue_compressor_recipe:\"\","
+                                "      posting_compressor:\"null\","
+                                "      posting_compressor_recipe:\"\","
+                                "    ],"
+                                "  ],"
+                                "  parameters:[],"
+                                "  tokenizer:["
+                                "    name:\"utf8\","
+                                "    recipe:\"\","
+                                "  ],"
+                                "  txt:["
+                                "    name:\"bigwig\","
+                                "    recipe:["
+                                "      compressor:\"null\","
+                                "      compressor_recipe:\"\","
+                                "      json:\"no\","
+                                "    ],"
+                                "  ],"
+                                "  warren:\"bigwig\","
+                                "]";
+
 } // namespace
+
+std::shared_ptr<Bigwig> Bigwig::make(const std::string &burrow,
+                                     const std::string &recipe,
+                                     std::string *error) {
+  std::string the_burrow = burrow;
+  if (the_burrow == "")
+    the_burrow = DEFAULT_BURROW;
+  std::shared_ptr<Working> working = Working::make(the_burrow, error);
+  if (working == nullptr)
+    return nullptr;
+  std::string dna;
+  if (read_dna(working, &dna)) {
+    safe_set(error) = "Burrow already has cottontail dna";
+    return nullptr;
+  }
+  dna = default_dna;
+  std::regex whitespace("\\s+");
+  std::vector<std::string> options{
+      std::sregex_token_iterator(recipe.begin(), recipe.end(), whitespace, -1),
+      {}};
+  for (auto &option : options)
+    if (!interpret_option(&dna, option, error))
+      return nullptr;
+  if (!write_dna(working, dna, error))
+    return nullptr;
+  return make(the_burrow, error);
+}
 
 std::shared_ptr<Bigwig> Bigwig::make(const std::string &burrow,
                                      std::string *error) {
@@ -363,6 +422,7 @@ std::shared_ptr<Bigwig> Bigwig::make(const std::string &burrow,
   bigwig->posting_compressor_ = posting_compressor;
   bigwig->fvalue_compressor_ = fvalue_compressor;
   bigwig->text_compressor_ = text_compressor;
+  bigwig->txt_recipe_ = txt_parameters["recipe"];
   if (stemmer != nullptr)
     bigwig->set_stemmer(stemmer);
   if (container_query != "")
@@ -383,7 +443,7 @@ std::shared_ptr<Bigwig> Bigwig::make(
   if (working != nullptr) {
     std::string dna;
     if (read_dna(working, &dna, error)) {
-      safe_set(error) = "Working directory already has cottontail dna";
+      safe_set(error) = "Burrow already has cottontail dna";
       return nullptr;
     }
   }
@@ -461,7 +521,7 @@ void Bigwig::start_() {
   fluffle_->lock.unlock();
   idx_ = BigwigIdx::make(warrens_);
   assert(idx_ != nullptr);
-  txt_ = BigwigTxt::make(warrens_);
+  txt_ = Txt::wrap(txt_recipe_, BigwigTxt::make(warrens_));
   assert(txt_ != nullptr);
 }
 
@@ -476,8 +536,10 @@ bool Bigwig::set_parameter_(const std::string &key, const std::string &value,
   std::shared_ptr<std::map<std::string, std::string>> parameters =
       std::make_shared<std::map<std::string, std::string>>();
   fluffle_->lock.lock();
-  if (working_ != nullptr && !set_parameter_in_dna(working_, key, value, error))
+  if (working_ != nullptr && !set_parameter_in_dna(working_, key, value, error)) {
+    fluffle_->lock.unlock();
     return false;
+  }
   if (fluffle_->parameters != nullptr)
     parameters = fluffle_->parameters;
   else
