@@ -68,7 +68,14 @@ void JsonTxt::abort_() { txt_->abort(); }
 
 std::string JsonTxt::name_() { return txt_->name(); }
 
-std::string JsonTxt::recipe_() { return txt_->recipe(); }
+std::string JsonTxt::recipe_() {
+  std::string recipe = txt_->recipe();
+  std::map<std::string, std::string> parameters;
+  if (recipe != "" && !cook(recipe, &parameters))
+    return recipe;
+  parameters["jason"] = okay(true);
+  return freeze(parameters);
+}
 
 std::shared_ptr<Txt> JsonTxt::clone_(std::string *error) {
   return wrap(txt_->clone(error));
