@@ -285,7 +285,7 @@ std::shared_ptr<Bigwig> Bigwig::make(const std::string &burrow,
   std::string the_burrow = burrow;
   if (the_burrow == "")
     the_burrow = DEFAULT_BURROW;
-  std::shared_ptr<Working> working = Working::make(the_burrow, error);
+  std::shared_ptr<Working> working = Working::mkdir(the_burrow, error);
   if (working == nullptr)
     return nullptr;
   std::string dna;
