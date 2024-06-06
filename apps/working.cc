@@ -125,9 +125,7 @@ std::string x2 =
     "  }\n"
     "}\n";
 
-void scribe_warren(std::shared_ptr<cottontail::Warren> warren) {
-  std::shared_ptr<cottontail::Scribe> scribe = cottontail::Scribe::make(warren);
-  ASSERT_NE(scribe, nullptr);
+void scribe_json(std::shared_ptr<cottontail::Scribe> scribe) {
   ASSERT_TRUE(scribe->transaction());
   json j0 = json::parse(x0);
   EXPECT_TRUE(json_scribe(j0, scribe));
@@ -237,8 +235,30 @@ TEST(JSON, Bigwig) {
   std::shared_ptr<cottontail::Bigwig> bigwig =
       cottontail::Bigwig::make(burrow, "txt:json:yes", &error);
   ASSERT_NE(bigwig, nullptr);
-  scribe_warren(bigwig);
+  std::shared_ptr<cottontail::Scribe> scribe = cottontail::Scribe::make(bigwig);
+  ASSERT_NE(scribe, nullptr);
+  scribe_json(scribe);
   check_warren(bigwig);
+}
+
+TEST(JSON, Simple) {
+  std::string error;
+  std::string burrow = "simple.json.burrow";
+  std::shared_ptr<cottontail::Working> working =
+      cottontail::Working::mkdir(burrow, &error);
+  ASSERT_NE(working, nullptr);
+  std::string options = "tokenizer:name:utf8 txt:json:yes";
+  std::shared_ptr<cottontail::Builder> builder =
+      cottontail::SimpleBuilder::make(working, options, &error);
+  ASSERT_NE(builder, nullptr);
+  std::shared_ptr<cottontail::Scribe> scribe =
+      cottontail::Scribe::make(builder, &error);
+  ASSERT_NE(scribe, nullptr);
+  scribe_json(scribe);
+  std::shared_ptr<cottontail::Warren> warren =
+      cottontail::Warren::make(burrow, &error);
+  ASSERT_NE(warren, nullptr);
+  check_warren(warren);
 }
 
 int main(int argc, char **argv) {
@@ -246,5 +266,6 @@ int main(int argc, char **argv) {
   std::string error;
   test_JSON_Tokens();
   test_JSON_Bigwig();
+  test_JSON_Simple();
   return 0;
 }

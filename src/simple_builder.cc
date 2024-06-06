@@ -214,6 +214,7 @@ bool sort_annotations(std::shared_ptr<Working> working,
 namespace {
 
 const std::string default_dna = "["
+                                "  warren:\"simple\","
                                 "  featurizer:["
                                 "    name:\"hashing\","
                                 "    recipe:\"\","
@@ -236,6 +237,7 @@ const std::string default_dna = "["
                                 "    recipe:["
                                 "      compressor:\"zlib\","
                                 "      compressor_recipe:\"\","
+                                "      json:\"no\","
                                 "    ],"
                                 "  ],"
                                 "]";
@@ -287,9 +289,9 @@ bool SimpleBuilder::check(const std::string &recipe, std::string *error) {
   return true;
 }
 
-std::shared_ptr<Builder> SimpleBuilder::make(std::shared_ptr<Working> working,
-                                             const std::string &recipe,
-                                             std::string *error) {
+std::shared_ptr<SimpleBuilder>
+SimpleBuilder::make(std::shared_ptr<Working> working, const std::string &recipe,
+                    std::string *error) {
   if (!check(recipe, error))
     return nullptr;
   std::string dna = default_dna;
@@ -345,14 +347,16 @@ std::shared_ptr<Builder> SimpleBuilder::make(std::shared_ptr<Working> working,
   std::remove(dna_filename.c_str());
   if (!write_dna(working, dna, error))
     return nullptr;
-  return make(working, featurizer, tokenizer, error, DEFAULT_TOK_FILE_SIZE,
-              DEFAULT_ANN_FILE_SIZE, posting_compressor_name,
-              posting_compressor_recipe, fvalue_compressor_name,
-              fvalue_compressor_recipe, text_compressor_name,
-              text_compressor_recipe);
+  std::shared_ptr<SimpleBuilder> builder = SimpleBuilder::make(
+      working, featurizer, tokenizer, error, DEFAULT_TOK_FILE_SIZE,
+      DEFAULT_ANN_FILE_SIZE, posting_compressor_name, posting_compressor_recipe,
+      fvalue_compressor_name, fvalue_compressor_recipe, text_compressor_name,
+      text_compressor_recipe);
+  builder->write_dna_ = false;
+  return builder;
 }
 
-std::shared_ptr<Builder> SimpleBuilder::make(
+std::shared_ptr<SimpleBuilder> SimpleBuilder::make(
     std::shared_ptr<Working> working, std::shared_ptr<Featurizer> featurizer,
     std::shared_ptr<Tokenizer> tokenizer, std::string *error,
     size_t tok_file_size, size_t ann_file_size,
@@ -680,6 +684,8 @@ bool SimpleBuilder::finalize_(std::string *error) {
     std::cout << "SimpleBuilder building inverted index\n";
   if (!build_index(error))
     return false;
+  if (!write_dna_)
+    return true;
   if (verbose())
     std::cout << "SimpleBuilder writing parameters\n";
   std::map<std::string, std::string> txt_recipe;

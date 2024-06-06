@@ -23,11 +23,11 @@ namespace cottontail {
 
 class SimpleBuilder final : public Builder {
 public:
-  static std::shared_ptr<Builder> make(std::shared_ptr<Working> working,
-                                       const std::string &recipe,
-                                       std::string *error = nullptr);
+  static std::shared_ptr<SimpleBuilder> make(std::shared_ptr<Working> working,
+                                             const std::string &recipe,
+                                             std::string *error = nullptr);
   static bool check(const std::string &recipe, std::string *error = nullptr);
-  static std::shared_ptr<Builder>
+  static std::shared_ptr<SimpleBuilder>
   make(std::shared_ptr<Working> working, std::shared_ptr<Featurizer> featurizer,
        std::shared_ptr<Tokenizer> tokenizer, std::string *error = nullptr,
        size_t tok_file_size = DEFAULT_TOK_FILE_SIZE,
@@ -85,6 +85,7 @@ private:
   std::unique_ptr<std::vector<Annotation>> annotations_;
   size_t ann_file_size_;
   std::shared_ptr<SimplePostingFactory> posting_factory_;
+  bool write_dna_ = true;
   bool multithreaded_ = true;
   std::vector<std::thread> workers_;
 };
