@@ -213,6 +213,8 @@ std::string json_translate(const std::string &s) {
     } else if (is_next(c, open_number_token) ||
                is_next(c, close_number_token)) {
       c = skip(c);
+    } else if (*c == '\n') {
+      t += ' ';
     } else if (inside) {
       if (*c == '"')
         t += "\\\"";
