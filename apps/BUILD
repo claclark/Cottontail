@@ -118,6 +118,19 @@ cc_binary(
 )
 
 cc_binary(
+    name = "jsonl",
+    srcs = [
+      "jsonl.cc",
+    ],
+    deps = [
+      "//src:cottontail",
+    ],
+    linkopts = [
+      "-pthread"
+    ],
+)
+
+cc_binary(
     name = "idx-timing",
     srcs = [
       "idx-timing.cc",

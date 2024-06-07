@@ -25,6 +25,8 @@ const std::string close_number_token = "\xEF\xB7\x99";
 
 bool json_scribe(json &j, std::shared_ptr<Scribe> scribe,
                  std::string *error = nullptr);
+bool json_scribe(json &j, std::shared_ptr<Scribe> scribe, addr *p, addr *q,
+                 std::string *error = nullptr);
 std::string json_translate(const std::string &s);
 } // namespace cottontail
 #endif // COTTONTAIL_SRC_JSON_H_

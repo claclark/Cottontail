@@ -152,18 +152,18 @@ bool do_json(json &j, std::shared_ptr<Scribe> scribe, const std::string &path,
 }
 } // namespace
 
-bool json_scribe(json &j, std::shared_ptr<Scribe> scribe, std::string *error) {
+bool json_scribe(json &j, std::shared_ptr<Scribe> scribe, addr *p, addr *q,
+                 std::string *error) {
   if (scribe == nullptr) {
     safe_set(error) = "Null scribe";
     return false;
   }
-  if (!j.is_object()) {
-    safe_set(error) = "Can only scribe JSON objects";
-    return false;
-  }
+  return do_json(j, scribe, ":", "", p, q, error);
+}
+
+bool json_scribe(json &j, std::shared_ptr<Scribe> scribe, std::string *error) {
   addr p, q;
-  return do_json(j, scribe, ":", "", &p, &q, error);
-  return true;
+  return json_scribe(j, scribe, &p, &q, error);
 }
 
 namespace {

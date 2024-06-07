@@ -1,5 +1,6 @@
 #include "src/scribe.h"
 
+#include <iostream>
 #include <memory>
 #include <string>
 
@@ -256,7 +257,7 @@ bool scribe_files(const std::vector<std::string> &filenames,
       if (verbose)
         std::cerr << "scribe_files commiting: " << filename << "\n";
       if (!scribe->ready()) {
-        safe_set(error) = "Function scribe_files unable to commit";
+        safe_set(error) = "Function scribe_files unable to commit transaction";
         return false;
       }
       scribe->commit();
@@ -264,6 +265,60 @@ bool scribe_files(const std::vector<std::string> &filenames,
   }
   if (verbose)
     std::cerr << "scribe_files done\n";
+  return true;
+}
+
+namespace {
+std::string path(const std::string &filename) {
+  if (filename.find("/") != std::string::npos)
+    return filename;
+  else 
+    return "./" + filename;
+}
+} // namespace
+
+bool scribe_jsonl(const std::vector<std::string> &filenames,
+                  std::shared_ptr<Scribe> scribe, std::string *error) {
+  if (scribe == nullptr) {
+    safe_set(error) = "Function scribe_jsonl passed null scribe";
+  }
+  for (auto &filename : filenames) {
+    std::ifstream f(filename);
+    if (f.fail()) {
+      safe_set(error) = "Cannot open jsonl file: " + filename;
+      return false;
+    }
+    if (!scribe->transaction(error))
+      return false;
+    std::string line;
+    size_t number = 1;
+    addr p = maxfinity, q = minfinity;
+    while (std::getline(f, line)) {
+      json j;
+      try {
+        j = json::parse(line);
+      } catch (json::parse_error &e) {
+        safe_set(error) = "Cannot parse json line: " + filename + ":" +
+                          std::to_string(number);
+        return false;
+      }
+      addr p0, q0;
+      if (!json_scribe(j, scribe, &p0, &q0, error))
+        return false;
+      p = std::min(p, p0);
+      q = std::max(q, q0);
+      number++;
+    }
+    if (p < maxfinity && q > minfinity && p <= q)
+      if (!scribe->annotator()->annotate(
+              scribe->featurizer()->featurize(path(filename)), p, q, error))
+        return false;
+    if (!scribe->ready()) {
+      safe_set(error) = "Function scribe_jsonl unable to commit transaction";
+      return false;
+    }
+    scribe->commit();
+  }
   return true;
 }
 
