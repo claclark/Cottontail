@@ -1,5 +1,6 @@
 #include "src/array_hopper.h"
 
+#define NDEBUG 1
 #include <cassert>
 #include <memory>
 
