@@ -14,6 +14,11 @@ void usage(std::string program_name) {
   std::cerr << "usage: " << program_name << " [--burrow burrow] \n";
 }
 
+void timestamp(size_t number, cottontail::addr t) {
+  std::cout << "@example " << number << ": " << t << " ms\n";
+}
+
+// Example 0
 // Outcomes from city inspections
 // SELECT result, COUNT(result) FROM city_inspections GROUP BY result
 void example0(std::shared_ptr<cottontail::Warren> warren, bool verbose) {
@@ -32,13 +37,14 @@ void example0(std::shared_ptr<cottontail::Warren> warren, bool verbose) {
       results[result]++;
   }
   cottontail::addr t1 = cottontail::now();
-  std::cout << "0 " << t1 - t0 << "\n";
+  timestamp(0, t1 - t0 + 1);
   if (verbose)
     for (auto &result : results)
       std::cout << result.first << ": " << result.second << "\n";
   std::flush(std::cout);
 }
 
+// Example 1
 // Some statistics on restaurant ratings
 // SELECT MIN(rating), AVG(rating), MAX(rating) FROM restaurants
 void example1(std::shared_ptr<cottontail::Warren> warren, bool verbose) {
@@ -61,13 +67,14 @@ void example1(std::shared_ptr<cottontail::Warren> warren, bool verbose) {
     }
   }
   cottontail::addr t1 = cottontail::now();
-  std::cout << "1 " << t1 - t0 << "\n";
+  timestamp(1, t1 - t0);
   if (verbose)
     std::cout << min_rating << ", " << total_ratings / restaurants << ", "
               << max_rating << "\n";
   std::flush(std::cout);
 }
 
+// Example 2
 // How many zip codes does New York have?
 // SELECT COUNT(*) FROM zips WHERE CITY = "NEW YORK"
 void example2(std::shared_ptr<cottontail::Warren> warren, bool verbose) {
@@ -81,12 +88,13 @@ void example2(std::shared_ptr<cottontail::Warren> warren, bool verbose) {
     if (q - p == 3) // exact match
       count++;
   cottontail::addr t1 = cottontail::now();
-  std::cout << "2 " << t1 - t0 << "\n";
+  timestamp(2, t1 - t0);
   if (verbose)
     std::cout << count << "\n";
   std::flush(std::cout);
 }
 
+// Example 3
 // Names of nanotech companies
 // SELECT name FROM companies WHERE category_code CONTAINS "nanotech"
 void example3(std::shared_ptr<cottontail::Warren> warren, bool verbose) {
@@ -100,10 +108,87 @@ void example3(std::shared_ptr<cottontail::Warren> warren, bool verbose) {
        p < cottontail::maxfinity; hopper->tau(p + 1, &p, &q))
     results.emplace_back(warren->txt()->translate(p, q));
   cottontail::addr t1 = cottontail::now();
-  std::cout << "3 " << t1 - t0 << "\n";
+  timestamp(3, t1 - t0);
   if (verbose)
     for (auto &result : results)
       std::cout << result << "\n";
+  std::flush(std::cout);
+}
+
+// Example 4
+// Titles and authors of books
+// SELECT title, EXPLODE(authors) AS author FROM books
+void example4(std::shared_ptr<cottontail::Warren> warren, bool verbose) {
+  cottontail::addr t0 = cottontail::now();
+  std::unique_ptr<cottontail::Hopper> books =
+      warren->hopper_from_gcl("(<< : Files/books.json)");
+  std::unique_ptr<cottontail::Hopper> title =
+      warren->hopper_from_gcl(":title:");
+  std::vector<std::unique_ptr<cottontail::Hopper>> authors;
+  std::vector<std::pair<std::string, std::string>> results;
+  cottontail::addr p, q;
+  for (books->tau(cottontail::minfinity + 1, &p, &q); q < cottontail::maxfinity;
+       books->tau(p + 1, &p, &q)) {
+    cottontail::addr p_title, q_title;
+    title->tau(p, &p_title, &q_title);
+    if (q_title > q)
+      continue;
+    std::string the_title = warren->txt()->translate(p_title, q_title);
+    if (the_title == "\"\"")
+      continue;
+    for (size_t i = 0;; i++) {
+      if (authors.size() <= i) { // EXPLODE
+        std::string feature = ":authors:[" + std::to_string(i) + "]:";
+        authors.emplace_back(warren->hopper_from_gcl(feature));
+      }
+      cottontail::addr p_author, q_author;
+      authors[i]->tau(p, &p_author, &q_author);
+      if (q_author > q)
+        break;
+      std::string the_author = warren->txt()->translate(p_author, q_author);
+      if (the_author == "\"\" ")
+        continue;
+      results.emplace_back(the_title, the_author);
+    }
+  }
+  cottontail::addr t1 = cottontail::now();
+  timestamp(4, t1 - t0);
+  if (verbose)
+    for (auto &&result : results)
+      std::cout << result.first << ", " << result.second << "\n";
+  std::flush(std::cout);
+}
+
+// Example 5
+// How many stock trades?
+// SELECT COUNT(*) FROM trades
+void example5(std::shared_ptr<cottontail::Warren> warren, bool verbose) {
+  cottontail::addr t0 = cottontail::now();
+  std::string query = "(<< : Files/trades.json)";
+  std::unique_ptr<cottontail::Hopper> hopper = warren->hopper_from_gcl(query);
+  size_t count = 0;
+  cottontail::addr p, q;
+  for (hopper->tau(cottontail::minfinity + 1, &p, &q);
+       p < cottontail::maxfinity; hopper->tau(p + 1, &p, &q))
+    count++;
+  cottontail::addr t1 = cottontail::now();
+  timestamp(5, t1 - t0);
+  if (verbose)
+    std::cout << count << "\n";
+  std::flush(std::cout);
+}
+
+// Example 6
+// How many rows in the database?
+// SELECT COUNT(*) FROM *
+void example6(std::shared_ptr<cottontail::Warren> warren, bool verbose) {
+  cottontail::addr t0 = cottontail::now();
+  cottontail::addr count =
+      warren->idx()->count(warren->featurizer()->featurize(":"));
+  cottontail::addr t1 = cottontail::now();
+  timestamp(6, t1 - t0);
+  if (verbose)
+    std::cout << count << "\n";
   std::flush(std::cout);
 }
 
@@ -131,10 +216,13 @@ int main(int argc, char **argv) {
     return 1;
   }
   warren->start();
-  example0(warren, true);
-  example1(warren, true);
-  example2(warren, true);
-  example3(warren, true);
+  example0(warren, false);
+  example1(warren, false);
+  example2(warren, false);
+  example3(warren, false);
+  example4(warren, false);
+  example5(warren, false);
+  example6(warren, false);
   warren->end();
   return 0;
 }
