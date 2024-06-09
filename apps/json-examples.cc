@@ -3,6 +3,7 @@
 //
 // Index built with "jsonl Files/*"
 //
+#include <ctime>
 #include <map>
 #include <memory>
 #include <string>
@@ -19,32 +20,6 @@ void timestamp(size_t number, cottontail::addr t) {
     std::cout << "@example " << number << ": <1 ms\n";
   else
     std::cout << "@example " << number << ": " << t << " ms\n";
-}
-
-// Example 0
-// Outcomes from city inspections
-// SELECT result, COUNT(result) FROM city_inspections GROUP BY result
-void example0(std::shared_ptr<cottontail::Warren> warren, bool verbose) {
-  cottontail::addr t0 = cottontail::now();
-  std::string query = "(<< :result: Files/city_inspections.json)";
-  std::unique_ptr<cottontail::Hopper> hopper = warren->hopper_from_gcl(query);
-  std::map<std::string, size_t> results;
-  cottontail::addr p, q;
-  for (hopper->tau(cottontail::minfinity + 1, &p, &q);
-       p < cottontail::maxfinity; hopper->tau(p + 1, &p, &q)) {
-    std::string result = warren->txt()->translate(p, q);
-    auto f = results.find(result);
-    if (f == results.end())
-      results[result] = 1;
-    else
-      results[result]++;
-  }
-  cottontail::addr t1 = cottontail::now();
-  timestamp(0, t1 - t0 + 1);
-  if (verbose)
-    for (auto &result : results)
-      std::cout << result.first << ": " << result.second << "\n";
-  std::flush(std::cout);
 }
 
 // Example 1
@@ -181,18 +156,166 @@ void example5(std::shared_ptr<cottontail::Warren> warren, bool verbose) {
   std::flush(std::cout);
 }
 
-// Example 6
+// Example 7
+// Outcomes from city inspections
+// SELECT result, COUNT(result) FROM city_inspections GROUP BY result
+void example7(std::shared_ptr<cottontail::Warren> warren, bool verbose) {
+  cottontail::addr t0 = cottontail::now();
+  std::string query = "(<< :result: Files/city_inspections.json)";
+  std::unique_ptr<cottontail::Hopper> hopper = warren->hopper_from_gcl(query);
+  std::map<std::string, size_t> results;
+  cottontail::addr p, q;
+  for (hopper->tau(cottontail::minfinity + 1, &p, &q);
+       p < cottontail::maxfinity; hopper->tau(p + 1, &p, &q)) {
+    std::string result = warren->txt()->translate(p, q);
+    auto f = results.find(result);
+    if (f == results.end())
+      results[result] = 1;
+    else
+      results[result]++;
+  }
+  cottontail::addr t1 = cottontail::now();
+  timestamp(7, t1 - t0 + 1);
+  if (verbose)
+    for (auto &result : results)
+      std::cout << result.first << ": " << result.second << "\n";
+  std::flush(std::cout);
+}
+
+// Example 8
 // How many rows in the database?
 // SELECT COUNT(*) FROM *
-void example6(std::shared_ptr<cottontail::Warren> warren, bool verbose) {
+void example8(std::shared_ptr<cottontail::Warren> warren, bool verbose) {
   cottontail::addr t0 = cottontail::now();
   cottontail::addr count =
       warren->idx()->count(warren->featurizer()->featurize(":"));
   cottontail::addr t1 = cottontail::now();
-  timestamp(6, t1 - t0);
+  timestamp(8, t1 - t0);
   if (verbose)
     std::cout << count << "\n";
   std::flush(std::cout);
+}
+
+// Consistent annotation for dates
+void annotate_date(std::shared_ptr<cottontail::Warren> warren,
+                   cottontail::addr p, cottontail::addr q,
+                   const std::string &year, const std::string &month,
+                   const std::string day) {
+  // should valid date, but this is just an example.
+  warren->annotator()->annotate(warren->featurizer()->featurize("year=" + year),
+                                p, q);
+  warren->annotator()->annotate(
+      warren->featurizer()->featurize("month=" + month), p, q);
+  warren->annotator()->annotate(warren->featurizer()->featurize("day=" + day),
+                                p, q);
+}
+
+// "publishedDate" : { "$date" : "2009-04-01T00:00:00.000-0700" }
+void annotate_books(std::shared_ptr<cottontail::Warren> warren) {
+  std::string query = "(<< :publishedDate:$date: Files/books.json)";
+  std::unique_ptr<cottontail::Hopper> hopper = warren->hopper_from_gcl(query);
+  cottontail::addr p, q;
+  for (hopper->tau(cottontail::minfinity + 1, &p, &q);
+       p < cottontail::maxfinity; hopper->tau(p + 1, &p, &q)) {
+    std::string date = warren->txt()->translate(p, q);
+    annotate_date(warren, p, q, date.substr(1, 4), date.substr(6, 2),
+                  date.substr(9, 2));
+  }
+}
+
+std::map<std::string, std::string> months = {
+    {"Jan", "01"}, {"Feb", "02"}, {"Mar", "03"}, {"Apr", "04"},
+    {"May", "05"}, {"Jun", "06"}, {"Jul", "07"}, {"Aug", "08"},
+    {"Sep", "09"}, {"Oct", "10"}, {"Nov", "11"}, {"Dec", "12"}};
+
+// "date":"Feb 20 2015"
+void annotate_city_inspections(std::shared_ptr<cottontail::Warren> warren) {
+  std::string query = "(<< :date: Files/city_inspections.json)";
+  std::unique_ptr<cottontail::Hopper> hopper = warren->hopper_from_gcl(query);
+  cottontail::addr p, q;
+  for (hopper->tau(cottontail::minfinity + 1, &p, &q);
+       p < cottontail::maxfinity; hopper->tau(p + 1, &p, &q)) {
+    std::string date = warren->txt()->translate(p, q);
+    std::string day = date.substr(5, 2);
+    if (day.substr(0, 1) == " ")
+      day = "0" + day.substr(1, 1);
+    annotate_date(warren, p, q, date.substr(8, 4), months[date.substr(1, 3)],
+                  day);
+  }
+}
+
+// "created_at" : { "$date" : 1180075887000 }
+// "created_at" : "Fri May 25 19:30:28 UTC 2007"
+void annotate_companies(std::shared_ptr<cottontail::Warren> warren) {
+  std::string query = "(<< :created_at:$date: Files/companies.json)";
+  std::unique_ptr<cottontail::Hopper> hopper = warren->hopper_from_gcl(query);
+  cottontail::addr p, q;
+  cottontail::fval v;
+  for (hopper->tau(cottontail::minfinity + 1, &p, &q, &v);
+       p < cottontail::maxfinity; hopper->tau(p + 1, &p, &q, &v)) {
+    time_t t = ((time_t)v) / 1000;
+    struct tm *lt = gmtime(&t);
+    char buffer[64];
+    strftime(buffer, 64, "%Y-%m-%d", lt);
+    std::string date = buffer;
+    annotate_date(warren, p, q, date.substr(0, 4), date.substr(5, 2),
+                  date.substr(8, 2));
+  }
+  query = "(<< (!> :created_at: :created_at:$date:) Files/companies.json)";
+  hopper = warren->hopper_from_gcl(query);
+  for (hopper->tau(cottontail::minfinity + 1, &p, &q);
+       p < cottontail::maxfinity; hopper->tau(p + 1, &p, &q)) {
+    std::string date = warren->txt()->translate(p, q);
+    annotate_date(warren, p, q, date.substr(25, 4), months[date.substr(5, 3)],
+                  date.substr(9, 2));
+  }
+}
+
+// "ts":{"$date":"2012-11-20T20:02:24.386Z"}
+void annotate_profiles(std::shared_ptr<cottontail::Warren> warren) {
+  std::string query = "(<< :ts:$date: Files/profiles.json)";
+  std::unique_ptr<cottontail::Hopper> hopper = warren->hopper_from_gcl(query);
+  cottontail::addr p, q;
+  for (hopper->tau(cottontail::minfinity + 1, &p, &q);
+       p < cottontail::maxfinity; hopper->tau(p + 1, &p, &q)) {
+    std::string date = warren->txt()->translate(p, q);
+    annotate_date(warren, p, q, date.substr(1, 4), date.substr(6, 2),
+                  date.substr(9, 2));
+  }
+}
+
+// "time":{"$date":"2012-03-02T22:00:00.000Z"}
+void annotate_trades(std::shared_ptr<cottontail::Warren> warren) {
+  std::string query = "(<< :time:$date: Files/trades.json)";
+  std::unique_ptr<cottontail::Hopper> hopper = warren->hopper_from_gcl(query);
+  cottontail::addr p, q;
+  for (hopper->tau(cottontail::minfinity + 1, &p, &q);
+       p < cottontail::maxfinity; hopper->tau(p + 1, &p, &q)) {
+    std::string date = warren->txt()->translate(p, q);
+    annotate_date(warren, p, q, date.substr(1, 4), date.substr(6, 2),
+                  date.substr(9, 2));
+  }
+}
+
+bool annotate_dates(std::shared_ptr<cottontail::Warren> warren,
+                    std::string *error) {
+  std::string has_dates;
+  if (!warren->get_parameter("has_dates", &has_dates, error))
+    return false;
+  if (cottontail::okay(has_dates))
+    return true;
+  if (!warren->transaction(error))
+    return false;
+  annotate_books(warren);
+  annotate_city_inspections(warren);
+  annotate_companies(warren);
+  annotate_profiles(warren);
+  annotate_trades(warren);
+  warren->ready();
+  warren->commit();
+  if (!warren->set_parameter("has_dates", "yes", error))
+    return false;
+  return true;
 }
 
 int main(int argc, char **argv) {
@@ -219,13 +342,17 @@ int main(int argc, char **argv) {
     return 1;
   }
   warren->start();
-  example0(warren, false);
   example1(warren, false);
   example2(warren, false);
   example3(warren, false);
   example4(warren, false);
   example5(warren, false);
-  example6(warren, false);
+  example7(warren, false);
+  example8(warren, false);
+  if (!annotate_dates(warren, &error)) {
+    std::cerr << program_name << ": " << error << "\n";
+    return 1;
+  }
   warren->end();
   return 0;
 }
