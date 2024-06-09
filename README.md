@@ -1,3 +1,3 @@
-# Simple but flexible indexing
+# Annotative Indexing
 
-Playground for simple indexing that supports (or can support) traditional inverted indices, links, graph structures, JSON, other structured text, regular expressions and even dense retrieval models.
+Unified indexing that supports traditional inverted indices, links, graph structures, JSON, other structured text, regular expressions and dense retrieval.
