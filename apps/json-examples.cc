@@ -15,7 +15,10 @@ void usage(std::string program_name) {
 }
 
 void timestamp(size_t number, cottontail::addr t) {
-  std::cout << "@example " << number << ": " << t << " ms\n";
+  if (t == 0)
+    std::cout << "@example " << number << ": <1 ms\n";
+  else
+    std::cout << "@example " << number << ": " << t << " ms\n";
 }
 
 // Example 0

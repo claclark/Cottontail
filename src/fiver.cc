@@ -175,7 +175,7 @@ private:
     address_ = staging;
     (*text_) = "";
   }
-  static const addr CHUNK_SIZE = 1000;
+  static const addr CHUNK_SIZE = 512;
   addr address_;
   addr first_address_;
   addr chunk_address_;
