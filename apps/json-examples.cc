@@ -19,7 +19,7 @@ void timestamp(size_t number, cottontail::addr t) {
   if (t == 0)
     std::cout << "@example " << number << ": <1 ms\n";
   else
-    std::cout << "@example " << number << ": " << t << " ms\n";
+    std::cout << "@example " << number << ": " << t + 1 << " ms\n";
 }
 
 // Example 1
@@ -27,7 +27,7 @@ void timestamp(size_t number, cottontail::addr t) {
 // SELECT MIN(rating), AVG(rating), MAX(rating) FROM restaurants
 void example1(std::shared_ptr<cottontail::Warren> warren, bool verbose) {
   cottontail::addr t0 = cottontail::now();
-  std::string query = "(<< rating: Files/restaurant.json)";
+  std::string query = "(<< :rating: Files/restaurant.json)";
   std::unique_ptr<cottontail::Hopper> hopper = warren->hopper_from_gcl(query);
   cottontail::fval min_rating, max_rating, total_ratings, restaurants = 1;
   cottontail::addr p, q;
@@ -335,6 +335,46 @@ bool annotate_dates(std::shared_ptr<cottontail::Warren> warren,
   return true;
 }
 
+// Example 8
+// Titles of books publised in 2008
+// SELECT title FROM books
+//     WHERE created >= '2008-01-01' AND created <= '2008-12-31'
+void example8(std::shared_ptr<cottontail::Warren> warren, bool verbose) {
+  cottontail::addr t0 = cottontail::now();
+  std::string query = "(<< :title: (>> Files/books.json year=2008))";
+  std::unique_ptr<cottontail::Hopper> hopper = warren->hopper_from_gcl(query);
+  std::vector<std::string> results;
+  cottontail::addr p, q;
+  for (hopper->tau(cottontail::minfinity + 1, &p, &q);
+       p < cottontail::maxfinity; hopper->tau(p + 1, &p, &q))
+    results.emplace_back(warren->txt()->translate(p, q));
+  cottontail::addr t1 = cottontail::now();
+  timestamp(8, t1 - t0);
+  if (verbose)
+    for (auto &result : results)
+      std::cout << result << "\n";
+  std::flush(std::cout);
+}
+
+// Example 9
+// Count objects with a creation date of '2008-21-01'
+// SELECT COUNT(*) FROM * WHERE created = '2008-12-01'
+void example9(std::shared_ptr<cottontail::Warren> warren, bool verbose) {
+  cottontail::addr t0 = cottontail::now();
+  std::string query = "(>> : (^ year=2008 month=12 day=01))";
+  std::unique_ptr<cottontail::Hopper> hopper = warren->hopper_from_gcl(query);
+  size_t count = 0;
+  cottontail::addr p, q;
+  for (hopper->tau(cottontail::minfinity + 1, &p, &q);
+       p < cottontail::maxfinity; hopper->tau(p + 1, &p, &q))
+    count++;
+  cottontail::addr t1 = cottontail::now();
+  timestamp(9, t1 - t0);
+  if (verbose)
+    std::cout << count << "\n";
+  std::flush(std::cout);
+}
+
 int main(int argc, char **argv) {
   std::string program_name = argv[0];
   if (argc == 2 && argv[1] == std::string("--help")) {
@@ -370,6 +410,10 @@ int main(int argc, char **argv) {
     std::cerr << program_name << ": " << error << "\n";
     return 1;
   }
+  warren->end();
+  warren->start();
+  example8(warren, false);
+  example9(warren, false);
   warren->end();
   return 0;
 }

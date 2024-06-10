@@ -70,12 +70,10 @@ std::shared_ptr<Warren> Warren::make(const std::string &burrow,
   if (!cook(dna, &parameters, error))
     return nullptr;
   std::string name;
-  if (parameters.find("warren") != parameters.end()) {
+  if (parameters.find("warren") != parameters.end())
     name = parameters["warren"];
-  } else {
-    safe_set(error) = "No warren name in burrow dna: " + the_burrow;
-    return nullptr;
-  }
+  else
+    name = "simple";
   return Warren::make(name, burrow, error);
 }
 
