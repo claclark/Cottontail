@@ -156,10 +156,10 @@ void example5(std::shared_ptr<cottontail::Warren> warren, bool verbose) {
   std::flush(std::cout);
 }
 
-// Example 7
+// Example 6
 // Outcomes from city inspections
 // SELECT result, COUNT(result) FROM city_inspections GROUP BY result
-void example7(std::shared_ptr<cottontail::Warren> warren, bool verbose) {
+void example6(std::shared_ptr<cottontail::Warren> warren, bool verbose) {
   cottontail::addr t0 = cottontail::now();
   std::string query = "(<< :result: Files/city_inspections.json)";
   std::unique_ptr<cottontail::Hopper> hopper = warren->hopper_from_gcl(query);
@@ -175,33 +175,50 @@ void example7(std::shared_ptr<cottontail::Warren> warren, bool verbose) {
       results[result]++;
   }
   cottontail::addr t1 = cottontail::now();
-  timestamp(7, t1 - t0 + 1);
+  timestamp(6, t1 - t0 + 1);
   if (verbose)
     for (auto &result : results)
       std::cout << result.first << ": " << result.second << "\n";
   std::flush(std::cout);
 }
 
-// Example 8
+// Example 7
 // How many rows in the database?
 // SELECT COUNT(*) FROM *
-void example8(std::shared_ptr<cottontail::Warren> warren, bool verbose) {
+void example7(std::shared_ptr<cottontail::Warren> warren, bool verbose) {
   cottontail::addr t0 = cottontail::now();
   cottontail::addr count =
       warren->idx()->count(warren->featurizer()->featurize(":"));
   cottontail::addr t1 = cottontail::now();
-  timestamp(8, t1 - t0);
+  timestamp(7, t1 - t0);
   if (verbose)
     std::cout << count << "\n";
   std::flush(std::cout);
 }
 
-// Consistent annotation for dates
+// Add consistent annotation for dates.
+// Not very robust thanks to struct tm.
+
 void annotate_date(std::shared_ptr<cottontail::Warren> warren,
                    cottontail::addr p, cottontail::addr q,
                    const std::string &year, const std::string &month,
                    const std::string day) {
-  // should valid date, but this is just an example.
+  struct tm tm;
+  try {
+    tm.tm_year = std::stoi(year) - 1900;
+    tm.tm_mon = std::stoi(month) - 1;
+    tm.tm_mday = std::stoi(day);
+    tm.tm_hour = tm.tm_min = tm.tm_sec = 0;
+    tm.tm_isdst = -1;
+  } catch (const std::invalid_argument &e) {
+    return;
+  }
+  time_t t = mktime(&tm);
+  if (t < 0)
+    return;
+  cottontail::fval v = (cottontail::fval)t;
+  warren->annotator()->annotate(warren->featurizer()->featurize("created:"), p,
+                                q, v);
   warren->annotator()->annotate(warren->featurizer()->featurize("year=" + year),
                                 p, q);
   warren->annotator()->annotate(
@@ -209,6 +226,11 @@ void annotate_date(std::shared_ptr<cottontail::Warren> warren,
   warren->annotator()->annotate(warren->featurizer()->featurize("day=" + day),
                                 p, q);
 }
+
+std::map<std::string, std::string> months = {
+    {"Jan", "01"}, {"Feb", "02"}, {"Mar", "03"}, {"Apr", "04"},
+    {"May", "05"}, {"Jun", "06"}, {"Jul", "07"}, {"Aug", "08"},
+    {"Sep", "09"}, {"Oct", "10"}, {"Nov", "11"}, {"Dec", "12"}};
 
 // "publishedDate" : { "$date" : "2009-04-01T00:00:00.000-0700" }
 void annotate_books(std::shared_ptr<cottontail::Warren> warren) {
@@ -222,11 +244,6 @@ void annotate_books(std::shared_ptr<cottontail::Warren> warren) {
                   date.substr(9, 2));
   }
 }
-
-std::map<std::string, std::string> months = {
-    {"Jan", "01"}, {"Feb", "02"}, {"Mar", "03"}, {"Apr", "04"},
-    {"May", "05"}, {"Jun", "06"}, {"Jul", "07"}, {"Aug", "08"},
-    {"Sep", "09"}, {"Oct", "10"}, {"Nov", "11"}, {"Dec", "12"}};
 
 // "date":"Feb 20 2015"
 void annotate_city_inspections(std::shared_ptr<cottontail::Warren> warren) {
@@ -347,8 +364,8 @@ int main(int argc, char **argv) {
   example3(warren, false);
   example4(warren, false);
   example5(warren, false);
+  example6(warren, false);
   example7(warren, false);
-  example8(warren, false);
   if (!annotate_dates(warren, &error)) {
     std::cerr << program_name << ": " << error << "\n";
     return 1;

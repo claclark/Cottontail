@@ -5,7 +5,7 @@
 #include "src/cottontail.h"
 
 void usage(std::string program_name) {
-  std::cerr << "usage: " << program_name << "[--simple|---bigwig] [files]\n";
+  std::cerr << "usage: " << program_name << " [--simple|---bigwig] [files]\n";
 }
 
 std::shared_ptr<cottontail::Scribe> simple_scribe(const std::string &burrow,

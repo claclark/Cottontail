@@ -104,10 +104,15 @@ int main(int argc, char **argv) {
         else
           std::cout << "(" << p << "," << q << ")" << n << ": ";
       } else {
-        if (v == 0.0)
+        if (v == 0.0) {
           std::cout << "(" << p << "," << q << "): ";
-        else
-          std::cout << "(" << p << "," << q << ")" << v << ": ";
+        } else {
+          cottontail::addr n = v;
+          if (v - n > 0.0)
+            std::cout << "(" << p << "," << q << ")" << v << ": ";
+          else
+            std::cout << "(" << p << "," << q << ")" << n << ": ";
+        }
       }
       cottontail::addr const WINDOW = 128;
       if (q - p <= WINDOW) {
