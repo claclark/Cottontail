@@ -12,6 +12,7 @@ cc_test(
         "-lz -pthread"
     ],
     data = [
+        "books.json",
         "ranking.txt",
         "sonnet0.txt",
         "sonnet1.txt",

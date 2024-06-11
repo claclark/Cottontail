@@ -200,7 +200,47 @@ void check_json(std::shared_ptr<cottontail::Warren> warren) {
   }
   warren->end();
 }
+
+void check_books(std::shared_ptr<cottontail::Warren> warren) {
+  warren->start();
+  std::unique_ptr<cottontail::Hopper> books =
+      warren->hopper_from_gcl("(<< : test/books.json)");
+  std::unique_ptr<cottontail::Hopper> title =
+      warren->hopper_from_gcl(":title:");
+  std::vector<std::unique_ptr<cottontail::Hopper>> authors;
+  std::vector<std::pair<std::string, std::string>> results;
+  cottontail::addr p, q;
+  for (books->tau(cottontail::minfinity + 1, &p, &q); q < cottontail::maxfinity;
+       books->tau(p + 1, &p, &q)) {
+    cottontail::addr p_title, q_title;
+    title->tau(p, &p_title, &q_title);
+    if (q_title > q)
+      continue;
+    std::string the_title = warren->txt()->translate(p_title, q_title);
+    if (the_title == "\"\"")
+      continue;
+    for (size_t i = 0;; i++) {
+      if (authors.size() <= i) {
+        std::string feature = ":authors:[" + std::to_string(i) + "]:";
+        authors.emplace_back(warren->hopper_from_gcl(feature));
+      }
+      cottontail::addr p_author, q_author;
+      authors[i]->tau(p, &p_author, &q_author);
+      if (q_author > q)
+        break;
+      std::string the_author = warren->txt()->translate(p_author, q_author);
+      if (the_author == "\"\" ")
+        continue;
+      results.emplace_back(the_title, the_author);
+    }
+  }
+  warren->end();
+  EXPECT_EQ(results[688].first, "\"jQuery UI in Action\" ");
+  EXPECT_EQ(results[688].second, "\"Theodore J. (T.J.) VanToll III\" ");
+  EXPECT_EQ(results[710].first, "\"Barcodes with iOS\" ");
+  EXPECT_EQ(results[710].second, "\"Oliver Drobnik\" ");
 }
+} // namespace
 
 TEST(JSON, Bigwig) {
   std::string error;
@@ -212,6 +252,10 @@ TEST(JSON, Bigwig) {
   ASSERT_NE(scribe, nullptr);
   scribe_json(scribe);
   check_json(bigwig);
+  std::vector<std::string> filenames;
+  filenames.push_back("test/books.json");
+  ASSERT_TRUE(scribe_jsonl(filenames, scribe));
+  check_books(bigwig);
 }
 
 TEST(JSON, Simple) {
