@@ -244,6 +244,7 @@ public:
     }
     std::shared_ptr<FiverTxt> txt = std::shared_ptr<FiverTxt>(new FiverTxt());
     txt->count_ = -1;
+    txt->range_valid_ = false;
     txt->tokenizer_ = tokenizer;
     txt->hopper_ = idx->hopper(featurizer->featurize(text_chunk_feature));
     txt->text_ = text;
@@ -301,15 +302,24 @@ private:
     return count_;
   }
   bool range_(addr *p, addr *q) {
-    std::lock_guard<std::mutex> lock(mutex_);
-    hopper_->tau(minfinity + 1, p, q);
-    if (*p == maxfinity)
-      return false;
-    addr r;
-    hopper_->uat(maxfinity - 1, &r, q);
-    return true;
+    if (!range_valid_) {
+      std::lock_guard<std::mutex> lock(mutex_);
+      if (!range_valid_) {
+        range_valid_ = true;
+        hopper_->tau(minfinity + 1, &range_p_, &range_q_);
+        if (range_p_ < maxfinity) {
+          addr ignore;
+          hopper_->uat(maxfinity - 1, &ignore, &range_q_);
+        }
+      }
+    }
+    *p = range_p_;
+    *q = range_q_;
+    return range_p_ < maxfinity;
   }
   addr count_;
+  bool range_valid_;
+  addr range_p_, range_q_;
   std::mutex mutex_;
   std::shared_ptr<Tokenizer> tokenizer_;
   std::unique_ptr<Hopper> hopper_;
