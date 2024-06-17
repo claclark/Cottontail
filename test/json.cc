@@ -21,6 +21,13 @@ TEST(JSON, Tokens) {
   EXPECT_EQ(t.size(), 10);
   for (size_t i = 0; i < t.size(); i++)
     EXPECT_EQ(t[i].length(), 3);
+  EXPECT_TRUE(cottontail::json_contains_utf8_noncharacters(s));
+  EXPECT_FALSE(cottontail::json_contains_utf8_noncharacters("a nice string"));
+  s = cottontail::json_sanitize(s);
+  EXPECT_EQ(s[3], '\xEF');
+  EXPECT_EQ(s[7], '\xBF');
+  EXPECT_EQ(s[11], '\xBD');
+  EXPECT_FALSE(cottontail::json_contains_utf8_noncharacters(s));
 }
 
 namespace {
@@ -121,10 +128,10 @@ void check_json(std::shared_ptr<cottontail::Warren> warren) {
     ASSERT_NE(hopper, nullptr);
     hopper->tau(cottontail::minfinity + 1, &p, &q);
     t = cottontail::scribe_translate_json(warren->txt()->translate(p, q));
-    EXPECT_EQ(t, "\"0001\" ");
+    EXPECT_EQ(t, "\"0001\"");
     hopper->tau(p + 1, &p, &q);
     t = cottontail::scribe_translate_json(warren->txt()->translate(p, q));
-    EXPECT_EQ(t, "\"0000\" ");
+    EXPECT_EQ(t, "\"0000\"");
   }
   {
     std::shared_ptr<cottontail::Hopper> hopper = warren->hopper_from_gcl("id:");
@@ -133,11 +140,11 @@ void check_json(std::shared_ptr<cottontail::Warren> warren) {
     for (hopper->tau(cottontail::minfinity + 1, &p, &q);
          p < cottontail::maxfinity; hopper->tau(p + 1, &p, &q)) {
       t = cottontail::scribe_translate_json(warren->txt()->translate(p, q));
-      EXPECT_EQ(t.length(), 7);
+      EXPECT_EQ(t.length(), 6);
       i++;
     }
     EXPECT_EQ(i, 13);
-    EXPECT_EQ(t, "\"0000\" ");
+    EXPECT_EQ(t, "\"0000\"");
   }
   {
     std::shared_ptr<cottontail::Hopper> hopper =
@@ -146,11 +153,11 @@ void check_json(std::shared_ptr<cottontail::Warren> warren) {
     hopper->tau(cottontail::minfinity + 1, &p, &q, &v);
     EXPECT_EQ(v, 0.55);
     t = cottontail::scribe_translate_json(warren->txt()->translate(p, q));
-    EXPECT_EQ(t, "0.550000 ");
+    EXPECT_EQ(t, "0.550000");
     hopper->tau(p + 1, &p, &q, &v);
     EXPECT_EQ(v, -0.55);
     t = cottontail::scribe_translate_json(warren->txt()->translate(p, q));
-    EXPECT_EQ(t, "-0.550000 ");
+    EXPECT_EQ(t, "-0.550000");
   }
   {
     std::shared_ptr<cottontail::Hopper> hopper =
@@ -161,7 +168,7 @@ void check_json(std::shared_ptr<cottontail::Warren> warren) {
     hopper->tau(p + 1, &p, &q, &v);
     EXPECT_EQ(v, 0);
     t = cottontail::scribe_translate_json(warren->txt()->translate(p, q));
-    EXPECT_EQ(t, "[ ] ");
+    EXPECT_EQ(t, "[ ]");
   }
   {
     std::shared_ptr<cottontail::Hopper> hopper =
@@ -171,7 +178,7 @@ void check_json(std::shared_ptr<cottontail::Warren> warren) {
     for (hopper->tau(cottontail::minfinity + 1, &p, &q);
          p < cottontail::maxfinity; hopper->tau(p + 1, &p, &q)) {
       t = cottontail::scribe_translate_json(warren->txt()->translate(p, q));
-      EXPECT_GT(t.length(), 6);
+      EXPECT_GT(t.length(), 5);
       i++;
     }
     EXPECT_EQ(i, 11);
@@ -183,7 +190,7 @@ void check_json(std::shared_ptr<cottontail::Warren> warren) {
     hopper->tau(cottontail::minfinity + 1, &p, &q, &v);
     EXPECT_TRUE(std::isnan(v));
     t = cottontail::scribe_translate_json(warren->txt()->translate(p, q));
-    EXPECT_EQ(t, "null ");
+    EXPECT_EQ(t, "null");
   }
   {
     std::shared_ptr<cottontail::Hopper> hopper =
@@ -229,16 +236,16 @@ void check_books(std::shared_ptr<cottontail::Warren> warren) {
       if (q_author > q)
         break;
       std::string the_author = warren->txt()->translate(p_author, q_author);
-      if (the_author == "\"\" ")
+      if (the_author == "\"\"")
         continue;
       results.emplace_back(the_title, the_author);
     }
   }
   warren->end();
-  EXPECT_EQ(results[688].first, "\"jQuery UI in Action\" ");
-  EXPECT_EQ(results[688].second, "\"Theodore J. (T.J.) VanToll III\" ");
-  EXPECT_EQ(results[710].first, "\"Barcodes with iOS\" ");
-  EXPECT_EQ(results[710].second, "\"Oliver Drobnik\" ");
+  EXPECT_EQ(results[688].first, "\"jQuery UI in Action\"");
+  EXPECT_EQ(results[688].second, "\"Theodore J. (T.J.) VanToll III\"");
+  EXPECT_EQ(results[710].first, "\"Barcodes with iOS\"");
+  EXPECT_EQ(results[710].second, "\"Oliver Drobnik\"");
 }
 } // namespace
 

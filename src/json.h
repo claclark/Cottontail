@@ -28,5 +28,7 @@ bool json_scribe(json &j, std::shared_ptr<Scribe> scribe,
 bool json_scribe(json &j, std::shared_ptr<Scribe> scribe, addr *p, addr *q,
                  std::string *error = nullptr);
 std::string json_translate(const std::string &s);
+bool json_contains_utf8_noncharacters(const std::string &s);
+std::string json_sanitize(const std::string &s);
 } // namespace cottontail
 #endif // COTTONTAIL_SRC_JSON_H_

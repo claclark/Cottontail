@@ -272,7 +272,7 @@ namespace {
 std::string path(const std::string &filename) {
   if (filename.find("/") != std::string::npos)
     return filename;
-  else 
+  else
     return "./" + filename;
 }
 } // namespace
@@ -295,6 +295,8 @@ bool scribe_jsonl(const std::vector<std::string> &filenames,
     addr p = maxfinity, q = minfinity;
     while (std::getline(f, line)) {
       json j;
+      if (json_contains_utf8_noncharacters(line))
+        line = json_sanitize(line);
       try {
         j = json::parse(line);
       } catch (json::parse_error &e) {

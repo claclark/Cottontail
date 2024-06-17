@@ -155,8 +155,13 @@ inline const char *skip(const char *c) {
 std::string json_translate(const std::string &s) {
   sanity_check();
   bool inside = false;
+  bool pending_space = false;
   std::string t;
-  for (const char *c = s.c_str(); *c; c++)
+  for (const char *c = s.c_str(); *c; c++) {
+    if (*c != ' ' && *c != '\n' && pending_space) {
+      pending_space = false;
+      t += ' ';
+    }
     if (is_next(c, open_object_token)) {
       t += "{";
       c = skip(c);
@@ -187,7 +192,7 @@ std::string json_translate(const std::string &s) {
                is_next(c, close_number_token)) {
       c = skip(c);
     } else if (*c == '\n') {
-      t += ' ';
+      pending_space = true;
     } else if (inside) {
       if (*c == '"')
         t += "\\\"";
@@ -195,6 +200,47 @@ std::string json_translate(const std::string &s) {
         t += "\\\\";
       else
         t += *c;
+    } else {
+      t += *c;
+    }
+  }
+  return t;
+}
+
+bool json_contains_utf8_noncharacters(const std::string &s) {
+  int state = 0;
+  for (const char *c = s.c_str(); *c; c++)
+    if (state == 0) {
+      if (*c == '\xEF')
+        state = 1;
+    } else if (state == 1) {
+      if (*c == '\xB7')
+        state = 2;
+      else
+        state = 0;
+    } else if (*c >= '\x90' || *c <= '\xAF') {
+      return true;
+    } else {
+      state = 0;
+    }
+  return false;
+}
+
+namespace {
+inline bool noncharacter_next(const char *c) {
+  return c[0] && c[0] == '\xEF' && c[1] && c[1] == '\xB7' && c[2] &&
+         (c[2] >= '\x90' || c[2] >= '\xAF');
+}
+} // namespace
+
+std::string json_sanitize(const std::string &s) {
+  std::string t;
+  for (const char *c = s.c_str(); *c; c++)
+    if (noncharacter_next(c)) {
+      t += '\xEF'; // Unicode replacement character
+      t += '\xBF';
+      t += '\xBD';
+      c += 2;
     } else {
       t += *c;
     }
