@@ -50,6 +50,9 @@ private:
                  std::string *error) final {
     return fiver_->annotator()->annotate(feature, p, q, v, error);
   };
+  bool erase_(addr p, addr q, std::string *error) {
+    return fiver_->annotator()->annotate(0, p, q, 0.0, error);
+  }
   std::shared_ptr<Fiver> fiver_;
 };
 
@@ -91,6 +94,12 @@ public:
         std::shared_ptr<BigwigIdx>(new BigwigIdx());
     assert(idx != nullptr);
     idx->warrens_ = warrens;
+    idx->erasing_ = false;
+    for (auto &&warren : warrens)
+      if (warren->idx()->count(0)) {
+        idx->erasing_ = true;
+        break;
+      }
     return idx;
   };
 
@@ -104,7 +113,13 @@ private:
   BigwigIdx(){};
   std::string recipe_() final { return ""; };
   std::unique_ptr<Hopper> hopper_(addr feature) final {
-    return Fiver::merge(warrens_, feature);
+    if (erasing_ && feature != 0) {
+      return std::make_unique<cottontail::gcl::NotContainedIn>(
+          std::move(Fiver::merge(warrens_, feature)),
+          std::move(Fiver::merge(warrens_, (addr)0)));
+    } else {
+      return Fiver::merge(warrens_, feature);
+    }
   };
   addr count_(addr feature) final {
     addr n = 0;
@@ -114,9 +129,6 @@ private:
     return n;
   }
   addr vocab_() final {
-    // TODO
-    // Technically wrong, but fixable with some work
-    // Really intended to be an approximation anyway
     addr n = 0;
     for (auto &warren : warrens_)
       if (warren != nullptr)
@@ -124,6 +136,7 @@ private:
     return n;
   }
   std::vector<std::shared_ptr<Fiver>> warrens_;
+  bool erasing_;
 };
 
 class BigwigTxt final : public Txt {
@@ -536,7 +549,8 @@ bool Bigwig::set_parameter_(const std::string &key, const std::string &value,
   std::shared_ptr<std::map<std::string, std::string>> parameters =
       std::make_shared<std::map<std::string, std::string>>();
   fluffle_->lock.lock();
-  if (working_ != nullptr && !set_parameter_in_dna(working_, key, value, error)) {
+  if (working_ != nullptr &&
+      !set_parameter_in_dna(working_, key, value, error)) {
     fluffle_->lock.unlock();
     return false;
   }

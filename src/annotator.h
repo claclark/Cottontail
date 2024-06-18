@@ -39,6 +39,9 @@ public:
                        std::string *error = nullptr) {
     return annotate_(annotations_filename, error);
   }
+  inline bool erase(addr p, addr q, std::string *error = nullptr) {
+    return erase_(p, q, error);
+  }
 
   virtual ~Annotator(){};
   Annotator(const Annotator &) = delete;
@@ -55,6 +58,7 @@ private:
                          std::string *error) = 0;
   virtual bool annotate_(const std::string &annotations_filename,
                          std::string *error);
+  virtual bool erase_(addr p, addr q, std::string *error);
   std::string name_ = "";
 };
 

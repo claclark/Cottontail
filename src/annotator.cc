@@ -73,4 +73,9 @@ bool Annotator::annotate_(const std::string &annotations_filename,
   return true;
 }
 
+bool Annotator::erase_(addr p, addr q, std::string *error) {
+  safe_set(error) = "Annotator " + name() + "can't erase content";
+  return false;
+}
+
 } // namespace cottontail

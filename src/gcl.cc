@@ -146,7 +146,7 @@ void Containing::ohr_(addr k, addr *p, addr *q, fval *v) {
 
 void NotContainedIn::tau_(addr k, addr *p, addr *q, fval *v) {
   left_->tau(k, p, q, v);
-  if (*p == maxfinity)
+  if (*p == maxfinity || *q == minfinity)
     return;
   for (;;) {
     addr pp, qq;
@@ -167,11 +167,11 @@ void NotContainedIn::rho_(addr k, addr *p, addr *q, fval *v) {
 
 void NotContainedIn::uat_(addr k, addr *p, addr *q, fval *v) {
   left_->uat(k, p, q, v);
-  if (*q == minfinity)
+  if (*q == minfinity || *p == maxfinity)
     return;
   for (;;) {
     addr pp, qq;
-    right_->ohr(*q, &pp, &qq);
+    right_->ohr(*p, &pp, &qq);
     if (qq < *q)
       return;
     left_->ohr(pp - 1, p, q, v);
@@ -183,7 +183,7 @@ void NotContainedIn::uat_(addr k, addr *p, addr *q, fval *v) {
 void NotContainedIn::ohr_(addr k, addr *p, addr *q, fval *v) {
   addr pp, qq;
   left_->ohr(k, &pp, &qq);
-  uat(pp, p, q, v);
+  uat(qq, p, q, v);
 }
 
 void NotContaining::tau_(addr k, addr *p, addr *q, fval *v) {
@@ -194,7 +194,7 @@ void NotContaining::tau_(addr k, addr *p, addr *q, fval *v) {
 
 void NotContaining::rho_(addr k, addr *p, addr *q, fval *v) {
   left_->rho(k, p, q, v);
-  if (*q == maxfinity)
+  if (*q == maxfinity || *p == minfinity)
     return;
   for (;;) {
     addr pp, qq;
@@ -215,7 +215,7 @@ void NotContaining::uat_(addr k, addr *p, addr *q, fval *v) {
 
 void NotContaining::ohr_(addr k, addr *p, addr *q, fval *v) {
   left_->ohr(k, p, q, v);
-  if (*p == minfinity)
+  if (*p == minfinity || *q == maxfinity)
     return;
   for (;;) {
     addr pp, qq;

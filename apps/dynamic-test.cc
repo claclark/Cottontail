@@ -312,13 +312,38 @@ int main(int argc, char **argv) {
       std::map<std::string, cottontail::fval> metrics;
       cottontail::eval(lrels, ranking, &metrics);
       output_mutex.lock();
-      if (metrics["ap"] > 0.0)
-        std::cout << time(NULL) << " " << total_topics << " " << topic << " "
-                  << metrics["ap"] << "\n"
-                  << std::flush;
+      std::cout << time(NULL) << " " << total_topics << " " << topic << " "
+                << metrics["ap"] << "\n"
+                << std::flush;
       output_mutex.unlock();
       sleep(1);
     }
+  };
+
+  auto erase_worker = [&]() {
+    std::shared_ptr<cottontail::Warren> warren = bigwig->clone();
+    ASSERT_NE(warren, nullptr);
+    warren->start();
+    std::unique_ptr<cottontail::Hopper> hopper =
+        warren->hopper_from_gcl("file:");
+    cottontail::addr p, q;
+#if 0
+    size_t i = 0;
+#endif
+    for (hopper->tau(cottontail::minfinity + 1, &p, &q);
+         p < cottontail::maxfinity; hopper->tau(p + 1, &p, &q)) {
+      ASSERT_TRUE(warren->transaction());
+      warren->annotator()->erase(p, q);
+      ASSERT_TRUE(warren->ready());
+      warren->commit();
+#if 0
+      if ((++i) % 12 == 0) {
+        std::cerr << i << "\n" << std::flush;
+        sleep(1);
+      }
+#endif
+    }
+    warren->end();
   };
 
   std::vector<std::thread> rankers;
@@ -332,6 +357,8 @@ int main(int argc, char **argv) {
     scribers.emplace_back(std::thread(scribe_worker));
   for (auto &scriber : scribers)
     scriber.join();
+  std::thread eraser(erase_worker);
+  eraser.join();
   stop = true;
   for (auto &ranker : rankers)
     ranker.join();
