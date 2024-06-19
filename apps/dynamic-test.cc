@@ -309,6 +309,9 @@ int main(int argc, char **argv) {
            p < cottontail::maxfinity; hopper->tau(p + 1, &p, &q, &v))
         lrels[p] = v;
       warren->end();
+      cottontail::addr fake = cottontail::maxfinity/2;
+      while (lrels.size() < qrels[topic].size())
+        lrels[fake++] = 1;
       std::map<std::string, cottontail::fval> metrics;
       cottontail::eval(lrels, ranking, &metrics);
       output_mutex.lock();
@@ -357,6 +360,9 @@ int main(int argc, char **argv) {
     scribers.emplace_back(std::thread(scribe_worker));
   for (auto &scriber : scribers)
     scriber.join();
+  std::cerr << "Collection added.\n" << std::flush;
+  sleep(20);
+  std::cerr << "Erasing collection.\n" << std::flush;
   std::thread eraser(erase_worker);
   eraser.join();
   stop = true;
