@@ -8,6 +8,7 @@
 
 #include "src/cottontail.h"
 #include "src/json.h"
+#include "src/nlohmann.h"
 
 namespace cottontail {
 

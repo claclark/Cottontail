@@ -5,7 +5,7 @@
 #include <string>
 
 #include "src/core.h"
-#include "src/json.h"
+#include "src/nlohmann.h"
 #include "src/scribe.h"
 
 namespace cottontail {
@@ -123,20 +123,66 @@ bool do_json(json &j, std::shared_ptr<Scribe> scribe, const std::string &path,
   safe_set(error) = "Unknown JSON data type.";
   return false;
 }
+
+bool contains_utf8_noncharacters(const std::string &s) {
+  int state = 0;
+  for (const char *c = s.c_str(); *c; c++)
+    if (state == 0) {
+      if (*c == '\xEF')
+        state = 1;
+    } else if (state == 1) {
+      if (*c == '\xB7')
+        state = 2;
+      else
+        state = 0;
+    } else if (*c >= '\x90' || *c <= '\xAF') {
+      return true;
+    } else {
+      state = 0;
+    }
+  return false;
+}
+
+inline bool noncharacter_next(const char *c) {
+  return c[0] && c[0] == '\xEF' && c[1] && c[1] == '\xB7' && c[2] &&
+         (c[2] >= '\x90' || c[2] >= '\xAF');
+}
+
+std::string sanitize(const std::string &s) {
+  std::string t;
+  for (const char *c = s.c_str(); *c; c++)
+    if (noncharacter_next(c)) {
+      t += '\xEF'; // Unicode replacement character
+      t += '\xBF';
+      t += '\xBD';
+      c += 2;
+    } else {
+      t += *c;
+    }
+  return t;
+}
 } // namespace
 
-bool json_scribe(json &j, std::shared_ptr<Scribe> scribe, addr *p, addr *q,
-                 std::string *error) {
-  if (scribe == nullptr) {
-    safe_set(error) = "Null scribe";
+bool json_scribe(const std::string &s, std::shared_ptr<Scribe> scribe, addr *p,
+                 addr *q, std::string *error) {
+  assert(scribe != nullptr);
+  json j;
+  try {
+    if (contains_utf8_noncharacters(s))
+      j = json::parse(sanitize(s));
+    else
+      j = json::parse(s);
+  } catch (json::parse_error &e) {
+    safe_set(error) = "Cannot parse json";
     return false;
   }
   return do_json(j, scribe, ":", p, q, error);
 }
 
-bool json_scribe(json &j, std::shared_ptr<Scribe> scribe, std::string *error) {
+bool json_scribe(const std::string &s, std::shared_ptr<Scribe> scribe,
+                 std::string *error) {
   addr p, q;
-  return json_scribe(j, scribe, &p, &q, error);
+  return json_scribe(s, scribe, &p, &q, error);
 }
 
 namespace {
@@ -206,45 +252,4 @@ std::string json_translate(const std::string &s) {
   }
   return t;
 }
-
-bool json_contains_utf8_noncharacters(const std::string &s) {
-  int state = 0;
-  for (const char *c = s.c_str(); *c; c++)
-    if (state == 0) {
-      if (*c == '\xEF')
-        state = 1;
-    } else if (state == 1) {
-      if (*c == '\xB7')
-        state = 2;
-      else
-        state = 0;
-    } else if (*c >= '\x90' || *c <= '\xAF') {
-      return true;
-    } else {
-      state = 0;
-    }
-  return false;
-}
-
-namespace {
-inline bool noncharacter_next(const char *c) {
-  return c[0] && c[0] == '\xEF' && c[1] && c[1] == '\xB7' && c[2] &&
-         (c[2] >= '\x90' || c[2] >= '\xAF');
-}
-} // namespace
-
-std::string json_sanitize(const std::string &s) {
-  std::string t;
-  for (const char *c = s.c_str(); *c; c++)
-    if (noncharacter_next(c)) {
-      t += '\xEF'; // Unicode replacement character
-      t += '\xBF';
-      t += '\xBD';
-      c += 2;
-    } else {
-      t += *c;
-    }
-  return t;
-}
-
 } // namespace cottontail

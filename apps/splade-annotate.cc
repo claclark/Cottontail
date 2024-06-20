@@ -2,6 +2,7 @@
 
 #include "src/cottontail.h"
 #include "src/json.h"
+#include "src/nlohmann.h"
 
 void usage(std::string program_name) {
   std::cerr << "usage: " << program_name << " [--burrow burrow] vectors\n";

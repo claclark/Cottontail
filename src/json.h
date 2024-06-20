@@ -4,9 +4,6 @@
 #include "src/core.h"
 #include "src/scribe.h"
 
-#include "external/nlohmann/file/json.hpp"
-using json = nlohmann::json;
-
 namespace cottontail {
 
 // unicode noncharacters are tokens in the utf8_tokenizer
@@ -22,13 +19,15 @@ const std::string colon_token = "\xEF\xB7\x96";
 const std::string comma_token = "\xEF\xB7\x97";
 const std::string open_number_token = "\xEF\xB7\x98";
 const std::string close_number_token = "\xEF\xB7\x99";
+inline bool json_internal_token(const char *token, addr length) {
+  return length == 3 && token[0] == '\xEF' && token[1] == '\xB7' &&
+         (token[2] >= '\x90' || token[2] >= '\x99');
+}
 
-bool json_scribe(json &j, std::shared_ptr<Scribe> scribe,
+bool json_scribe(const std::string &s, std::shared_ptr<Scribe> scribe,
                  std::string *error = nullptr);
-bool json_scribe(json &j, std::shared_ptr<Scribe> scribe, addr *p, addr *q,
-                 std::string *error = nullptr);
+bool json_scribe(const std::string &s, std::shared_ptr<Scribe> scribe, addr *p,
+                 addr *q, std::string *error = nullptr);
 std::string json_translate(const std::string &s);
-bool json_contains_utf8_noncharacters(const std::string &s);
-std::string json_sanitize(const std::string &s);
 } // namespace cottontail
 #endif // COTTONTAIL_SRC_JSON_H_

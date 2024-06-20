@@ -10,6 +10,7 @@
 
 #include "src/cottontail.h"
 #include "src/json.h"
+#include "src/nlohmann.h"
 
 void usage(std::string program_name) {
   std::cerr << "usage: " << program_name
@@ -133,10 +134,10 @@ int main(int argc, char **argv) {
         for (size_t i = 0; i < ranking.size(); i++) {
           cottontail::addr p, q;
           hopper->tau(ranking[i].container_p(), &p, &q);
-            std::string docno =
-                cottontail::trec_docno(warren->txt()->translate(p, q));
-            std::cout << topic << " Q0 " << docno << " " << i + 1 << " "
-                      << ranking[i].score() << " cottontail\n";
+          std::string docno =
+              cottontail::trec_docno(warren->txt()->translate(p, q));
+          std::cout << topic << " Q0 " << docno << " " << i + 1 << " "
+                    << ranking[i].score() << " cottontail\n";
         }
       }
       std::flush(std::cout);

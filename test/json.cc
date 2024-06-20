@@ -21,13 +21,11 @@ TEST(JSON, Tokens) {
   EXPECT_EQ(t.size(), 10);
   for (size_t i = 0; i < t.size(); i++)
     EXPECT_EQ(t[i].length(), 3);
-  EXPECT_TRUE(cottontail::json_contains_utf8_noncharacters(s));
-  EXPECT_FALSE(cottontail::json_contains_utf8_noncharacters("a nice string"));
-  s = cottontail::json_sanitize(s);
-  EXPECT_EQ(s[3], '\xEF');
-  EXPECT_EQ(s[7], '\xBF');
-  EXPECT_EQ(s[11], '\xBD');
-  EXPECT_FALSE(cottontail::json_contains_utf8_noncharacters(s));
+  const char *c = s.c_str();
+  for (size_t i = 0; i < 10; i++)
+    EXPECT_TRUE(cottontail::json_internal_token(c + 3*i, 3));
+  EXPECT_FALSE(cottontail::json_internal_token(nullptr, 2));
+  EXPECT_FALSE(cottontail::json_internal_token("the", 3));
 }
 
 namespace {
@@ -106,12 +104,9 @@ std::string x2 =
 
 void scribe_json(std::shared_ptr<cottontail::Scribe> scribe) {
   ASSERT_TRUE(scribe->transaction());
-  json j0 = json::parse(x0);
-  EXPECT_TRUE(json_scribe(j0, scribe));
-  json j1 = json::parse(x1);
-  EXPECT_TRUE(json_scribe(j1, scribe));
-  json j2 = json::parse(x2);
-  EXPECT_TRUE(json_scribe(j2, scribe));
+  EXPECT_TRUE(json_scribe(x0, scribe));
+  EXPECT_TRUE(json_scribe(x1, scribe));
+  EXPECT_TRUE(json_scribe(x2, scribe));
   ASSERT_TRUE(scribe->ready());
   scribe->commit();
   scribe->finalize();

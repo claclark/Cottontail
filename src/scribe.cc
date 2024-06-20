@@ -294,19 +294,12 @@ bool scribe_jsonl(const std::vector<std::string> &filenames,
     size_t number = 1;
     addr p = maxfinity, q = minfinity;
     while (std::getline(f, line)) {
-      json j;
-      if (json_contains_utf8_noncharacters(line))
-        line = json_sanitize(line);
-      try {
-        j = json::parse(line);
-      } catch (json::parse_error &e) {
-        safe_set(error) = "Cannot parse json line: " + filename + ":" +
+      addr p0, q0;
+      if (!json_scribe(line, scribe, &p0, &q0)) {
+        safe_set(error) = "Cannot scribe json line: " + filename + ":" +
                           std::to_string(number);
         return false;
       }
-      addr p0, q0;
-      if (!json_scribe(j, scribe, &p0, &q0, error))
-        return false;
       p = std::min(p, p0);
       q = std::max(q, q0);
       number++;
