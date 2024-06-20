@@ -25,15 +25,24 @@ public:
   inline std::string name() { return name_; }
   inline bool annotate(addr feature, addr p, addr q, fval v,
                        std::string *error = nullptr) {
-    return annotate_(feature, p, q, v, error);
+    if (feature == null_feature)
+      return true;
+    else
+      return annotate_(feature, p, q, v, error);
   };
   inline bool annotate(addr feature, addr p, addr q,
                        std::string *error = nullptr) {
-    return annotate_(feature, p, q, 0.0, error);
+    if (feature == null_feature)
+      return true;
+    else
+      return annotate_(feature, p, q, 0.0, error);
   };
   inline bool annotate(addr feature, addr p, addr q, addr v,
-                std::string *error = nullptr) {
-    return annotate(feature, p, q, addr2fval(v), error);
+                       std::string *error = nullptr) {
+    if (feature == null_feature)
+      return true;
+    else
+      return annotate(feature, p, q, addr2fval(v), error);
   };
   inline bool annotate(const std::string &annotations_filename,
                        std::string *error = nullptr) {

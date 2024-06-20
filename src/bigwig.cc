@@ -51,7 +51,7 @@ private:
     return fiver_->annotator()->annotate(feature, p, q, v, error);
   };
   bool erase_(addr p, addr q, std::string *error) {
-    return fiver_->annotator()->annotate(0, p, q, 0.0, error);
+    return fiver_->annotator()->erase(p, q, error);
   }
   std::shared_ptr<Fiver> fiver_;
 };
@@ -96,7 +96,7 @@ public:
     idx->warrens_ = warrens;
     idx->erasing_ = false;
     for (auto &&warren : warrens)
-      if (warren->idx()->count(0)) {
+      if (warren->idx()->count(null_feature)) {
         idx->erasing_ = true;
         break;
       }
@@ -113,10 +113,10 @@ private:
   BigwigIdx(){};
   std::string recipe_() final { return ""; };
   std::unique_ptr<Hopper> hopper_(addr feature) final {
-    if (erasing_ && feature != 0) {
+    if (erasing_ && feature != null_feature) {
       return std::make_unique<cottontail::gcl::NotContainedIn>(
           std::move(Fiver::merge(warrens_, feature)),
-          std::move(Fiver::merge(warrens_, (addr)0)));
+          std::move(Fiver::merge(warrens_, null_feature)));
     } else {
       return Fiver::merge(warrens_, feature);
     }
@@ -250,6 +250,9 @@ bool fiver_files(std::shared_ptr<Working> working,
   std::vector<std::string> kittens = working->ls("kitten");
   for (auto &kitten : kittens)
     std::remove(working->make_name(kitten).c_str());
+  std::vector<std::string> temps = working->ls("temp");
+  for (auto &temp : temps)
+    std::remove(working->make_name(temp).c_str());
   for (auto &fiver : dead)
     std::remove(working->make_name(fiver.name).c_str());
   if (name != nullptr) {

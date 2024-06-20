@@ -48,9 +48,14 @@ TEST(SimpleAnnotator, FromEmpty) {
       EXPECT_NE(hopper, nullptr);
       cottontail::addr p, q, v;
       hopper->tau(0, &p, &q, &v);
-      EXPECT_EQ(i, p);
-      EXPECT_EQ(i, q);
-      EXPECT_EQ(i, v);
+      if (i == 0) {
+        EXPECT_EQ(cottontail::maxfinity, p);
+        EXPECT_EQ(cottontail::maxfinity, q);
+      } else {
+        EXPECT_EQ(i, p);
+        EXPECT_EQ(i, q);
+        EXPECT_EQ(i, v);
+      }
     }
   }
   {
@@ -117,9 +122,14 @@ TEST(SimpleAnnotator, FromEmpty) {
       EXPECT_NE(hopper, nullptr);
       cottontail::addr p, q, v;
       hopper->tau(0, &p, &q, &v);
-      EXPECT_EQ(i, p);
-      EXPECT_EQ(i, q);
-      EXPECT_EQ(i, v);
+      if (i == 0) {
+        EXPECT_EQ(cottontail::maxfinity, p);
+        EXPECT_EQ(cottontail::maxfinity, q);
+      } else {
+        EXPECT_EQ(i, p);
+        EXPECT_EQ(i, q);
+        EXPECT_EQ(i, v);
+      }
     }
     {
       cottontail::fval v;
