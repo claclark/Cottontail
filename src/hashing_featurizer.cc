@@ -114,7 +114,7 @@ std::string HashingFeaturizer::recipe_() { return ""; }
 
 addr HashingFeaturizer::featurize_(const char *key, addr length) {
   if (length <= 0)
-    return 0;
+    return null_feature;
   if (*key == '#') {
     addr literal = try_literal(key + 1, length - 1);
     if (literal >= 0)
@@ -140,7 +140,7 @@ addr HashingFeaturizer::featurize_(const char *key, addr length) {
 }
 
 std::string HashingFeaturizer::translate_(addr feature) {
-  if (feature == 0)
+  if (feature == null_feature)
     return "#0";
   union {
     char s[sizeof(addr)];
