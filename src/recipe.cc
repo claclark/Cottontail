@@ -207,6 +207,7 @@ std::string freeze(std::string value) {
 //   X:Z sets the recipe for X to Z
 //   X:name:Z sets the name for X to Z, clearing the recipe
 //   X:Y:Z sets the value of Y to Z in the recipe for X (where Y != "name")
+//   X@Y wraps the recipe for X in wrapper Y
 bool interpret_option(std::string *recipe, const std::string &option,
                       std::string *error) {
   if (option == "")
@@ -215,6 +216,25 @@ bool interpret_option(std::string *recipe, const std::string &option,
   if (!cook(*recipe, &parameters)) {
     safe_set(error) = "Bad recipe";
     return false;
+  }
+  {
+    std::regex sep("@");
+    std::vector<std::string> pieces{
+        std::sregex_token_iterator(option.begin(), option.end(), sep, -1), {}};
+    if (pieces.size() == 2) {
+      std::map<std::string, std::string>::iterator item =
+          parameters.find(pieces[0]);
+      if (item == parameters.end()) {
+        safe_set(error) = "Option not found: " + pieces[0];
+        return false;
+      }
+      std::map<std::string, std::string> package;
+      package["name"] = pieces[1];
+      package["recipe"] = item->second;
+      parameters[item->first] = freeze(package);
+      *recipe = freeze(parameters);
+      return true;
+    }
   }
   std::regex sep(":");
   std::vector<std::string> pieces{

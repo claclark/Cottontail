@@ -168,3 +168,50 @@ TEST(recipe, Options) {
   option = "thing:name:foo";
   EXPECT_FALSE(cottontail::interpret_option(&dna, option));
 }
+
+TEST(recipe, Wrap) {
+  std::string dna = "[\n"
+                    "  featurizer:[\n"
+                    "    name:\"hashing\",\n"
+                    "    recipe:\"\",\n"
+                    "  ],\n"
+                    "  idx:[\n"
+                    "    name:\"bigwig\",\n"
+                    "    recipe:[\n"
+                    "      fvalue_compressor:\"null\",\n"
+                    "      fvalue_compressor_recipe:\"\",\n"
+                    "      posting_compressor:\"null\",\n"
+                    "      posting_compressor_recipe:\"\",\n"
+                    "    ],\n"
+                    "  ],\n"
+                    "  parameters:[\n"
+                    "    container:\"(... <DOC> </DOC>)\",\n"
+                    "    id:\"(... <DOCNO> </DOCNO>)\",\n"
+                    "    statistics:\"tf\",\n"
+                    "    stemmer:\"porter\",\n"
+                    "  ],\n"
+                    "  tokenizer:[\n"
+                    "    name:\"ascii\",\n"
+                    "    recipe:\"xml\",\n"
+                    "  ],\n"
+                    "  txt:[\n"
+                    "    name:\"bigwig\",\n"
+                    "    recipe:[\n"
+                    "      compressor:\"null\",\n"
+                    "      compressor_recipe:\"\",\n"
+                    "    ],\n"
+                    "  ],\n"
+                    "  warren:\"bigwig\",\n"
+                    "]\n";
+  EXPECT_TRUE(cottontail::interpret_option(&dna, "featurizer@json"));
+  EXPECT_TRUE(cottontail::interpret_option(&dna, "txt@json"));
+  std::string value;
+  EXPECT_TRUE(cottontail::extract_option(dna, "txt:name", &value));
+  EXPECT_EQ(value, "json");
+  EXPECT_TRUE(cottontail::extract_option(dna, "idx:name", &value));
+  EXPECT_EQ(value, "bigwig");
+  EXPECT_TRUE(cottontail::extract_option(dna, "featurizer:name", &value));
+  EXPECT_EQ(value, "json");
+  EXPECT_FALSE(cottontail::interpret_option(&dna, "junk@json"));
+  EXPECT_FALSE(cottontail::interpret_option(&dna, "x@y@z"));
+}
