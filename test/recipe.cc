@@ -212,6 +212,13 @@ TEST(recipe, Wrap) {
   EXPECT_EQ(value, "bigwig");
   EXPECT_TRUE(cottontail::extract_option(dna, "featurizer:name", &value));
   EXPECT_EQ(value, "json");
+  std::map<std::string, std::string> parameters;
+  EXPECT_TRUE(cottontail::cook(dna, &parameters));
+  EXPECT_TRUE(cottontail::cook(parameters["featurizer"], &parameters));
+  std::string name, recipe;
+  EXPECT_TRUE(cottontail::unwrap(parameters["recipe"], &name, &recipe));
+  EXPECT_EQ(name, "hashing");
+  EXPECT_EQ(recipe, "");
   EXPECT_FALSE(cottontail::interpret_option(&dna, "junk@json"));
   EXPECT_FALSE(cottontail::interpret_option(&dna, "x@y@z"));
 }

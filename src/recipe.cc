@@ -341,4 +341,27 @@ bool extract_option(const std::string &recipe, const std::string &option,
   }
   return true;
 }
+
+bool unwrap(const std::string &package, std::string *name, std::string *recipe,
+            std::string *error) {
+  std::map<std::string, std::string> parameters;
+  if (!cook(package, &parameters)) {
+    safe_set(error) = "Strange package";
+    return false;
+  }
+  auto y = parameters.find("name");
+  if (y == parameters.end()) {
+    safe_set(error) = "No name in package";
+    return false;
+  }
+  auto z = parameters.find("recipe");
+  if (z == parameters.end()) {
+    safe_set(error) = "No recipe in package";
+    return false;
+  }
+  *name = y->second;
+  *recipe = z->second;
+  return true;
+}
+
 } // namespace cottontail
