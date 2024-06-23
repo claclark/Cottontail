@@ -6,7 +6,9 @@
 
 #include "src/core.h"
 #include "src/hashing_featurizer.h"
+#include "src/json_featurizer.h"
 #include "src/null_featurizer.h"
+#include "src/recipe.h"
 #include "src/tagging_featurizer.h"
 #include "src/vocab_featurizer.h"
 
@@ -32,6 +34,15 @@ std::shared_ptr<Featurizer> Featurizer::make(const std::string &name,
     if (featurizer != nullptr)
       featurizer->name_ = "vocab";
     return featurizer;
+  } else if (name == "json") {
+    std::string wrapped_name;
+    std::string wrapped_recipe;
+    if (!unwrap(recipe, &wrapped_name, &wrapped_recipe, error))
+      return nullptr;
+    featurizer = make(wrapped_name, wrapped_recipe, error, working);
+    if (featurizer == nullptr)
+      return nullptr;
+    return JsonFeaturizer::make(featurizer);
   } else if (name == "null") {
     featurizer = NullFeaturizer::make(recipe, error);
     if (featurizer != nullptr)
@@ -51,6 +62,14 @@ bool Featurizer::check(const std::string &name, const std::string &recipe,
     return TaggingFeaturizer::check(recipe, error);
   } else if (name == "vocab") {
     return VocabFeaturizer::check(recipe, error);
+  } else if (name == "json") {
+    std::string wrapped_name;
+    std::string wrapped_recipe;
+    if (!unwrap(recipe, &wrapped_name, &wrapped_recipe, error))
+      return false;
+    return check(wrapped_name, wrapped_recipe, error);
+  } else if (name == "vocab") {
+    return NullFeaturizer::check(recipe, error);
   } else {
     safe_set(error) = "No Featurizer named: " + name;
     return false;

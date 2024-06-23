@@ -381,13 +381,25 @@ int main(int argc, char **argv) {
     usage(program_name);
     return 0;
   }
+  bool verbose = false;
   std::string burrow = "/data/hdd2/claclark/JSON/json.burrow";
-  if (argc == 2 &&
-      (argv[1] == std::string("-b") || argv[1] == std::string("--burrow"))) {
-    burrow = argv[2];
-    argc -= 2;
-    argv += 2;
-  } else if (argc != 1) {
+  while (argc > 1) {
+    if (argc > 2 &&
+        (argv[1] == std::string("-b") || argv[1] == std::string("--burrow"))) {
+      burrow = argv[2];
+      argc -= 2;
+      argv += 2;
+    } else if (argv[1] == std::string("-v") ||
+               argv[1] == std::string("--verbose")) {
+      verbose = true;
+      --argc;
+      argv++;
+    } else {
+      usage(program_name);
+      return 1;
+    }
+  }
+  if (argc != 1) {
     usage(program_name);
     return 1;
   }
@@ -397,23 +409,24 @@ int main(int argc, char **argv) {
   if (warren == nullptr) {
     std::cerr << program_name << ": " << error << "\n";
     return 1;
-  }
+  };
+  ;
   warren->start();
-  example1(warren, false);
-  example2(warren, false);
-  example3(warren, false);
-  example4(warren, false);
-  example5(warren, false);
-  example6(warren, false);
-  example7(warren, false);
+  example1(warren, verbose);
+  example2(warren, verbose);
+  example3(warren, verbose);
+  example4(warren, verbose);
+  example5(warren, verbose);
+  example6(warren, verbose);
+  example7(warren, verbose);
   if (!annotate_dates(warren, &error)) {
     std::cerr << program_name << ": " << error << "\n";
     return 1;
   }
   warren->end();
   warren->start();
-  example8(warren, false);
-  example9(warren, false);
+  example8(warren, verbose);
+  example9(warren, verbose);
   warren->end();
   return 0;
 }

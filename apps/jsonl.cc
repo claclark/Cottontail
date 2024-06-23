@@ -14,7 +14,7 @@ std::shared_ptr<cottontail::Scribe> simple_scribe(const std::string &burrow,
       cottontail::Working::mkdir(burrow, error);
   if (working == nullptr)
     return nullptr;
-  std::string options = "tokenizer:name:utf8 txt:json:yes";
+  std::string options = "tokenizer:name:utf8 txt:json:yes featurizer@json";
   std::shared_ptr<cottontail::Builder> builder =
       cottontail::SimpleBuilder::make(working, options, error);
   if (builder == nullptr)
@@ -24,7 +24,7 @@ std::shared_ptr<cottontail::Scribe> simple_scribe(const std::string &burrow,
 
 std::shared_ptr<cottontail::Scribe> bigwig_scribe(const std::string &burrow,
                                                   std::string *error) {
-  std::string options = "tokenizer:name:utf8 txt:json:yes";
+  std::string options = "tokenizer:name:utf8 txt:json:yes featurizer@json";
   std::shared_ptr<cottontail::Bigwig> bigwig =
       cottontail::Bigwig::make(burrow, options, error);
   if (bigwig == nullptr)
