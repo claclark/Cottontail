@@ -54,6 +54,5 @@ bool scribe_files(const std::vector<std::string> &filenames,
                   bool verbose = false);
 bool scribe_jsonl(const std::vector<std::string> &filenames,
                   std::shared_ptr<Scribe> scribe, std::string *error = nullptr);
-std::string scribe_translate_json(const std::string &s);
 } // namespace cottontail
 #endif // COTTONTAIL_SRC_SCRIBE_H_

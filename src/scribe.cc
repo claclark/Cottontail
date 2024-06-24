@@ -283,19 +283,24 @@ bool scribe_jsonl(const std::vector<std::string> &filenames,
     safe_set(error) = "Function scribe_jsonl passed null scribe";
   }
   for (auto &filename : filenames) {
-    std::ifstream f(filename);
-    if (f.fail()) {
-      safe_set(error) = "Cannot open jsonl file: " + filename;
+    std::shared_ptr<std::string> everything =
+        cottontail::inhale(filename, error);
+    if (everything == nullptr) {
+      safe_set(error) = "Cannot inhale: " + filename;
       return false;
     }
     if (!scribe->transaction(error))
       return false;
-    std::string line;
     size_t number = 1;
     addr p = maxfinity, q = minfinity;
-    while (std::getline(f, line)) {
+    std::string::size_type pos;
+    std::string::size_type prev;
+    std::string newline = "\n";
+    for (prev = 0; (pos = everything->find(newline, prev)) != std::string::npos;
+         prev = pos + 1) {
       addr p0, q0;
-      if (!json_scribe(line, scribe, &p0, &q0)) {
+      if (!json_scribe(everything->substr(prev, pos - prev), scribe, &p0,
+                       &q0)) {
         safe_set(error) = "Cannot scribe json line: " + filename + ":" +
                           std::to_string(number);
         return false;
@@ -315,9 +320,5 @@ bool scribe_jsonl(const std::vector<std::string> &filenames,
     scribe->commit();
   }
   return true;
-}
-
-std::string scribe_translate_json(const std::string &s) {
-  return json_translate(s);
 }
 } // namespace cottontail

@@ -122,10 +122,10 @@ void check_json(std::shared_ptr<cottontail::Warren> warren) {
         warren->hopper_from_gcl(":id:");
     ASSERT_NE(hopper, nullptr);
     hopper->tau(cottontail::minfinity + 1, &p, &q);
-    t = cottontail::scribe_translate_json(warren->txt()->translate(p, q));
+    t = cottontail::json_translate(warren->txt()->translate(p, q));
     EXPECT_EQ(t, "\"0001\"");
     hopper->tau(p + 1, &p, &q);
-    t = cottontail::scribe_translate_json(warren->txt()->translate(p, q));
+    t = cottontail::json_translate(warren->txt()->translate(p, q));
     EXPECT_EQ(t, "\"0000\"");
   }
   {
@@ -134,7 +134,7 @@ void check_json(std::shared_ptr<cottontail::Warren> warren) {
     size_t i = 0;
     for (hopper->tau(cottontail::minfinity + 1, &p, &q);
          p < cottontail::maxfinity; hopper->tau(p + 1, &p, &q)) {
-      t = cottontail::scribe_translate_json(warren->txt()->translate(p, q));
+      t = cottontail::json_translate(warren->txt()->translate(p, q));
       EXPECT_EQ(t.length(), 6);
       i++;
     }
@@ -147,11 +147,11 @@ void check_json(std::shared_ptr<cottontail::Warren> warren) {
     ASSERT_NE(hopper, nullptr);
     hopper->tau(cottontail::minfinity + 1, &p, &q, &v);
     EXPECT_EQ(v, 0.55);
-    t = cottontail::scribe_translate_json(warren->txt()->translate(p, q));
+    t = cottontail::json_translate(warren->txt()->translate(p, q));
     EXPECT_EQ(t, "0.550000");
     hopper->tau(p + 1, &p, &q, &v);
     EXPECT_EQ(v, -0.55);
-    t = cottontail::scribe_translate_json(warren->txt()->translate(p, q));
+    t = cottontail::json_translate(warren->txt()->translate(p, q));
     EXPECT_EQ(t, "-0.550000");
   }
   {
@@ -162,7 +162,7 @@ void check_json(std::shared_ptr<cottontail::Warren> warren) {
     EXPECT_EQ(v, 4);
     hopper->tau(p + 1, &p, &q, &v);
     EXPECT_EQ(v, 0);
-    t = cottontail::scribe_translate_json(warren->txt()->translate(p, q));
+    t = cottontail::json_translate(warren->txt()->translate(p, q));
     EXPECT_EQ(t, "[ ]");
   }
   {
@@ -172,7 +172,7 @@ void check_json(std::shared_ptr<cottontail::Warren> warren) {
     size_t i = 0;
     for (hopper->tau(cottontail::minfinity + 1, &p, &q);
          p < cottontail::maxfinity; hopper->tau(p + 1, &p, &q)) {
-      t = cottontail::scribe_translate_json(warren->txt()->translate(p, q));
+      t = cottontail::json_translate(warren->txt()->translate(p, q));
       EXPECT_GT(t.length(), 5);
       i++;
     }
@@ -184,7 +184,7 @@ void check_json(std::shared_ptr<cottontail::Warren> warren) {
     ASSERT_NE(hopper, nullptr);
     hopper->tau(cottontail::minfinity + 1, &p, &q, &v);
     EXPECT_TRUE(std::isnan(v));
-    t = cottontail::scribe_translate_json(warren->txt()->translate(p, q));
+    t = cottontail::json_translate(warren->txt()->translate(p, q));
     EXPECT_EQ(t, "null");
   }
   {
@@ -194,7 +194,7 @@ void check_json(std::shared_ptr<cottontail::Warren> warren) {
     size_t i = 0;
     for (hopper->tau(cottontail::minfinity + 1, &p, &q);
          p < cottontail::maxfinity; hopper->tau(p + 1, &p, &q)) {
-      t = cottontail::scribe_translate_json(warren->txt()->translate(p, q));
+      t = cottontail::json_translate(warren->txt()->translate(p, q));
       EXPECT_EQ(t, "SGML");
       i++;
     }

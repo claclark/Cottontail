@@ -5,6 +5,7 @@
 #include <string>
 
 #include "src/core.h"
+#include "src/json.h"
 #include "src/recipe.h"
 #include "src/scribe.h"
 #include "src/txt.h"
@@ -84,7 +85,7 @@ std::shared_ptr<Txt> JsonTxt::clone_(std::string *error) {
 }
 
 std::string JsonTxt::translate_(addr p, addr q) {
-  return scribe_translate_json(txt_->translate(p, q));
+  return json_translate(txt_->translate(p, q));
 }
 
 addr JsonTxt::tokens_() { return txt_->tokens(); }
