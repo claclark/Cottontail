@@ -63,7 +63,7 @@ int main(int argc, char **argv) {
     std::cerr << program_name + ": " + error + "\n";
     return 1;
   }
-  if (!scribe_jsonl(filenames, scribe, &error)) {
+  if (!scribe_jsonl(filenames, scribe, &error, true)) {
     std::cerr << program_name + ": " + error + "\n";
     return 1;
   }

@@ -237,7 +237,7 @@ bool scribe_files(const std::vector<std::string> &filenames,
     if (!scribe->transaction(error))
       return false;
     if (verbose)
-      std::cerr << "scribe_files inhaling: " << filename << "\n";
+      std::cerr << "scribing: " << filename << "\n";
     std::shared_ptr<std::string> content = inhale(filename, error);
     if (content) {
       addr name_p, name_q, content_p, content_q;
@@ -264,7 +264,7 @@ bool scribe_files(const std::vector<std::string> &filenames,
     }
   }
   if (verbose)
-    std::cerr << "scribe_files done\n";
+    std::cerr << "scribe done\n";
   return true;
 }
 
@@ -278,11 +278,14 @@ std::string path(const std::string &filename) {
 } // namespace
 
 bool scribe_jsonl(const std::vector<std::string> &filenames,
-                  std::shared_ptr<Scribe> scribe, std::string *error) {
+                  std::shared_ptr<Scribe> scribe, std::string *error,
+                  bool verbose) {
   if (scribe == nullptr) {
     safe_set(error) = "Function scribe_jsonl passed null scribe";
   }
   for (auto &filename : filenames) {
+    if (verbose)
+      std::cerr << "scribing: " << filename << "\n";
     std::shared_ptr<std::string> everything =
         cottontail::inhale(filename, error);
     if (everything == nullptr) {
@@ -319,6 +322,8 @@ bool scribe_jsonl(const std::vector<std::string> &filenames,
     }
     scribe->commit();
   }
+  if (verbose)
+    std::cerr << "scribe done\n";
   return true;
 }
 } // namespace cottontail
