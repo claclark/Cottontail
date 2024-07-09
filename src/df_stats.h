@@ -34,6 +34,7 @@ private:
   virtual fval idf_(const std::string &term) final;
   virtual fval rsj_(const std::string &term) final;
   virtual std::unique_ptr<Hopper> tf_hopper_(const std::string &term) final;
+  virtual std::unique_ptr<Hopper> container_hopper_() final;
   fval items_;
   fval average_length_;
   std::shared_ptr<Featurizer> tf_featurizer_;

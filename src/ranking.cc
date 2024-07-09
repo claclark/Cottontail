@@ -38,6 +38,20 @@ fval ranking_parameter(std::string ranker_name, std::string parameter_name,
   assert(defaults.find(parameter_name) != defaults.end());
   return defaults[parameter_name];
 }
+
+void maybe_add_container(std::shared_ptr<Stats> stats,
+                         std::vector<RankingResult> *ranking) {
+  if (ranking == nullptr)
+    return;
+  if (!stats->have("content"))
+    return;
+  std::unique_ptr<Hopper> hopper = stats->container_hopper();
+  for (auto &r : *ranking) {
+    addr p, q;
+    hopper->rho(r.q(), &p, &q);
+    r.container(p, q);
+  }
+}
 } // namespace
 
 // Reciprocal rank fusion based on:
@@ -1316,6 +1330,7 @@ bm25_ranking(std::shared_ptr<Warren> warren,
     }
   }
   top = top_results(top, current, depth);
+  maybe_add_container(stats, &top);
   return top;
 }
 

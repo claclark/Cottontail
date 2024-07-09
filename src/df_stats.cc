@@ -13,11 +13,15 @@
 namespace cottontail {
 
 namespace {
-std::unique_ptr<Hopper> container_hopper(std::shared_ptr<Warren> warren,
-                                         std::string *error = nullptr) {
-  std::string content_key = "container";
+std::unique_ptr<Hopper> content_hopper(std::shared_ptr<Warren> warren,
+                                       std::string *error = nullptr) {
   std::string content_query = "";
-  if (!warren->get_parameter(content_key, &content_query, error))
+  if (!warren->get_parameter("content", &content_query, error))
+    return nullptr;
+  if (content_query == "" &&
+      !warren->get_parameter("container", &content_query, error))
+    return nullptr;
+  if (content_query == "")
     content_query = warren->default_container();
   if (content_query == "") {
     safe_set(error) = "No items to rank defined by warren";
@@ -38,7 +42,7 @@ std::shared_ptr<Stats> DfStats::make(const std::string &recipe,
                                      std::string *error) {
   if (!check(recipe, error))
     return nullptr;
-  std::unique_ptr<Hopper> hopper = container_hopper(warren, error);
+  std::unique_ptr<Hopper> hopper = content_hopper(warren, error);
   if (hopper == nullptr)
     return nullptr;
   std::shared_ptr<DfStats> stats =
@@ -94,6 +98,12 @@ bool DfStats::check(const std::string &recipe, std::string *error) {
 std::string DfStats::recipe_() { return ""; }
 
 bool DfStats::have_(const std::string &name) {
+  if (name == "content") {
+    std::string content_query = "";
+    if (!warren_->get_parameter("content", &content_query))
+      return false;
+    return content_query != "";
+  }
   return name == "avgl" || name == "rsj" || name == "idf" || name == "tf";
 }
 
@@ -104,18 +114,6 @@ inline addr load_df(std::shared_ptr<Warren> warren,
                     std::shared_ptr<Featurizer> featurizer,
                     const std::string &term) {
   return warren->idx()->count(featurizer->featurize(term));
-#if 0
-  addr p, q, df;
-  std::unique_ptr<Hopper> hopper =
-      warren->idx()->hopper(featurizer->featurize(term));
-  if (hopper == nullptr)
-    return 0;
-  hopper->tau(minfinity + 1, &p, &q, &df);
-  if (p == maxfinity || df < 1)
-    return 0;
-  else
-    return df;
-#endif
 }
 } // namespace
 
@@ -143,9 +141,9 @@ namespace {
 class TfHopper final : public Hopper {
 public:
   TfHopper(std::unique_ptr<Hopper> tf_hopper,
-           std::unique_ptr<Hopper> container_hopper)
+           std::unique_ptr<Hopper> content_hopper)
       : tf_hopper_(std::move(tf_hopper)),
-        container_hopper_(std::move(container_hopper)){};
+        content_hopper_(std::move(content_hopper)){};
 
   virtual ~TfHopper(){};
   TfHopper(const TfHopper &) = delete;
@@ -157,31 +155,31 @@ private:
   void tau_(addr k, addr *p, addr *q, fval *v) final {
     addr p0, q0, df;
     tf_hopper_->tau(k, &p0, &q0, &df);
-    container_hopper_->tau(p0, p, q);
+    content_hopper_->tau(p0, p, q);
     *v = (fval)df;
   };
   void rho_(addr k, addr *p, addr *q, fval *v) final {
     addr p0, q0, df;
-    container_hopper_->rho(k, &p0, &q0);
+    content_hopper_->rho(k, &p0, &q0);
     tf_hopper_->tau(p0, &p0, &q0, &df);
-    container_hopper_->tau(p0, p, q);
+    content_hopper_->tau(p0, p, q);
     *v = (fval)df;
   };
   void uat_(addr k, addr *p, addr *q, fval *v) final {
     addr p0, q0, df;
-    container_hopper_->uat(k, &p0, &q0);
+    content_hopper_->uat(k, &p0, &q0);
     tf_hopper_->ohr(p0, &p0, &q0, &df);
-    container_hopper_->ohr(p0, p, q);
+    content_hopper_->ohr(p0, p, q);
     *v = (fval)df;
   };
   void ohr_(addr k, addr *p, addr *q, fval *v) final {
     addr p0, q0, df;
     tf_hopper_->ohr(k, &p0, &q0, &df);
-    container_hopper_->ohr(p0, p, q);
+    content_hopper_->ohr(p0, p, q);
     *v = (fval)df;
   };
   std::unique_ptr<Hopper> tf_hopper_;
-  std::unique_ptr<Hopper> container_hopper_;
+  std::unique_ptr<Hopper> content_hopper_;
 };
 } // namespace
 
@@ -189,8 +187,23 @@ std::unique_ptr<Hopper> DfStats::tf_hopper_(const std::string &term) {
   std::unique_ptr<Hopper> tf_hopper =
       warren_->idx()->hopper(tf_featurizer_->featurize(term));
   assert(tf_hopper != nullptr);
-  std::unique_ptr<Hopper> chopper = container_hopper(warren_);
+  std::unique_ptr<Hopper> chopper = content_hopper(warren_);
   assert(chopper != nullptr);
   return std::make_unique<TfHopper>(std::move(tf_hopper), std::move(chopper));
 };
+
+std::unique_ptr<Hopper> DfStats::container_hopper_() {
+  std::string container_query = "";
+  if (!warren_->get_parameter("container", &container_query))
+    return std::make_unique<EmptyHopper>();
+  if (container_query == "")
+    container_query = warren_->default_container();
+  if (container_query == "")
+    return std::make_unique<EmptyHopper>();
+  std::unique_ptr<cottontail::Hopper> hopper =
+      warren_->hopper_from_gcl(container_query);
+  if (hopper == nullptr)
+    return std::make_unique<EmptyHopper>();
+  return hopper;
+}
 } // namespace cottontail

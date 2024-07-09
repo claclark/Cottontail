@@ -27,6 +27,12 @@ public:
   inline addr container_p() const { return container_p_; }
   inline addr container_q() const { return container_q_; }
   inline fval score() const { return score_; }
+  inline void container(addr container_p, addr container_q) {
+    if (container_p <= p_ && container_q >= q_) {
+      container_p_ = container_p;
+      container_q_ = container_q;
+    }
+  }
 
 private:
   addr p_, q_, container_p_, container_q_;

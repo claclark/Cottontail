@@ -30,6 +30,9 @@ public:
   inline std::unique_ptr<Hopper> tf_hopper(const std::string &term) {
     return tf_hopper_(term);
   };
+  inline std::unique_ptr<Hopper> container_hopper() {
+    return container_hopper_();
+  };
 
   virtual ~Stats(){};
   Stats(const Stats &) = delete;
@@ -49,6 +52,9 @@ private:
   virtual fval idf_(const std::string &term) { return 0.0; }
   virtual fval rsj_(const std::string &term) { return 0.0; }
   virtual std::unique_ptr<Hopper> tf_hopper_(const std::string &term) {
+    return std::make_unique<EmptyHopper>();
+  }
+  virtual std::unique_ptr<Hopper> container_hopper_() {
     return std::make_unique<EmptyHopper>();
   }
   std::string name_ = "";
