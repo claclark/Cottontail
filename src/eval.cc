@@ -17,10 +17,12 @@ std::string trec_docno(const std::string &text) {
   std::regex docno_end("</DOCNO>");
   std::regex leading("^\\s*");
   std::regex trailing("\\s.*\\s*$");
+  std::regex quote("\"");
   std::string docno = std::regex_replace(text, docno_start, "");
   docno = std::regex_replace(docno, docno_end, "");
   docno = std::regex_replace(docno, leading, "");
   docno = std::regex_replace(docno, trailing, "");
+  docno = std::regex_replace(docno, quote, "");
   return docno;
 }
 
