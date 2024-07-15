@@ -446,6 +446,18 @@ cc_binary(
 )
 
 cc_binary(
+    name = "wikidata-build",
+    srcs = [
+      "wikidata-build.cc",
+    ],
+    deps = [
+      "//src:cottontail",
+    ] ,
+    linkopts = [
+    ],
+)
+
+cc_binary(
     name = "working",
     srcs = [
       "working.cc",

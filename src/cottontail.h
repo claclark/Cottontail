@@ -13,6 +13,7 @@
 #include "src/gcl.h"
 #include "src/hopper.h"
 #include "src/idx.h"
+#include "src/json.h"
 #include "src/porter.h"
 #include "src/ranker.h"
 #include "src/ranking.h"

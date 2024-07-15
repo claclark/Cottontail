@@ -173,7 +173,7 @@ bool json_scribe(const std::string &s, std::shared_ptr<Scribe> scribe, addr *p,
     else
       j = json::parse(s);
   } catch (json::parse_error &e) {
-    safe_set(error) = "Cannot parse json";
+    safe_set(error) = "Cannot parse json: " + std::string(e.what());
     return false;
   }
   return do_json(j, scribe, ":", p, q, error);
