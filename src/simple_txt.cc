@@ -121,6 +121,7 @@ std::shared_ptr<Txt> SimpleTxt::make(const std::string &recipe,
   if (!txt->load_map(txt_filename, error))
     return nullptr;
   txt->computed_tokens_valid_ = false;
+  txt->memo_valid_ = false;
   return txt;
 }
 
@@ -142,6 +143,7 @@ std::string SimpleTxt::recipe_() {
 }
 
 std::shared_ptr<Txt> SimpleTxt::clone_(std::string *error) {
+  const std::lock_guard<std::mutex> lock(mutex_);
   std::shared_ptr<SimpleTxtIO> io = io_->clone(error);
   if (io == nullptr)
     return nullptr;
@@ -154,6 +156,7 @@ std::shared_ptr<Txt> SimpleTxt::clone_(std::string *error) {
   txt->map_blocking_ = map_blocking_;
   txt->computed_tokens_ = computed_tokens_;
   txt->computed_tokens_valid_ = computed_tokens_valid_;
+  txt->memo_valid_ = false;
   txt->compressor_name_ = compressor_name_;
   txt->compressor_recipe_ = compressor_recipe_;
   return txt;
@@ -169,28 +172,41 @@ std::string SimpleTxt::translate_(addr p, addr q) {
   if (p > q)
     return "";
   addr p_block = (map_blocking_ == -1 ? 0 : p / map_blocking_);
-  if (p_block >= map_size_ - 1) {
+  if (p_block >= map_size_ - 1)
     return "";
-  }
   addr offset = map_.get()[p_block];
   addr q_block = (map_blocking_ == -1 ? 1 : q / map_blocking_ + 1);
-  if (q_block >= map_size_) {
+  if (q_block >= map_size_)
     q_block = map_size_ - 1;
-  }
   addr size = map_.get()[q_block] - offset;
-  io_lock_.lock();
+  addr token_skip = p - p_block * map_blocking_;
+  addr token_count = q - p + 1;
+  addr token_total = token_skip + token_count;
+  const std::lock_guard<std::mutex> lock(mutex_);
+  if (memo_valid_ && memo_offset_ == offset && memo_skip_ <= token_skip &&
+      memo_end_ <= size) {
+    offset += memo_end_;
+    size -= memo_end_;
+    token_skip -= memo_skip_;
+  } else {
+    memo_offset_ = offset;
+    memo_end_ = 0;
+  }
+  memo_valid_ = false;
   std::unique_ptr<char[]> buffer_unique_ptr = io_->read(offset, size, &size);
-  io_lock_.unlock();
   const char *buffer = buffer_unique_ptr.get();
   if (buffer == nullptr || size <= 0)
     return "";
-  addr token_skip = p - p_block * map_blocking_;
   const char *start = tokenizer_->skip(buffer, size, token_skip);
   if (start >= buffer + size)
     return "";
-  addr token_count = q - p + 1;
   const char *end =
       tokenizer_->skip(start, size - (start - buffer), token_count);
+  if (end < buffer + size) {
+    memo_skip_ = token_total;
+    memo_end_ += end - buffer;
+    memo_valid_ = true;
+  }
   return std::string(start, end - start);
 }
 
@@ -204,12 +220,11 @@ addr SimpleTxt::tokens_() {
     full_blocks = map_blocking_ * (map_size_ - 2);
   std::string tail_string = translate(full_blocks, maxfinity);
   std::vector<std::string> tail_tokens = tokenizer_->split(tail_string);
-  io_lock_.lock();
-  if (!computed_tokens_valid_) {
-    computed_tokens_ = full_blocks + tail_tokens.size();
-    computed_tokens_valid_ = true;
-  }
-  io_lock_.unlock();
+  const std::lock_guard<std::mutex> lock(mutex_);
+  if (computed_tokens_valid_)
+    return computed_tokens_;
+  computed_tokens_ = full_blocks + tail_tokens.size();
+  computed_tokens_valid_ = true;
   return computed_tokens_;
 }
 

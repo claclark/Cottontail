@@ -37,13 +37,17 @@ private:
   bool load_map(const std::string &txt_filename, std::string *error);
 
   std::shared_ptr<Tokenizer> tokenizer_;
-  std::mutex io_lock_;
+  std::mutex mutex_;
   std::shared_ptr<SimpleTxtIO> io_;
   std::shared_ptr<addr> map_;
   addr map_size_;
   addr map_blocking_;
   addr computed_tokens_;
   bool computed_tokens_valid_;
+  addr memo_offset_;
+  addr memo_skip_;
+  addr memo_end_;
+  bool memo_valid_;
   std::string compressor_name_;
   std::string compressor_recipe_;
 };
