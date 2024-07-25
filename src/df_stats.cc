@@ -12,31 +12,6 @@
 
 namespace cottontail {
 
-namespace {
-std::unique_ptr<Hopper> content_hopper(std::shared_ptr<Warren> warren,
-                                       std::string *error = nullptr) {
-  std::string content_query = "";
-  if (!warren->get_parameter("content", &content_query, error))
-    return nullptr;
-  if (content_query == "" &&
-      !warren->get_parameter("container", &content_query, error))
-    return nullptr;
-  if (content_query == "")
-    content_query = warren->default_container();
-  if (content_query == "") {
-    safe_set(error) = "No items to rank defined by warren";
-    return nullptr;
-  }
-  std::unique_ptr<cottontail::Hopper> hopper =
-      warren->hopper_from_gcl(content_query, error);
-  if (hopper == nullptr) {
-    safe_set(error) = "No items to rank defined by warren";
-    return nullptr;
-  }
-  return hopper;
-}
-} // namespace
-
 std::shared_ptr<Stats> DfStats::make(const std::string &recipe,
                                      std::shared_ptr<Warren> warren,
                                      std::string *error) {

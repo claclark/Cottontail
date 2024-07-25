@@ -164,6 +164,9 @@ bool tf_annotations(std::shared_ptr<Warren> warren,
 bool tf_df_annotations(std::shared_ptr<Warren> warren,
                        std::string *error = nullptr);
 
+// Generate annotations for BM25F
+bool tf_field_annotations(std::shared_ptr<Warren> warren, std::string *error = nullptr);
+
 // Generate annotations for the TF-IDF ranking and pseudo-relevance
 // feedback methods below.
 bool tf_idf_annotations(std::shared_ptr<Warren> warren,

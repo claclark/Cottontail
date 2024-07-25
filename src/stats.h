@@ -15,7 +15,7 @@ public:
                                      const std::string &recipe,
                                      std::shared_ptr<Warren> warren,
                                      std::string *error = nullptr);
-  static std::shared_ptr<Stats> make( std::shared_ptr<Warren> warren,
+  static std::shared_ptr<Stats> make(std::shared_ptr<Warren> warren,
                                      std::string *error = nullptr);
   static bool check(const std::string &name, const std::string &recipe,
                     std::string *error = nullptr);
@@ -59,5 +59,8 @@ private:
   }
   std::string name_ = "";
 };
+
+std::unique_ptr<Hopper> content_hopper(std::shared_ptr<Warren> warren,
+                                       std::string *error = nullptr);
 } // namespace cottontail
 #endif // COTTONTAIL_SRC_STATS_H_

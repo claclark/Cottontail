@@ -9,6 +9,7 @@
 #include <iostream>
 #include <map>
 #include <memory>
+#include <regex>
 #include <set>
 #include <string>
 #include <vector>
@@ -1581,4 +1582,137 @@ product_ranking(std::shared_ptr<Warren> warren,
   top = top_results(top, current, depth);
   return top;
 }
+
+bool tf_field_annotations(std::shared_ptr<Warren> warren, std::string *error) {
+  std::unique_ptr<Hopper> hopper = content_hopper(warren, error);
+  if (hopper == nullptr)
+    return false;
+  std::string fields_parameter;
+  if (!warren->get_parameter("fields", &fields_parameter, error))
+    return false;
+  std::regex tab("\t");
+  std::vector<std::string> field_queries{
+      std::sregex_token_iterator(fields_parameter.begin(),
+                                 fields_parameter.end(), tab, -1),
+      {}};
+  if (field_queries.size() == 0) {
+    safe_set(error) = "No fields defined by warren";
+    return false;
+  }
+  std::vector<std::unique_ptr<Hopper>> fhoppers;
+  for (auto &&query : field_queries) {
+    std::unique_ptr<Hopper> hopper = warren->hopper_from_gcl(query, error);
+    if (hopper == nullptr)
+      return false;
+    fhoppers.push_back(std::move(hopper));
+  }
+  std::shared_ptr<Featurizer> df_featurizer =
+      TaggingFeaturizer::make(warren->featurizer(), "df");
+  if (df_featurizer == nullptr)
+    return false;
+  std::shared_ptr<Featurizer> tf_featurizer =
+      TaggingFeaturizer::make(warren->featurizer(), "tf", error);
+  if (tf_featurizer == nullptr)
+    return false;
+  addr length_feature = tf_featurizer->featurize("#");
+  std::shared_ptr<Featurizer> total_featurizer =
+      TaggingFeaturizer::make(warren->featurizer(), "total", error);
+  if (total_featurizer == nullptr)
+    return false;
+  std::vector<std::shared_ptr<Featurizer>> field_featurizers;
+  for (size_t i = 0; i < fhoppers.size(); i++) {
+    std::shared_ptr<Featurizer> featurizer = TaggingFeaturizer::make(
+        warren->featurizer(), "tf:" + std::to_string(i), error);
+    if (featurizer == nullptr)
+      return false;
+    field_featurizers.push_back(featurizer);
+  }
+  std::map<cottontail::addr, cottontail::addr> df;
+  if (!warren->transaction(error))
+    return false;
+  addr p, q, total_items = 0, total_length = 0;
+  for (hopper->tau(0, &p, &q); p < cottontail::maxfinity;
+       hopper->tau(p + 1, &p, &q)) {
+    total_items++;
+    addr length = 0;
+    std::map<std::string, cottontail::addr> tf;
+    for (size_t i = 0; i < fhoppers.size(); i++) {
+      addr p0, q0;
+      fhoppers[i]->tau(p, &p0, &q0);
+      if (q0 <= q) {
+        length += q0 - p0 + 1;
+        std::string text = warren->txt()->translate(p0, q0);
+        std::vector<std::string> tokens = warren->tokenizer()->split(text);
+        std::map<std::string, cottontail::addr> ftf;
+        for (auto &&token : tokens) {
+          std::string stem = warren->stemmer()->stem(token);
+          auto it = tf.find(stem);
+          if (it == tf.end())
+            tf[stem] = 1;
+          else
+            it->second++;
+          auto fit = ftf.find(stem);
+          if (fit == ftf.end())
+            ftf[stem] = 1;
+          else
+            fit->second++;
+        }
+        for (auto &&token : ftf)
+          if (!warren->annotator()->annotate(
+                  field_featurizers[i]->featurize(token.first), p0, p0,
+                  token.second, error)) {
+            warren->abort();
+            return false;
+          }
+      }
+    }
+    for (auto &&token : tf) {
+      if (!warren->annotator()->annotate(tf_featurizer->featurize(token.first),
+                                         p, p, token.second, error)) {
+        warren->abort();
+        return false;
+      }
+      addr df_feature = df_featurizer->featurize(token.first);
+      auto it = df.find(df_feature);
+      if (it == df.end())
+        df[df_feature] = 1;
+      else
+        it->second++;
+    }
+    if (!warren->annotator()->annotate(length_feature, p, p, length, error))
+      return false;
+    total_length += length;
+  }
+  if (total_items == 0) {
+    safe_set(error) = "Can't find any items for ranking";
+    warren->abort();
+    return false;
+  }
+  for (auto &feature : df)
+    if (!warren->annotator()->annotate(feature.first, 0, 0, feature.second,
+                                       error)) {
+      warren->abort();
+      return false;
+    }
+  if (!warren->annotator()->annotate(total_featurizer->featurize("items"), 0, 0,
+                                     total_items, error)) {
+    warren->abort();
+    return false;
+  }
+  if (!warren->annotator()->annotate(total_featurizer->featurize("length"), 0,
+                                     0, total_length, error)) {
+    warren->abort();
+    return false;
+  }
+  if (!warren->ready()) {
+    warren->abort();
+    safe_set(error) = "Can't commit annotations";
+    return false;
+  }
+  warren->commit();
+  if (!warren->set_parameter("statistics", "field", error))
+    return false;
+  return true;
+}
+
 } // namespace cottontail
