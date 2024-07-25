@@ -18,8 +18,7 @@ int main(int argc, char **argv) {
     std::cerr << program_name << ": " << error << "\n";
     return 1;
   }
-  std::string options = "idx:fvalue_compressor:tfdf tokenizer:name:utf8 "
-                        "txt:json:yes featurizer@json";
+  std::string options = "tokenizer:name:utf8 txt:json:yes featurizer@json";
   std::shared_ptr<cottontail::Builder> builder =
       cottontail::SimpleBuilder::make(working, options, &error);
   if (builder == nullptr) {
@@ -38,7 +37,10 @@ int main(int argc, char **argv) {
   while (std::getline(std::cin, line)) {
     i++;
     if (line != "" && line != "[" && line != "]") {
-      if (!json_scribe(line.substr(0, line.length() - 1), scribe, &p, &q, &error)) {
+      size_t l = line.length();
+      while (line.back() != '}')
+        --l;
+      if (!json_scribe(line.substr(0, l), scribe, &p, &q, &error)) {
         std::cerr << program_name << ": On input line: " << i << ": " << error
                   << "\n";
         return 1;
