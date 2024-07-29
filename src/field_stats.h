@@ -1,8 +1,9 @@
-#ifndef COTTONTAIL_SRC_IDF_STATS_H_
-#define COTTONTAIL_SRC_IDF_STATS_H_
+#ifndef COTTONTAIL_SRC_FIELD_STATS_H_
+#define COTTONTAIL_SRC_FIELD_STATS_H_
 
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "src/core.h"
 #include "src/hopper.h"
@@ -11,21 +12,21 @@
 
 namespace cottontail {
 
-class IdfStats final : public Stats {
+class FieldStats final : public Stats {
 public:
   static std::shared_ptr<Stats> make(const std::string &recipe,
                                      std::shared_ptr<Warren> warren,
                                      std::string *error = nullptr);
   static bool check(const std::string &recipe, std::string *error = nullptr);
 
-  virtual ~IdfStats(){};
-  IdfStats(const IdfStats &) = delete;
-  IdfStats &operator=(const IdfStats &) = delete;
-  IdfStats(IdfStats &&) = delete;
-  IdfStats &operator=(IdfStats &&) = delete;
+  virtual ~FieldStats(){};
+  FieldStats(const FieldStats &) = delete;
+  FieldStats &operator=(const FieldStats &) = delete;
+  FieldStats(FieldStats &&) = delete;
+  FieldStats &operator=(FieldStats &&) = delete;
 
 protected:
-  IdfStats(std::shared_ptr<Warren> warren) : Stats(warren){};
+  FieldStats(std::shared_ptr<Warren> warren) : Stats(warren){};
 
 private:
   std::string recipe_() final;
@@ -34,14 +35,12 @@ private:
   fval idf_(const std::string &term) final;
   fval rsj_(const std::string &term) final;
   std::unique_ptr<Hopper> tf_hopper_(const std::string &term) final;
-  bool have_unstemmed_ = true;
-  bool have_idf_ = true;
-  bool have_rsj_ = true;
+  fval items_;
   fval average_length_;
-  std::shared_ptr<Featurizer> idf_featurizer_;
-  std::shared_ptr<Featurizer> rsj_featurizer_;
-  std::shared_ptr<Featurizer> tf_featurizer_;
+  std::vector<fval> weights_;
+  std::vector<std::shared_ptr<Featurizer>> tf_featurizers_;
+  std::shared_ptr<Featurizer> df_featurizer_;
 };
 
 } // namespace cottontail
-#endif // COTTONTAIL_SRC_IDF_STATS_H_
+#endif // COTTONTAIL_SRC_FIELD_STATS_H_

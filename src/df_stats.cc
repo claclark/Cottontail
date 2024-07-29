@@ -128,30 +128,30 @@ public:
 
 private:
   void tau_(addr k, addr *p, addr *q, fval *v) final {
-    addr p0, q0, df;
-    tf_hopper_->tau(k, &p0, &q0, &df);
+    addr p0, q0, tf;
+    tf_hopper_->tau(k, &p0, &q0, &tf);
     content_hopper_->tau(p0, p, q);
-    *v = (fval)df;
+    *v = (fval)tf;
   };
   void rho_(addr k, addr *p, addr *q, fval *v) final {
-    addr p0, q0, df;
+    addr p0, q0, tf;
     content_hopper_->rho(k, &p0, &q0);
-    tf_hopper_->tau(p0, &p0, &q0, &df);
+    tf_hopper_->tau(p0, &p0, &q0, &tf);
     content_hopper_->tau(p0, p, q);
-    *v = (fval)df;
+    *v = (fval)tf;
   };
   void uat_(addr k, addr *p, addr *q, fval *v) final {
-    addr p0, q0, df;
+    addr p0, q0, tf;
     content_hopper_->uat(k, &p0, &q0);
-    tf_hopper_->ohr(p0, &p0, &q0, &df);
+    tf_hopper_->ohr(p0, &p0, &q0, &tf);
     content_hopper_->ohr(p0, p, q);
-    *v = (fval)df;
+    *v = (fval)tf;
   };
   void ohr_(addr k, addr *p, addr *q, fval *v) final {
-    addr p0, q0, df;
-    tf_hopper_->ohr(k, &p0, &q0, &df);
+    addr p0, q0, tf;
+    tf_hopper_->ohr(k, &p0, &q0, &tf);
     content_hopper_->ohr(p0, p, q);
-    *v = (fval)df;
+    *v = (fval)tf;
   };
   std::unique_ptr<Hopper> tf_hopper_;
   std::unique_ptr<Hopper> content_hopper_;
@@ -166,19 +166,4 @@ std::unique_ptr<Hopper> DfStats::tf_hopper_(const std::string &term) {
   assert(chopper != nullptr);
   return std::make_unique<TfHopper>(std::move(tf_hopper), std::move(chopper));
 };
-
-std::unique_ptr<Hopper> DfStats::container_hopper_() {
-  std::string container_query = "";
-  if (!warren_->get_parameter("container", &container_query))
-    return std::make_unique<EmptyHopper>();
-  if (container_query == "")
-    container_query = warren_->default_container();
-  if (container_query == "")
-    return std::make_unique<EmptyHopper>();
-  std::unique_ptr<cottontail::Hopper> hopper =
-      warren_->hopper_from_gcl(container_query);
-  if (hopper == nullptr)
-    return std::make_unique<EmptyHopper>();
-  return hopper;
-}
 } // namespace cottontail

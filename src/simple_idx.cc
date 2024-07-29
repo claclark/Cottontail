@@ -76,6 +76,7 @@ bool interpret_simple_idx_recipe(const std::string &recipe,
         } catch (const std::invalid_argument &e) {
           safe_set(error) =
               "interpret_simple_idx_recipe got invalid add_file_size";
+          return false;
         }
       }
     }

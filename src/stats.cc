@@ -40,7 +40,7 @@ std::shared_ptr<Stats> Stats::make(const std::string &name,
     if (stats == nullptr)
       return nullptr;
     stats->name_ = name;
-  } else if (name == "df" || name == "tf") {
+  } else if (name == "df" || name == "tf" || name == "field") {
     stats = DfStats::make(recipe, warren, error);
     if (stats == nullptr)
       return nullptr;
@@ -64,6 +64,21 @@ bool Stats::check(const std::string &name, const std::string &recipe,
     safe_set(error) = "No Stats named: " + name;
     return false;
   }
+}
+
+std::unique_ptr<Hopper> Stats::container_hopper_() {
+  std::string container_query = "";
+  if (!warren_->get_parameter("container", &container_query))
+    return std::make_unique<EmptyHopper>();
+  if (container_query == "")
+    container_query = warren_->default_container();
+  if (container_query == "")
+    return std::make_unique<EmptyHopper>();
+  std::unique_ptr<cottontail::Hopper> hopper =
+      warren_->hopper_from_gcl(container_query);
+  if (hopper == nullptr)
+    return std::make_unique<EmptyHopper>();
+  return hopper;
 }
 
 std::unique_ptr<Hopper> content_hopper(std::shared_ptr<Warren> warren,

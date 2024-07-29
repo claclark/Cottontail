@@ -29,12 +29,11 @@ protected:
 
 private:
   std::string recipe_() final;
-  virtual bool have_(const std::string &name) final;
-  virtual fval avgl_() final;
-  virtual fval idf_(const std::string &term) final;
-  virtual fval rsj_(const std::string &term) final;
-  virtual std::unique_ptr<Hopper> tf_hopper_(const std::string &term) final;
-  virtual std::unique_ptr<Hopper> container_hopper_() final;
+  bool have_(const std::string &name) final;
+  fval avgl_() final;
+  fval idf_(const std::string &term) final;
+  fval rsj_(const std::string &term) final;
+  std::unique_ptr<Hopper> tf_hopper_(const std::string &term) final;
   fval items_;
   fval average_length_;
   std::shared_ptr<Featurizer> tf_featurizer_;

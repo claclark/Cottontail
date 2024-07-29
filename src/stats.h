@@ -23,7 +23,6 @@ public:
   inline std::string name() { return name_; }
 
   inline bool have(const std::string &name) { return have_(name); };
-  inline addr df(const std::string &term) { return idf_(term); };
   inline fval idf(const std::string &term) { return idf_(term); };
   inline fval rsj(const std::string &term) { return rsj_(term); };
   inline fval avgl() { return avgl_(); };
@@ -54,9 +53,7 @@ private:
   virtual std::unique_ptr<Hopper> tf_hopper_(const std::string &term) {
     return std::make_unique<EmptyHopper>();
   }
-  virtual std::unique_ptr<Hopper> container_hopper_() {
-    return std::make_unique<EmptyHopper>();
-  }
+  virtual std::unique_ptr<Hopper> container_hopper_();
   std::string name_ = "";
 };
 
