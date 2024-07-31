@@ -219,6 +219,22 @@ cc_binary(
 )
 
 cc_binary(
+    name = "rag2024-extract",
+    srcs = [
+      "rag2024-extract.cc",
+    ],
+    deps = [
+      "//src:cottontail",
+    ],
+    copts = [
+      "'-std=c++14'",
+    ],
+    linkopts = [
+      "-pthread",
+    ],
+)
+
+cc_binary(
     name = "rank",
     srcs = [
       "rank.cc",

@@ -8,6 +8,7 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <vector>
 
 namespace cottontail {
 
@@ -51,6 +52,7 @@ bool okay(const std::string &value);
 std::string okay(bool yes);
 void stamp(std::string label = "");
 addr now();
+std::vector<std::string> split (std::string str, std::string pattern = "\\s+");
 
 struct Token {
   Token() = default;

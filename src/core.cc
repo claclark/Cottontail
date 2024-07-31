@@ -3,6 +3,7 @@
 #include <chrono>
 #include <ctime>
 #include <iostream>
+#include <regex>
 #include <string>
 
 namespace cottontail {
@@ -32,6 +33,15 @@ addr now() {
   return std::chrono::duration_cast<std::chrono::milliseconds>(
              std::chrono::system_clock::now().time_since_epoch())
       .count();
+}
+
+std::vector<std::string> split(std::string str, std::string pattern) {
+  while (str.size() > 0 && (str.back() == '\n' || str.back() == '\r'))
+    str.pop_back();
+  std::regex r(pattern);
+  std::vector<std::string> fields{
+      std::sregex_token_iterator(str.begin(), str.end(), r, -1), {}};
+  return fields;
 }
 
 } // namespace cottontail

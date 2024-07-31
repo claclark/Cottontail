@@ -19,7 +19,7 @@ constexpr int8_t ACTION_FOLD = 2;
 constexpr int8_t ACTION_UNIGRAM = 3;
 constexpr int8_t ACTION_BIGRAM = 4;
 
-std::vector<std::string> split(const std::string &line,
+std::vector<std::string> split_record(const std::string &line,
                                const std::string &separator) {
   size_t start = 0;
   size_t end = line.find('#');
@@ -252,7 +252,7 @@ bool utf8_tables(const std::string &unicode_filename,
   uint32_t range_start = UTF8_MAX;
   std::string line;
   while (std::getline(unicodef, line)) {
-    std::vector<std::string> fields = split(line, ";");
+    std::vector<std::string> fields = split_record(line, ";");
     if (fields.size() == 0)
       continue;
     if (fields.size() < 3) {
@@ -283,7 +283,7 @@ bool utf8_tables(const std::string &unicode_filename,
   }
   std::map<uint32_t, uint32_t> foldings;
   while (std::getline(foldingf, line)) {
-    std::vector<std::string> fields = split(line, "; ");
+    std::vector<std::string> fields = split_record(line, "; ");
     if (fields.size() == 0)
       continue;
     if (fields.size() < 3) {
