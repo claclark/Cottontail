@@ -8,6 +8,7 @@
 #include "src/hopper.h"
 #include "src/idf_stats.h"
 #include "src/warren.h"
+#include "src/field_stats.h"
 
 namespace cottontail {
 std::shared_ptr<Stats> Stats::make(std::shared_ptr<Warren> warren,
@@ -40,8 +41,13 @@ std::shared_ptr<Stats> Stats::make(const std::string &name,
     if (stats == nullptr)
       return nullptr;
     stats->name_ = name;
-  } else if (name == "df" || name == "tf" || name == "field") {
+  } else if (name == "df" || name == "tf") {
     stats = DfStats::make(recipe, warren, error);
+    if (stats == nullptr)
+      return nullptr;
+    stats->name_ = name;
+  } else if (name == "field") {
+    stats = FieldStats::make(recipe, warren, error);
     if (stats == nullptr)
       return nullptr;
     stats->name_ = name;
@@ -60,6 +66,8 @@ bool Stats::check(const std::string &name, const std::string &recipe,
     return IdfStats::check(recipe, error);
   } else if (name == "df" || name == "tf") {
     return DfStats::check(recipe, error);
+  } else if (name == "field") {
+    return FieldStats::check(recipe, error);
   } else {
     safe_set(error) = "No Stats named: " + name;
     return false;

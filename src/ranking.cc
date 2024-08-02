@@ -1659,7 +1659,7 @@ bool tf_field_annotations(std::shared_ptr<Warren> warren, std::string *error) {
         }
         for (auto &&token : ftf)
           if (!warren->annotator()->annotate(
-                  field_featurizers[i]->featurize(token.first), p0, p0,
+                  field_featurizers[i]->featurize(token.first), p, p,
                   token.second, error)) {
             warren->abort();
             return false;

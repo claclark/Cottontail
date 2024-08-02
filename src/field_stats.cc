@@ -191,7 +191,6 @@ public:
   TfHopper &operator=(TfHopper &&) = delete;
 
 private:
-  fval epsilon_ = 0.0001;
   void tau_(addr k, addr *p, addr *q, fval *v) final {
     std::vector<addr> ps, tfs;
     addr min_p = maxfinity;
@@ -202,7 +201,7 @@ private:
       tfs.push_back(tf0);
       min_p = std::min(min_p, p0);
     }
-    fval tf = epsilon_;
+    fval tf = 0.0;
     for (size_t i = 0; i < tfs.size(); i++)
       if (ps[i] == min_p)
         tf += weights_[i] * tfs[i];
@@ -224,7 +223,7 @@ private:
       tfs.push_back(tf0);
       max_p = std::max(max_p, p0);
     }
-    fval tf = epsilon_;
+    fval tf = 0.0;
     for (size_t i = 0; i < tfs.size(); i++)
       if (ps[i] == max_p)
         tf += weights_[i] * tfs[i];
@@ -245,7 +244,8 @@ private:
 std::unique_ptr<Hopper> FieldStats::tf_hopper_(const std::string &term) {
   std::vector<std::unique_ptr<Hopper>> tf_hoppers;
   for (size_t i = 0; i < tf_featurizers_.size(); i++)
-    tf_hoppers.emplace_back(warren_->idx()->hopper(tf_featurizers_[i]->featurize(term)));
+    tf_hoppers.emplace_back(
+        warren_->idx()->hopper(tf_featurizers_[i]->featurize(term)));
   std::unique_ptr<Hopper> chopper = content_hopper(warren_);
   return std::make_unique<TfHopper>(&tf_hoppers, weights_, &chopper);
 };
