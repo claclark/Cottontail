@@ -37,13 +37,12 @@ int main(int argc, char **argv) {
   while (std::getline(std::cin, line)) {
     i++;
     if (line != "" && line != "[" && line != "]") {
-      size_t l = line.length();
       while (line.back() != '}')
-        --l;
-      if (!json_scribe(line.substr(0, l), scribe, &p, &q, &error)) {
+        line.pop_back();
+      if (!json_scribe(line, scribe, &p, &q, &error)) {
         std::cerr << program_name << ": On input line: " << i << ": " << error
                   << "\n";
-        return 1;
+        // return 1;
       }
     }
     if (i % 1000 == 0)
