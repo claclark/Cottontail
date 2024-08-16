@@ -60,7 +60,7 @@ int main(int argc, char **argv) {
     }
     std::string topic = fields[0];
     std::string docno;
-    if (fields.size() > 3 && fields[1] == "Q0")
+    if (fields.size() > 2)
       docno = fields[2];
     else
       docno = fields[1];
