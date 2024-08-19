@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 
+#include "hopper.h"
 #include "src/array_hopper.h"
 #include "src/compressor.h"
 #include "src/core.h"
@@ -184,6 +185,36 @@ public:
 } // namespace
 
 std::shared_ptr<SimplePosting> SimplePostingFactory::posting_from_merge(
+    const std::vector<std::shared_ptr<SimplePosting>> &postings,
+    std::shared_ptr<Hopper> exclude) {
+  if (postings.size() == 0)
+    return nullptr;
+  addr feature = postings[0]->feature();
+  std::shared_ptr<SimplePosting> merged_posting = posting_from_feature(feature);
+  std::priority_queue<Element, std::vector<Element>, Compare> queue;
+  for (size_t i = 0; i < postings.size(); i++)
+    if (postings[i]->size() > 0)
+      queue.emplace(postings[i], i);
+  addr k = minfinity, px = minfinity, qx = minfinity;
+  while (queue.size() > 0) {
+    Element e = queue.top();
+    queue.pop();
+    if (e.p() > k) {
+      if (qx < e.q())
+        exclude->rho(e.q(), &px, &qx);
+      if (px > e.q())
+        merged_posting->push(e.p(), e.q(), e.v());
+      k = e.p();
+    }
+    if (e.next())
+      queue.push(e);
+  }
+  if (merged_posting->size() == 0)
+    return nullptr;
+  return merged_posting;
+}
+
+std::shared_ptr<SimplePosting> SimplePostingFactory::posting_from_merge(
     const std::vector<std::shared_ptr<SimplePosting>> &postings) {
   if (postings.size() == 0)
     return nullptr;
@@ -219,13 +250,13 @@ std::shared_ptr<SimplePosting> SimplePostingFactory::posting_from_merge(
     for (size_t i = 0; i < postings.size(); i++)
       if (postings[i]->size() > 0)
         queue.emplace(postings[i], i);
-    addr k = minfinity;;
-    while(queue.size() > 0) {
+    addr k = minfinity;
+    while (queue.size() > 0) {
       Element e = queue.top();
       queue.pop();
       if (e.p() > k) {
-         merged_posting->push(e.p(), e.q(), e.v());
-         k = e.p();
+        merged_posting->push(e.p(), e.q(), e.v());
+        k = e.p();
       }
       if (e.next())
         queue.push(e);

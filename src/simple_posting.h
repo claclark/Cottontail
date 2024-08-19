@@ -66,6 +66,9 @@ public:
   std::shared_ptr<SimplePosting> posting_from_file(std::fstream *f);
   std::shared_ptr<SimplePosting> posting_from_merge(
       const std::vector<std::shared_ptr<SimplePosting>> &postings);
+  std::shared_ptr<SimplePosting> posting_from_merge(
+      const std::vector<std::shared_ptr<SimplePosting>> &postings,
+      std::shared_ptr<Hopper> exclude);
 
   SimplePostingFactory(const SimplePostingFactory &) = delete;
   SimplePostingFactory &operator=(const SimplePostingFactory &) = delete;
