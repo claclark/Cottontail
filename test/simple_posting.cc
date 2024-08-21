@@ -568,3 +568,65 @@ TEST(SimplePosting, Invariants) {
     x += 1.0;
   }
 }
+
+TEST(SimplePosting, GarbageCollection) {
+  std::shared_ptr<cottontail::Compressor> compressor =
+      cottontail::Compressor::make("null", "");
+  ASSERT_NE(compressor, nullptr);
+  std::shared_ptr<cottontail::SimplePostingFactory> factory =
+      cottontail::SimplePostingFactory::make(compressor, compressor);
+  ASSERT_NE(factory, nullptr);
+  std::vector<std::shared_ptr<cottontail::SimplePosting>> postings;
+  std::vector<cottontail::Annotation> ann1;
+  ann1.emplace_back(12, 0, 6, 0.0);
+  ann1.emplace_back(12, 2, 8, 2.0);
+  ann1.emplace_back(12, 4, 10, 4.0);
+  ann1.emplace_back(12, 6, 12, 6.0);
+  std::vector<cottontail::Annotation>::iterator it1 = ann1.begin();
+  std::shared_ptr<cottontail::SimplePosting> posting1 =
+      factory->posting_from_annotations(&it1, ann1.end());
+  postings.push_back(posting1);
+  ASSERT_NE(posting1, nullptr);
+  std::vector<cottontail::Annotation> ann2;
+  ann2.emplace_back(12, 1, 7, 1.0);
+  ann2.emplace_back(12, 3, 9, 3.0);
+  ann2.emplace_back(12, 5, 11, 5.0);
+  ann2.emplace_back(12, 7, 13, 7.0);
+  std::vector<cottontail::Annotation>::iterator it2 = ann2.begin();
+  std::shared_ptr<cottontail::SimplePosting> posting2 =
+      factory->posting_from_annotations(&it2, ann2.end());
+  ASSERT_NE(posting2, nullptr);
+  postings.push_back(posting2);
+  std::vector<cottontail::Annotation> annX;
+  annX.emplace_back(0, 2, 9, 0.0);
+  annX.emplace_back(0, 5, 12, 0.0);
+  std::vector<cottontail::Annotation>::iterator itX = annX.begin();
+  std::shared_ptr<cottontail::SimplePosting> postingX =
+      factory->posting_from_annotations(&itX, annX.end());
+  ASSERT_NE(postingX, nullptr);
+  std::shared_ptr<cottontail::SimplePosting> posting =
+      factory->posting_from_merge(postings, postingX);
+  std::unique_ptr<cottontail::Hopper> hopper = posting->hopper();
+  ASSERT_NE(hopper, nullptr);
+  cottontail::addr p, q;
+  cottontail::fval v;
+  hopper->tau(0, &p, &q, &v);
+  EXPECT_EQ(p, 0);
+  EXPECT_EQ(q, 6);
+  EXPECT_EQ(v, 0.0);
+  hopper->tau(p + 1, &p, &q, &v);
+  EXPECT_EQ(p, 1);
+  EXPECT_EQ(q, 7);
+  EXPECT_EQ(v, 1.0);
+  hopper->tau(p + 1, &p, &q, &v);
+  EXPECT_EQ(p, 4);
+  EXPECT_EQ(q, 10);
+  EXPECT_EQ(v, 4.0);
+  hopper->tau(p + 1, &p, &q, &v);
+  EXPECT_EQ(p, 7);
+  EXPECT_EQ(q, 13);
+  EXPECT_EQ(v, 7.0);
+  hopper->tau(p + 1, &p, &q, &v);
+  EXPECT_EQ(p, cottontail::maxfinity);
+  EXPECT_EQ(q, cottontail::maxfinity);
+}

@@ -186,9 +186,12 @@ public:
 
 std::shared_ptr<SimplePosting> SimplePostingFactory::posting_from_merge(
     const std::vector<std::shared_ptr<SimplePosting>> &postings,
-    std::shared_ptr<Hopper> exclude) {
+    std::shared_ptr<SimplePosting> exclude) {
   if (postings.size() == 0)
     return nullptr;
+  if (exclude == nullptr || exclude->size() == 0)
+    return posting_from_merge(postings);
+  std::unique_ptr<cottontail::Hopper> hopper = exclude->hopper();
   addr feature = postings[0]->feature();
   std::shared_ptr<SimplePosting> merged_posting = posting_from_feature(feature);
   std::priority_queue<Element, std::vector<Element>, Compare> queue;
@@ -201,8 +204,8 @@ std::shared_ptr<SimplePosting> SimplePostingFactory::posting_from_merge(
     queue.pop();
     if (e.p() > k) {
       if (qx < e.q())
-        exclude->rho(e.q(), &px, &qx);
-      if (px > e.q())
+        hopper->rho(e.q(), &px, &qx);
+      if (px > e.p())
         merged_posting->push(e.p(), e.q(), e.v());
       k = e.p();
     }
