@@ -19,6 +19,7 @@
 #include "src/parameters.h"
 #include "src/parse.h"
 #include "src/ranking.h"
+#include "src/stopwords.h"
 
 namespace cottontail {
 
@@ -50,6 +51,17 @@ public:
   std::vector<RankingResult> ranking() { return ranking_; };
 
 private:
+  void cook() {
+    if (weighted_query_.size() == 0 && raw_query_ != "") {
+      std::vector<std::string> terms = warren_->tokenizer()->split(raw_query_);
+      for (auto &term : terms)
+        if (weighted_query_.find(term) == weighted_query_.end())
+          weighted_query_[term] = 1.0;
+        else
+          weighted_query_[term] += 1.0;
+    }
+  };
+
   // friend class all RankingContextTransformer;
   friend class BM25Transformer;
   friend class ExpansionTransformer;
@@ -57,6 +69,7 @@ private:
   friend class ParameterTransformer;
   friend class RandomParameterTransformer;
   friend class StemTransformer;
+  friend class StopTransformer;
 
   std::shared_ptr<Warren> warren_;
   std::string raw_query_;
@@ -130,12 +143,7 @@ private:
   void transform_(class RankingContext *context) {
     if (context->ranking_.size() == 0)
       return;
-    if (context->weighted_query_.size() == 0) {
-      std::vector<std::string> terms =
-          context->warren_->tokenizer()->split(context->raw_query_);
-      for (auto &term : terms)
-        context->weighted_query_[term] = 1.0;
-    }
+    context->cook();
     expand(context->warren_, context->ranking_, context->parameters_,
            &context->weighted_query_);
   };
@@ -171,22 +179,35 @@ private:
   };
 };
 
+class StopTransformer : public RankingContextTransformer {
+public:
+  virtual ~StopTransformer(){};
+  StopTransformer(const std::vector<std::string> &list) {
+    for (auto &&word : list)
+      stopwords_.insert(word);
+  };
+
+private:
+  StopTransformer(){};
+  std::set<std::string> stopwords_;
+  void transform_(class RankingContext *context) {
+    context->cook();
+    std::map<std::string, fval> stopped_query;
+    for (auto &term : context->weighted_query_)
+      if (stopwords_.find(term.first) == stopwords_.end())
+        stopped_query[term.first] = term.second;
+    if (stopped_query.size() > 0)
+      context->weighted_query_ = stopped_query;
+  }
+};
+
 class StemTransformer : public RankingContextTransformer {
 public:
   virtual ~StemTransformer(){};
 
 private:
   void transform_(class RankingContext *context) {
-    if (context->weighted_query_.size() == 0) {
-      std::vector<std::string> terms =
-          context->warren_->tokenizer()->split(context->raw_query_);
-      for (auto &term : terms)
-        if (context->weighted_query_.find(term) ==
-            context->weighted_query_.end())
-          context->weighted_query_[term] = 1.0;
-        else
-          context->weighted_query_[term] += 1.0;
-    }
+    context->cook();
     std::map<std::string, fval> stemmed_query;
     for (auto &term : context->weighted_query_) {
       std::string stemmed_term = context->warren_->stemmer()->stem(term.first);
@@ -275,6 +296,8 @@ RankingContextTransformer::from_name(std::string transformation) {
     return std::make_shared<LMDTransformer>();
   else if (transformation == "stem")
     return std::make_shared<StemTransformer>();
+  else if (transformation == "stop")
+    return std::make_shared<StopTransformer>(cast2019_stopwords);
   else if (transformation == "rsj")
     return std::make_shared<RSJTransformer>();
   else
