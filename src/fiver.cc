@@ -31,7 +31,7 @@ namespace cottontail {
 
 constexpr addr staging = maxfinity / 2;
 const std::string transaction_tag = "\034"; // ASCII file separator
-const std::string text_chunk_tag = "\035"; // ASCII group separator
+const std::string text_chunk_tag = "\035";  // ASCII group separator
 
 class FiverAnnotator : public Annotator {
 public:
@@ -408,17 +408,16 @@ Fiver::merge(const std::vector<std::shared_ptr<Fiver>> &fivers,
     return fivers[0];
   std::shared_ptr<std::string> text = std::make_shared<std::string>();
   std::vector<Annotation> ann;
-  addr chunk = fivers[0]->featurizer_->featurize(text_chunk_tag);
+  addr chunk_feature = fivers[0]->featurizer_->featurize(text_chunk_tag);
   for (auto &fiver : fivers) {
     if (fiver->text_->length() > 0) {
-      auto posting = fiver->index_->find(
-          fiver->featurizer_->featurize(text_chunk_tag));
+      auto posting = fiver->index_->find(chunk_feature);
       if (posting != fiver->index_->end()) {
         std::unique_ptr<Hopper> hopper = posting->second->hopper();
         addr p, q, v;
         for (hopper->tau(0, &p, &q, &v); p < maxfinity;
              hopper->tau(p + 1, &p, &q, &v))
-          ann.emplace_back(chunk, p, q, addr2fval(v + text->length()));
+          ann.emplace_back(chunk_feature, p, q, addr2fval(v + text->length()));
       }
       if (text->length() > 0 && text->back() != '\n')
         *text += "\n";
@@ -453,15 +452,34 @@ Fiver::merge(const std::vector<std::shared_ptr<Fiver>> &fivers,
       std::make_shared<std::map<addr, std::shared_ptr<SimplePosting>>>();
   if (ann.size() > 0) {
     std::vector<Annotation>::iterator it = ann.begin();
-    (*index)[chunk] = posting_factory->posting_from_annotations(&it, ann.end());
+    (*index)[chunk_feature] =
+        posting_factory->posting_from_annotations(&it, ann.end());
+  }
+  std::shared_ptr<SimplePosting> exclude = nullptr;
+  {
+    std::vector<std::shared_ptr<SimplePosting>> x;
+    for (auto &f : fivers) {
+      auto posting = f->index_->find(null_feature);
+      if (posting != f->index_->end())
+        x.push_back(posting->second);
+    }
+    if (x.size() > 0) {
+      exclude = posting_factory->posting_from_merge(x);
+      if (exclude != nullptr)
+        (*index)[null_feature] = exclude;
+    }
   }
   std::map<addr, std::vector<std::shared_ptr<SimplePosting>>> unmerged_index;
   for (auto &f : fivers)
     for (auto &i : *(f->index_))
-      if (i.first != chunk)
+      if (i.first != null_feature && i.first != chunk_feature)
         unmerged_index[i.first].push_back(i.second);
-  for (auto &u : unmerged_index)
-    (*index)[u.first] = posting_factory->posting_from_merge(u.second);
+  for (auto &u : unmerged_index) {
+    std::shared_ptr<SimplePosting> p =
+        posting_factory->posting_from_merge(u.second, exclude);
+    if (p != nullptr)
+      (*index)[u.first] = p;
+  }
   fiver->built_ = true;
   fiver->where_ = 0;
   fiver->name_ = "fiver";

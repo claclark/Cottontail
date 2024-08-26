@@ -552,3 +552,140 @@ TEST(Fiver, Pickling) {
       "");
   fiver->end();
 }
+
+TEST(Fiver, Erase) {
+  const char *romeo[] = {
+      "ROMEO.",
+      "She speaks.",
+      "O speak again bright angel, for thou art",
+      "As glorious to this night, being o’er my head,",
+      "As is a winged messenger of heaven",
+      "Unto the white-upturned wondering eyes",
+      "Of mortals that fall back to gaze on him",
+      "When he bestrides the lazy-puffing clouds",
+      "And sails upon the bosom of the air.",
+  };
+  cottontail::addr rn = sizeof(romeo) / sizeof(char *);
+  const char *juliet[] = {
+      "JULIET.",
+      "O Romeo, Romeo, wherefore art thou Romeo?",
+      "Deny thy father and refuse thy name.",
+      "Or if thou wilt not, be but sworn my love,",
+      "And I’ll no longer be a Capulet.",
+  };
+  cottontail::addr jn = sizeof(juliet) / sizeof(char *);
+  std::shared_ptr<cottontail::Featurizer> featurizer =
+      cottontail::Featurizer::make("hashing", "");
+  ASSERT_NE(featurizer, nullptr);
+  std::shared_ptr<cottontail::Tokenizer> tokenizer =
+      cottontail::Tokenizer::make("ascii", "");
+  ASSERT_NE(tokenizer, nullptr);
+  cottontail::addr p, q, v;
+  std::vector<std::shared_ptr<cottontail::Fiver>> fivers;
+  std::shared_ptr<cottontail::Fiver> river =
+      cottontail::Fiver::make(nullptr, featurizer, tokenizer);
+  ASSERT_NE(river, nullptr);
+  cottontail::addr rine = featurizer->featurize("romeo:");
+  {
+    ASSERT_TRUE(river->transaction());
+    for (cottontail::addr i = 0; i < rn; i++) {
+      EXPECT_TRUE(river->appender()->append(romeo[i], &p, &q));
+      EXPECT_TRUE(river->annotator()->annotate(rine, p, q, i + 1));
+      EXPECT_TRUE(river->appender()->append(romeo[i], &p, &q));
+      EXPECT_TRUE(river->annotator()->annotate(rine, p, q, -(i + 1)));
+    }
+    ASSERT_TRUE(river->ready());
+    river->commit();
+  }
+  fivers.push_back(river);
+  std::shared_ptr<cottontail::Fiver> jiver =
+      cottontail::Fiver::make(nullptr, featurizer, tokenizer);
+  ASSERT_NE(jiver, nullptr);
+  cottontail::addr jine = featurizer->featurize("juliet:");
+  {
+    river->start();
+    ASSERT_TRUE(jiver->transaction());
+    std::unique_ptr<cottontail::Hopper> ropper = river->idx()->hopper(rine);
+    for (ropper->tau(0, &p, &q, &v); p < cottontail::maxfinity;
+         ropper->tau(p + 1, &p, &q, &v))
+      if (v < 0) {
+        EXPECT_TRUE(jiver->annotator()->erase(p, q));
+      }
+    for (cottontail::addr i = 0; i < jn; i++) {
+      EXPECT_TRUE(jiver->appender()->append(juliet[i], &p, &q));
+      EXPECT_TRUE(jiver->annotator()->annotate(jine, p, q, i + 1));
+      EXPECT_TRUE(jiver->appender()->append(juliet[i], &p, &q));
+      EXPECT_TRUE(jiver->annotator()->annotate(jine, p, q, -(i + 1)));
+    }
+    EXPECT_TRUE(river->txt()->range(&p, &q));
+    jiver->relocate(q + 1);
+    ASSERT_TRUE(jiver->ready());
+    jiver->commit();
+    river->end();
+  }
+  fivers.push_back(jiver);
+  std::shared_ptr<cottontail::Fiver> xiver =
+      cottontail::Fiver::make(nullptr, featurizer, tokenizer);
+  ASSERT_NE(xiver, nullptr);
+  cottontail::addr xine = featurizer->featurize("spam:");
+  {
+    jiver->start();
+    ASSERT_TRUE(xiver->transaction());
+    std::unique_ptr<cottontail::Hopper> jopper = jiver->idx()->hopper(jine);
+    for (jopper->tau(0, &p, &q, &v); p < cottontail::maxfinity;
+         jopper->tau(p + 1, &p, &q, &v)) {
+      if (v < 0) {
+        EXPECT_TRUE(xiver->annotator()->erase(p, q));
+      }
+      cottontail::addr p0, q0;
+      EXPECT_TRUE(xiver->appender()->append("spam spam spam", &p0, &q0));
+      EXPECT_TRUE(xiver->annotator()->annotate(xine, p0, q0));
+    }
+    EXPECT_TRUE(jiver->txt()->range(&p, &q));
+    xiver->relocate(q + 1);
+    ASSERT_TRUE(xiver->ready());
+    xiver->commit();
+    jiver->end();
+  }
+  fivers.push_back(xiver);
+  std::shared_ptr<cottontail::Fiver> fiver = cottontail::Fiver::merge(fivers);
+  ASSERT_NE(fiver, nullptr);
+  fiver->start();
+  std::unique_ptr<cottontail::Hopper> ropper = fiver->idx()->hopper(rine);
+  for (ropper->tau(0, &p, &q, &v); p < cottontail::maxfinity;
+       ropper->tau(p + 1, &p, &q, &v)) {
+    std::string s = fiver->txt()->translate(p, q);
+    s.pop_back();
+    EXPECT_EQ(s, romeo[v - 1]);
+  }
+  std::unique_ptr<cottontail::Hopper> jopper = fiver->idx()->hopper(jine);
+  for (jopper->tau(0, &p, &q, &v); p < cottontail::maxfinity;
+       jopper->tau(p + 1, &p, &q, &v)) {
+    std::string s = fiver->txt()->translate(p, q);
+    s.pop_back();
+    EXPECT_EQ(s, juliet[v - 1]);
+  }
+  cottontail::addr n = 0;
+  std::unique_ptr<cottontail::Hopper> xopper = fiver->idx()->hopper(xine);
+  for (xopper->tau(0, &p, &q); p < cottontail::maxfinity;
+       xopper->tau(p + 1, &p, &q)) {
+    n++;
+    std::string s = fiver->txt()->translate(p, q);
+    EXPECT_EQ(s, "spam spam spam\n");
+  }
+  EXPECT_EQ(n, 2 * jn);
+  std::unique_ptr<cottontail::Hopper> hopper =
+      fiver->hopper_from_gcl("\"romeo\"");
+  cottontail::addr m = 0;
+  for (hopper->tau(0, &p, &q); p < cottontail::maxfinity;
+       hopper->tau(p + 1, &p, &q)) {
+    std::string s = fiver->txt()->translate(p, q);
+    EXPECT_TRUE(m != 0 || s == "ROMEO.\n");
+    EXPECT_TRUE(m != 1 || s == "Romeo, ");
+    EXPECT_TRUE(m != 2 || s == "Romeo, ");
+    EXPECT_TRUE(m != 3 || s == "Romeo?\n");
+    m++;
+  }
+  EXPECT_EQ(m, 4);
+  fiver->end();
+}
