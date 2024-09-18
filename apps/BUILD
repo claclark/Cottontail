@@ -340,6 +340,20 @@ cc_binary(
 )
 
 cc_binary(
+    name = "trec-example",
+    srcs = [
+      "trec-example.cc",
+    ],
+    deps = [
+      "//src:cottontail",
+      "walk",
+    ],
+    linkopts = [
+      "-L/usr/local/lib -lboost_system -lboost_filesystem -pthread",
+    ],
+)
+
+cc_binary(
     name = "treccast20",
     srcs = [
       "treccast20.cc",

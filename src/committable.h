@@ -29,7 +29,7 @@ public:
     lock_.unlock();
     return result;
   }
-  inline bool ready() {
+  inline bool ready(std::string *error = nullptr) {
     lock_.lock();
     assert(started_);
     bool result;
@@ -41,6 +41,8 @@ public:
       result = vote_;
     }
     lock_.unlock();
+    if (!result)
+      safe_set(error) = "Transaction cannot be commited.";
     return result;
   }
   inline void commit() {
