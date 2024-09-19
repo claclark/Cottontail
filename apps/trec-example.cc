@@ -214,9 +214,6 @@ int main(int argc, char **argv) {
     std::cerr << program_name << ": " << error << "\n" << std::flush;
     exit(1);
   }
-  for (auto &&topic : trec7_queries)
-    std::cout << topic.first << " --- " << topic.second << "\n" << std::flush;
-  exit(0);
   std::vector<std::string> disk2_files;
   std::vector<std::string> disk3_files;
   std::vector<std::string> disk4_files;
@@ -253,15 +250,18 @@ int main(int argc, char **argv) {
     exit(1);
   }
   bool verbose = false;
+  std::mutex output_mutex;
 
   // Scriber worker
   std::queue<std::string> docq;
   std::mutex docq_mutex;
-  std::mutex output_mutex;
   auto scribe_worker = [&]() {
+    std::string error;
     std::shared_ptr<cottontail::Warren> warren = trec_warren->clone(&error);
     if (warren == nullptr) {
+      output_mutex.lock();
       std::cerr << program_name << ": " << error << "\n" << std::flush;
+      output_mutex.unlock();
       exit(1);
     }
     for (;;) {
@@ -376,19 +376,179 @@ int main(int argc, char **argv) {
     }
   };
 
+  // Ranking worker
+  std::string pipeline =
+      "bm25:b=0.298514 bm25:k1=0.786383 stop stem bm25 rsj:depth=19.2284 "
+      "rsj:expansions=20.8663 rsj:gamma=0.186011 rsj bm25:b=0.362828 "
+      "bm25:k1=0.711716 stop stem bm25";
+
+  bool stop = false;
+  auto ranking_worker = [&](int trec, std::string topic, std::string query) {
+    std::string error;
+    std::shared_ptr<cottontail::Warren> warren = trec_warren->clone(&error);
+    if (warren == nullptr) {
+      output_mutex.lock();
+      std::cerr << program_name << ": " << error << "\n" << std::flush;
+      output_mutex.unlock();
+      exit(1);
+    }
+    bool done = false;
+    while (!done) {
+      done = stop;
+      warren->start();
+      std::shared_ptr<cottontail::Ranker> rank =
+          cottontail::Ranker::from_pipeline(pipeline, warren, &error);
+      if (rank == nullptr) {
+        output_mutex.lock();
+        std::cerr << program_name << ": " << error << "\n" << std::flush;
+        output_mutex.unlock();
+        exit(1);
+      }
+      std::vector<cottontail::RankingResult> ranking = (*rank)(query);
+      std::map<cottontail::addr, cottontail::fval> lrels;
+      std::string label = "qrel:" + topic;
+      std::unique_ptr<cottontail::Hopper> hopper =
+          warren->hopper_from_gcl(label, &error);
+      if (hopper == nullptr) {
+        output_mutex.lock();
+        std::cerr << program_name << ": " << error << "\n" << std::flush;
+        output_mutex.unlock();
+        exit(1);
+      }
+      cottontail::addr p, q;
+      cottontail::fval v;
+      for (hopper->tau(cottontail::minfinity + 1, &p, &q, &v);
+           p < cottontail::maxfinity; hopper->tau(p + 1, &p, &q, &v))
+        lrels[p] = v;
+      warren->end();
+      cottontail::addr fake = cottontail::maxfinity / 2;
+      while (lrels.size() < qrels[topic].size())
+        lrels[fake++] = 1;
+      std::map<std::string, cottontail::fval> metrics;
+      cottontail::eval(lrels, ranking, &metrics);
+      output_mutex.lock();
+      std::cout << time(NULL) << " " << trec << " " << topic << " "
+                << metrics["ap"] << "\n"
+                << std::flush;
+      output_mutex.unlock();
+      sleep(2);
+    }
+  };
+
+  std::queue<std::string> delq;
+  std::mutex delq_mutex;
+  auto erase_worker = [&]() {
+    std::string error;
+    std::shared_ptr<cottontail::Warren> warren = trec_warren->clone(&error);
+    if (warren == nullptr) {
+      output_mutex.lock();
+      std::cerr << program_name << ": " << error << "\n" << std::flush;
+      output_mutex.unlock();
+      exit(1);
+    }
+    for (;;) {
+      std::string filename;
+      bool done = false;
+      delq_mutex.lock();
+      if (delq.empty()) {
+        done = true;
+      } else {
+        filename = delq.front();
+        delq.pop();
+      }
+      delq_mutex.unlock();
+      if (done)
+        return;
+      std::string query = "(>> file: (>> filename: \"" + filename + "\"))";
+      warren->start();
+      std::unique_ptr<cottontail::Hopper> hopper =
+          warren->hopper_from_gcl(query, &error);
+      if (hopper == nullptr) {
+        output_mutex.lock();
+        std::cerr << program_name << ": " << error << "\n" << std::flush;
+        output_mutex.unlock();
+        exit(1);
+      }
+      cottontail::addr p, q;
+      hopper->tau(0, &p, &q);
+      if (p < cottontail::maxfinity) {
+        if (!warren->transaction(&error) ||
+            !warren->annotator()->erase(p, q, &error) ||
+            !warren->ready(&error)) {
+          output_mutex.lock();
+          std::cerr << program_name << ": " << error << "\n" << std::flush;
+          output_mutex.unlock();
+          exit(1);
+        }
+        warren->commit();
+      }
+      warren->end();
+    }
+  };
+
+  std::vector<std::thread> rankers;
+  for (auto &&topic : trec4_queries)
+    rankers.emplace_back(
+        std::thread(ranking_worker, 4, topic.first, topic.second));
+  for (auto &&topic : trec5_queries)
+    rankers.emplace_back(
+        std::thread(ranking_worker, 5, topic.first, topic.second));
+  for (auto &&topic : trec6_queries)
+    rankers.emplace_back(
+        std::thread(ranking_worker, 6, topic.first, topic.second));
+
   size_t threads =
       std::max(std::thread::hardware_concurrency(), (unsigned int)2);
-  std::vector<std::thread> scribers;
 
   // TREC-4
-  for (auto &&f : disk2_files)
-    docq.push(f);
-  for (auto &&f : disk3_files)
-    docq.push(f);
-  for (size_t i = 0; i < threads; i++)
-    scribers.emplace_back(std::thread(scribe_worker));
-  for (auto &scriber : scribers)
-    scriber.join();
+  {
+    for (auto &&f : disk2_files)
+      docq.push(f);
+    for (auto &&f : disk3_files)
+      docq.push(f);
+    std::vector<std::thread> scribers;
+    for (size_t i = 0; i < threads; i++)
+      scribers.emplace_back(std::thread(scribe_worker));
+    for (auto &scriber : scribers)
+      scriber.join();
+    sleep(30);
+  }
+
+  // TREC-5
+  {
+    for (auto &&f : disk3_files)
+      delq.push(f);
+    std::thread eraser(erase_worker);
+    for (auto &&f : disk4_files)
+      docq.push(f);
+    std::vector<std::thread> scribers;
+    for (size_t i = 0; i < threads; i++)
+      scribers.emplace_back(std::thread(scribe_worker));
+    for (auto &scriber : scribers)
+      scriber.join();
+    sleep(30);
+    eraser.join();
+  }
+
+  // TREC-6
+  {
+    for (auto &&f : disk2_files)
+      delq.push(f);
+    std::thread eraser(erase_worker);
+    for (auto &&f : disk5_files)
+      docq.push(f);
+    std::vector<std::thread> scribers;
+    for (size_t i = 0; i < threads; i++)
+      scribers.emplace_back(std::thread(scribe_worker));
+    for (auto &scriber : scribers)
+      scriber.join();
+    sleep(30);
+    eraser.join();
+  }
+
+  stop = true;
+  for (auto &ranker : rankers)
+    ranker.join();
 
   return 0;
 }
