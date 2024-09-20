@@ -380,7 +380,7 @@ int main(int argc, char **argv) {
   std::string pipeline =
       "bm25:b=0.298514 bm25:k1=0.786383 stop stem bm25 rsj:depth=19.2284 "
       "rsj:expansions=20.8663 rsj:gamma=0.186011 rsj bm25:b=0.362828 "
-      "bm25:k1=0.711716 stop stem bm25";
+      "bm25:k1=0.711716 stem bm25";
 
   bool stop = false;
   auto ranking_worker = [&](int trec, std::string topic, std::string query) {
@@ -486,6 +486,7 @@ int main(int argc, char **argv) {
     }
   };
 
+  // Query threads
   std::vector<std::thread> rankers;
   for (auto &&topic : trec4_queries)
     rankers.emplace_back(
@@ -496,6 +497,9 @@ int main(int argc, char **argv) {
   for (auto &&topic : trec6_queries)
     rankers.emplace_back(
         std::thread(ranking_worker, 6, topic.first, topic.second));
+  for (auto &&topic : trec7_queries)
+    rankers.emplace_back(
+        std::thread(ranking_worker, 7, topic.first, topic.second));
 
   size_t threads =
       std::max(std::thread::hardware_concurrency(), (unsigned int)2);
@@ -526,8 +530,8 @@ int main(int argc, char **argv) {
       scribers.emplace_back(std::thread(scribe_worker));
     for (auto &scriber : scribers)
       scriber.join();
-    sleep(30);
     eraser.join();
+    sleep(30);
   }
 
   // TREC-6
@@ -542,10 +546,20 @@ int main(int argc, char **argv) {
       scribers.emplace_back(std::thread(scribe_worker));
     for (auto &scriber : scribers)
       scriber.join();
-    sleep(30);
     eraser.join();
+    sleep(30);
   }
 
+  // TREC-7
+  {
+    for (auto &&f : cr_files)
+      delq.push(f);
+    std::thread eraser(erase_worker);
+    eraser.join();
+    sleep(30);
+  }
+
+  // Stop query threads
   stop = true;
   for (auto &ranker : rankers)
     ranker.join();
