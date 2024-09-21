@@ -3,6 +3,7 @@
 #include <mutex>
 #include <queue>
 #include <regex>
+#include <semaphore>
 #include <set>
 #include <string>
 #include <thread>
@@ -383,7 +384,10 @@ int main(int argc, char **argv) {
       "bm25:k1=0.711716 stem bm25";
 
   bool stop = false;
-  auto ranking_worker = [&](int trec, std::string topic, std::string query) {
+  std::vector<bool> sync;
+  std::binary_semaphore ack{0};
+  auto ranking_worker = [&](int trec, std::string topic, std::string query,
+                            size_t i) {
     std::string error;
     std::shared_ptr<cottontail::Warren> warren = trec_warren->clone(&error);
     if (warren == nullptr) {
@@ -430,6 +434,15 @@ int main(int argc, char **argv) {
       std::cout << time(NULL) << " " << trec << " " << topic << " "
                 << metrics["ap"] << "\n"
                 << std::flush;
+      if (sync[i]) {
+        sync[i] = false;
+        unsigned i;
+        for (i = 0; i < sync.size(); i++)
+          if (sync[i])
+            break;
+        if (i == sync.size())
+          ack.release();
+      }
       output_mutex.unlock();
       sleep(2);
     }
@@ -486,20 +499,27 @@ int main(int argc, char **argv) {
     }
   };
 
+  // Synchronization
+  size_t n = trec4_queries.size() + trec5_queries.size() +
+             trec6_queries.size() + trec7_queries.size();
+  for (size_t i = 0; i < n; i++)
+    sync.push_back(false);
+
   // Query threads
+  n = 0;
   std::vector<std::thread> rankers;
   for (auto &&topic : trec4_queries)
     rankers.emplace_back(
-        std::thread(ranking_worker, 4, topic.first, topic.second));
+        std::thread(ranking_worker, 4, topic.first, topic.second, n++));
   for (auto &&topic : trec5_queries)
     rankers.emplace_back(
-        std::thread(ranking_worker, 5, topic.first, topic.second));
+        std::thread(ranking_worker, 5, topic.first, topic.second, n++));
   for (auto &&topic : trec6_queries)
     rankers.emplace_back(
-        std::thread(ranking_worker, 6, topic.first, topic.second));
+        std::thread(ranking_worker, 6, topic.first, topic.second, n++));
   for (auto &&topic : trec7_queries)
     rankers.emplace_back(
-        std::thread(ranking_worker, 7, topic.first, topic.second));
+        std::thread(ranking_worker, 7, topic.first, topic.second, n++));
 
   size_t threads =
       std::max(std::thread::hardware_concurrency(), (unsigned int)2);
@@ -515,7 +535,11 @@ int main(int argc, char **argv) {
       scribers.emplace_back(std::thread(scribe_worker));
     for (auto &scriber : scribers)
       scriber.join();
-    sleep(30);
+    output_mutex.lock();
+    for (size_t i = 0; i < sync.size(); i++)
+      sync[i] = true;
+    output_mutex.unlock();
+    ack.acquire();
   }
 
   // TREC-5
@@ -531,7 +555,11 @@ int main(int argc, char **argv) {
     for (auto &scriber : scribers)
       scriber.join();
     eraser.join();
-    sleep(30);
+    output_mutex.lock();
+    for (size_t i = 0; i < sync.size(); i++)
+      sync[i] = true;
+    output_mutex.unlock();
+    ack.acquire();
   }
 
   // TREC-6
@@ -547,7 +575,11 @@ int main(int argc, char **argv) {
     for (auto &scriber : scribers)
       scriber.join();
     eraser.join();
-    sleep(30);
+    output_mutex.lock();
+    for (size_t i = 0; i < sync.size(); i++)
+      sync[i] = true;
+    output_mutex.unlock();
+    ack.acquire();
   }
 
   // TREC-7
@@ -556,7 +588,11 @@ int main(int argc, char **argv) {
       delq.push(f);
     std::thread eraser(erase_worker);
     eraser.join();
-    sleep(30);
+    output_mutex.lock();
+    for (size_t i = 0; i < sync.size(); i++)
+      sync[i] = true;
+    output_mutex.unlock();
+    ack.acquire();
   }
 
   // Stop query threads

@@ -348,6 +348,9 @@ cc_binary(
       "//src:cottontail",
       "walk",
     ],
+    copts = [
+      "'-std=c++20'",
+    ],
     linkopts = [
       "-L/usr/local/lib -lboost_system -lboost_filesystem -pthread",
     ],
