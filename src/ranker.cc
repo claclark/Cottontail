@@ -297,7 +297,7 @@ RankingContextTransformer::from_name(std::string transformation) {
   else if (transformation == "stem")
     return std::make_shared<StemTransformer>();
   else if (transformation == "stop")
-    return std::make_shared<StopTransformer>(cast2019_stopwords);
+    return std::make_shared<StopTransformer>(spaCy_stopwords);
   else if (transformation == "rsj")
     return std::make_shared<RSJTransformer>();
   else

@@ -24,24 +24,26 @@ def trecs(time, scores):
     trec7 = 0.0
     if "7" in total:
         trec7 = total["7"]
-    print(time, trec4, trec5, trec6, trec7)
+    print(time, trec4, trec5, trec6, trec7, sep=",")
     sys.stdout.flush()
 
 if __name__ == "__main__":
+    print("Time(seconds)", "TREC-4", "TREC-5", "TREC-6", "TREC-7", sep=",")
     first = True;
     scores = {}
     for line in sys.stdin:
-        (time, trec, topic, score) = line.rstrip().split()
-        time = int(time)
-        score = float(score)
-        if trec not in scores:
-            scores[trec] = {}
-        scores[trec][topic] = score
-        if (first):
-            first = False
-            first_time = last_time = time
-        if time != last_time:
-            last_time = time
-            trecs(last_time - first_time, scores)
+        if len(line) > 0 and line[0] != "T":
+            (time, trec, topic, score) = line.rstrip().split()
+            time = int(time)
+            score = float(score)
+            if trec not in scores:
+                scores[trec] = {}
+            scores[trec][topic] = score
+            if (first):
+                first = False
+                first_time = last_time = time
+            if time != last_time:
+                last_time = time
+                trecs(last_time - first_time, scores)
     if not first:
         trecs(last_time - first_time, scores)

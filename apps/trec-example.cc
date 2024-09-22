@@ -379,9 +379,9 @@ int main(int argc, char **argv) {
 
   // Ranking worker
   std::string pipeline =
-      "bm25:b=0.298514 bm25:k1=0.786383 stop stem bm25 rsj:depth=19.2284 "
-      "rsj:expansions=20.8663 rsj:gamma=0.186011 rsj bm25:b=0.362828 "
-      "bm25:k1=0.711716 stem bm25";
+      "bm25:depth=20 bm25:b=0.298514 bm25:k1=0.786383 stop stem bm25 "
+      "rsj:depth=19.2284 rsj:expansions=20.8663 rsj:gamma=0.186011 rsj "
+      "bm25:b=0.362828 bm25:k1=0.711716 bm25:depth=1000 stem bm25";
 
   bool stop = false;
   std::vector<bool> sync;
@@ -543,6 +543,9 @@ int main(int argc, char **argv) {
   }
 
   // TREC-5
+  output_mutex.lock();
+  std::cout << "TREC-5\n" << std::flush;
+  output_mutex.unlock();
   {
     for (auto &&f : disk3_files)
       delq.push(f);
@@ -563,6 +566,9 @@ int main(int argc, char **argv) {
   }
 
   // TREC-6
+  output_mutex.lock();
+  std::cout << "TREC-6\n" << std::flush;
+  output_mutex.unlock();
   {
     for (auto &&f : disk2_files)
       delq.push(f);
@@ -583,6 +589,9 @@ int main(int argc, char **argv) {
   }
 
   // TREC-7
+  output_mutex.lock();
+  std::cout << "TREC-7\n" << std::flush;
+  output_mutex.unlock();
   {
     for (auto &&f : cr_files)
       delq.push(f);
