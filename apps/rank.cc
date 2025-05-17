@@ -177,10 +177,10 @@ int main(int argc, char **argv) {
     }
     larren->end();
   };
-  time_t t0 = 0;
+  cottontail::addr t0 = 0;
   if (verbose) {
     std::cerr << "Release the rankers...\n" << std::flush;
-    t0 = time(NULL);
+    t0 = cottontail::now();
   }
   std::vector<std::thread> workers;
   for (size_t i = 0; i < threads; i++)
@@ -189,8 +189,8 @@ int main(int argc, char **argv) {
     worker.join();
   std::flush(std::cout);
   if (verbose) {
-    time_t t1 = time(NULL);
-    std::cerr << "Ranking took: " << (t1 - t0) << " second(s) \n" << std::flush;
+    time_t t1 = cottontail::now();
+    std::cerr << "Ranking took: " << (t1 - t0) << " millisecond(s) \n" << std::flush;
   }
   return 0;
 }

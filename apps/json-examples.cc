@@ -27,17 +27,21 @@ void timestamp(size_t number, cottontail::addr t) {
 // SELECT MIN(rating), AVG(rating), MAX(rating) FROM restaurants
 void example1(std::shared_ptr<cottontail::Warren> warren, bool verbose) {
   cottontail::addr t0 = cottontail::now();
+
+  // Query: ratings contained in restaurants
   std::string query = "(<< :rating: Files/restaurant.json)";
   std::unique_ptr<cottontail::Hopper> hopper = warren->hopper_from_gcl(query);
+
   cottontail::fval min_rating, max_rating, total_ratings, restaurants = 1;
   cottontail::addr p, q;
-  cottontail::fval v;
+  cottontail::fval v; // ratings are stored as the values in annoations
   hopper->tau(cottontail::minfinity + 1, &p, &q, &v);
   if (p == cottontail::maxfinity) {
     min_rating = max_rating = total_ratings = 0.0;
   } else {
     min_rating = max_rating = total_ratings = v;
     for (; p < cottontail::maxfinity; hopper->tau(p + 1, &p, &q, &v)) {
+      // Aggregations: MIN, MAX, AVG
       min_rating = std::min(min_rating, v);
       max_rating = std::max(max_rating, v);
       total_ratings += v;
@@ -57,13 +61,16 @@ void example1(std::shared_ptr<cottontail::Warren> warren, bool verbose) {
 // SELECT COUNT(*) FROM zips WHERE CITY = "NEW YORK"
 void example2(std::shared_ptr<cottontail::Warren> warren, bool verbose) {
   cottontail::addr t0 = cottontail::now();
+
+  // Query: (cities containing "NEW YORK") contained in zips
   std::string query = "(<< (>> :city: \"NEW YORK\") Files/zips.json)";
   std::unique_ptr<cottontail::Hopper> hopper = warren->hopper_from_gcl(query);
+
   size_t count = 0;
   cottontail::addr p, q;
   for (hopper->tau(cottontail::minfinity + 1, &p, &q);
        p < cottontail::maxfinity; hopper->tau(p + 1, &p, &q))
-    if (q - p == 3) // exact match
+    if (q - p == 3) // check for exact match
       count++;
   cottontail::addr t1 = cottontail::now();
   timestamp(2, t1 - t0);
@@ -77,9 +84,15 @@ void example2(std::shared_ptr<cottontail::Warren> warren, bool verbose) {
 // SELECT name FROM companies WHERE category_code CONTAINS "nanotech"
 void example3(std::shared_ptr<cottontail::Warren> warren, bool verbose) {
   cottontail::addr t0 = cottontail::now();
+
+  // Query:
+  //   names contained in (
+  //    objects containing (
+  //      (nanotech contained in (category codes comtained in companies)))
   std::string query = "(<< :name: (>> : (<< nanotech (<< :category_code: "
                       "Files/companies.json)))))";
   std::unique_ptr<cottontail::Hopper> hopper = warren->hopper_from_gcl(query);
+
   std::vector<std::string> results;
   cottontail::addr p, q;
   for (hopper->tau(cottontail::minfinity + 1, &p, &q);
@@ -98,24 +111,30 @@ void example3(std::shared_ptr<cottontail::Warren> warren, bool verbose) {
 // SELECT title, EXPLODE(authors) AS author FROM books
 void example4(std::shared_ptr<cottontail::Warren> warren, bool verbose) {
   cottontail::addr t0 = cottontail::now();
+
+  // Query: books
   std::unique_ptr<cottontail::Hopper> books =
       warren->hopper_from_gcl("(<< : Files/books.json)");
+
+  // Query: titles
   std::unique_ptr<cottontail::Hopper> title =
       warren->hopper_from_gcl(":title:");
+
   std::vector<std::unique_ptr<cottontail::Hopper>> authors;
   std::vector<std::pair<std::string, std::string>> results;
   cottontail::addr p, q;
   for (books->tau(cottontail::minfinity + 1, &p, &q); q < cottontail::maxfinity;
        books->tau(p + 1, &p, &q)) {
     cottontail::addr p_title, q_title;
-    title->tau(p, &p_title, &q_title);
+    title->tau(p, &p_title, &q_title); // title contained in this book
     if (q_title > q)
       continue;
     std::string the_title = warren->txt()->translate(p_title, q_title);
-    if (the_title == "\"\"")
+    if (the_title == "\"\"") // ignore empty titles
       continue;
+   // Explode author array
     for (size_t i = 0;; i++) {
-      if (authors.size() <= i) { // EXPLODE
+      if (authors.size() <= i) { // explode author array
         std::string feature = ":authors:[" + std::to_string(i) + "]:";
         authors.emplace_back(warren->hopper_from_gcl(feature));
       }
@@ -124,7 +143,7 @@ void example4(std::shared_ptr<cottontail::Warren> warren, bool verbose) {
       if (q_author > q)
         break;
       std::string the_author = warren->txt()->translate(p_author, q_author);
-      if (the_author == "\"\" ")
+      if (the_author == "\"\" ") // ingore empty authors
         continue;
       results.emplace_back(the_title, the_author);
     }
@@ -142,13 +161,16 @@ void example4(std::shared_ptr<cottontail::Warren> warren, bool verbose) {
 // SELECT COUNT(*) FROM trades
 void example5(std::shared_ptr<cottontail::Warren> warren, bool verbose) {
   cottontail::addr t0 = cottontail::now();
+
+  // Query: objects in trades table
   std::string query = "(<< : Files/trades.json)";
   std::unique_ptr<cottontail::Hopper> hopper = warren->hopper_from_gcl(query);
+
   size_t count = 0;
   cottontail::addr p, q;
   for (hopper->tau(cottontail::minfinity + 1, &p, &q);
        p < cottontail::maxfinity; hopper->tau(p + 1, &p, &q))
-    count++;
+    count++; // aggregate
   cottontail::addr t1 = cottontail::now();
   timestamp(5, t1 - t0);
   if (verbose)
@@ -161,9 +183,12 @@ void example5(std::shared_ptr<cottontail::Warren> warren, bool verbose) {
 // SELECT result, COUNT(result) FROM city_inspections GROUP BY result
 void example6(std::shared_ptr<cottontail::Warren> warren, bool verbose) {
   cottontail::addr t0 = cottontail::now();
+
+  // Query: results in city inspections
   std::string query = "(<< :result: Files/city_inspections.json)";
   std::unique_ptr<cottontail::Hopper> hopper = warren->hopper_from_gcl(query);
-  std::map<std::string, size_t> results;
+
+  std::map<std::string, size_t> results; // count of each result
   cottontail::addr p, q;
   for (hopper->tau(cottontail::minfinity + 1, &p, &q);
        p < cottontail::maxfinity; hopper->tau(p + 1, &p, &q)) {
@@ -197,8 +222,7 @@ void example7(std::shared_ptr<cottontail::Warren> warren, bool verbose) {
 }
 
 // Add consistent annotation for dates.
-// Not very robust thanks to struct tm.
-
+// Not very robust thanks to limitations of struct tm.
 void annotate_date(std::shared_ptr<cottontail::Warren> warren,
                    cottontail::addr p, cottontail::addr q,
                    const std::string &year, const std::string &month,
@@ -226,6 +250,9 @@ void annotate_date(std::shared_ptr<cottontail::Warren> warren,
   warren->annotator()->annotate(warren->featurizer()->featurize("day=" + day),
                                 p, q);
 }
+
+// For each table containing dates, we read from the table, convert to a
+// standard format, and write the annotations.
 
 std::map<std::string, std::string> months = {
     {"Jan", "01"}, {"Feb", "02"}, {"Mar", "03"}, {"Apr", "04"},
@@ -341,8 +368,11 @@ bool annotate_dates(std::shared_ptr<cottontail::Warren> warren,
 //     WHERE created >= '2008-01-01' AND created <= '2008-12-31'
 void example8(std::shared_ptr<cottontail::Warren> warren, bool verbose) {
   cottontail::addr t0 = cottontail::now();
+
+  // Query: titles contained in books written in 2008
   std::string query = "(<< :title: (>> Files/books.json year=2008))";
   std::unique_ptr<cottontail::Hopper> hopper = warren->hopper_from_gcl(query);
+
   std::vector<std::string> results;
   cottontail::addr p, q;
   for (hopper->tau(cottontail::minfinity + 1, &p, &q);
@@ -361,13 +391,16 @@ void example8(std::shared_ptr<cottontail::Warren> warren, bool verbose) {
 // SELECT COUNT(*) FROM * WHERE created = '2008-12-01'
 void example9(std::shared_ptr<cottontail::Warren> warren, bool verbose) {
   cottontail::addr t0 = cottontail::now();
+
+  // Query: objects containing year, month, and day annotations for 2008-21-01
   std::string query = "(>> : (^ year=2008 month=12 day=01))";
   std::unique_ptr<cottontail::Hopper> hopper = warren->hopper_from_gcl(query);
+
   size_t count = 0;
   cottontail::addr p, q;
   for (hopper->tau(cottontail::minfinity + 1, &p, &q);
        p < cottontail::maxfinity; hopper->tau(p + 1, &p, &q))
-    count++;
+    count++; // aggregate
   cottontail::addr t1 = cottontail::now();
   timestamp(9, t1 - t0);
   if (verbose)
@@ -411,7 +444,7 @@ int main(int argc, char **argv) {
     return 1;
   };
   ;
-  warren->start();
+  warren->start(); // read snapshot
   example1(warren, verbose);
   example2(warren, verbose);
   example3(warren, verbose);
@@ -423,10 +456,10 @@ int main(int argc, char **argv) {
     std::cerr << program_name << ": " << error << "\n";
     return 1;
   }
-  warren->end();
-  warren->start();
+  warren->end(); // release read snapshot
+  warren->start(); // new read snapshot; date annoations are now visible
   example8(warren, verbose);
   example9(warren, verbose);
-  warren->end();
+  warren->end(); // release read snapshot
   return 0;
 }

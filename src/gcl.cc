@@ -1,3 +1,24 @@
+// This file implements query processing for the mathematical framework defined
+// by the following publications.
+//
+// Charles L. A. Clarke.
+// An Algebra for Structured Text Search.
+// PhD thesis, University of Waterloo, 1996.
+// https://plg.uwaterloo.ca/~claclark/phd.pdf.
+//
+// Charles L. A. Clarke and Gordon V. Cormack.
+// Shortest-substring retrieval and ranking. ACM
+// Transactions on Information Systems, 18(1):44–78, 2000.
+//
+// Charles L. A. Clarke, Gordon V. Cormack, and Forbes J. Burkowski.
+// An algebra for structured text search and a framework for its implementation.
+// The Computer Journal, 38(1):43–56, 1995.
+//
+// Charles L. A. Clarke, Gordon V. Cormack, and Forbes J. Burkowski.
+// Schema-independent retrieval from hetrogeneous structured text.
+// In 4th Annual Symposium on Document Analysis and Information Retrieval,
+// pages 279–289, Las Vegas, Nevada, April 1995.
+
 #include "src/gcl.h"
 
 #include <algorithm>
