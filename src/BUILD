@@ -1,9 +1,10 @@
 cc_library(
     name = "cottontail",
-    srcs = glob(["*.cc"]) + ["@nlohmann//file"],  
+    srcs = glob(["*.cc"]),  
     hdrs = glob(["*.h"]),
+    deps = ["@nlohmann_json//:json"],
     copts = [
-      "'-std=c++14'",
+      "-std=c++14",
     ],
     linkopts = [
       "-lz",
