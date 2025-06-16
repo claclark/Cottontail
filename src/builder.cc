@@ -1,5 +1,6 @@
 #include "src/builder.h"
 
+#include <array>
 #include <cassert>
 #include <exception>
 #include <iostream>

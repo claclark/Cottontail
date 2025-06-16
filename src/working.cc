@@ -1,5 +1,6 @@
 #include "src/working.h"
 
+#include <array>
 #include <cassert>
 #include <cstring>
 #include <fstream>

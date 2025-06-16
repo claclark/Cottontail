@@ -7,6 +7,7 @@ cc_library(
     ],
     linkopts = [
       "-lz",
+      "-lpthread",
     ],
     visibility = [
       "//visibility:public",
