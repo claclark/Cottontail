@@ -37,6 +37,7 @@ private:
   std::string recipe_() final;
   std::shared_ptr<Txt> clone_(std::string *error) final;
   std::string translate_(addr p, addr q) final;
+  std::string raw_(addr p, addr q) final;
   addr tokens_() final;
   bool range_(addr *p, addr *q) final;
 };

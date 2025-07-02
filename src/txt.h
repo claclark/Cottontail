@@ -27,6 +27,7 @@ public:
     return clone_(error);
   }
   inline std::string translate(addr p, addr q) { return translate_(p, q); }
+  inline std::string raw(addr p, addr q) { return raw_(p, q); }
   inline addr tokens() { return tokens_(); }
   inline bool range(addr *p, addr *q) { return range_(p, q); };
 
@@ -44,6 +45,7 @@ private:
   virtual std::string recipe_() = 0;
   virtual std::shared_ptr<Txt> clone_(std::string *error);
   virtual std::string translate_(addr p, addr q) = 0;
+  virtual std::string raw_(addr p, addr q) { return translate(p, q); }
   virtual addr tokens_() = 0;
   virtual bool range_(addr *p, addr *q) {
     addr t = tokens();

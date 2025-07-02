@@ -1,0 +1,8 @@
+*~
+*.swp
+.DS_Store
+MODULE.bazel.lock
+/bazel-Cottontail
+/bazel-bin
+/bazel-out
+/bazel-testlogs

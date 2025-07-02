@@ -88,6 +88,10 @@ std::string JsonTxt::translate_(addr p, addr q) {
   return json_translate(txt_->translate(p, q));
 }
 
+std::string JsonTxt::raw_(addr p, addr q) {
+  return txt_->translate(p, q);
+}
+
 addr JsonTxt::tokens_() { return txt_->tokens(); }
 
 bool JsonTxt::range_(addr *p, addr *q) { return txt_->range(p, q); }
