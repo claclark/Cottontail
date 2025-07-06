@@ -23,9 +23,49 @@ TEST(JSON, Tokens) {
     EXPECT_EQ(t[i].length(), 3);
   const char *c = s.c_str();
   for (size_t i = 0; i < 10; i++)
-    EXPECT_TRUE(cottontail::json_internal_token(c + 3*i, 3));
+    EXPECT_TRUE(cottontail::json_internal_token(c + 3 * i, 3));
   EXPECT_FALSE(cottontail::json_internal_token(nullptr, 2));
   EXPECT_FALSE(cottontail::json_internal_token("the", 3));
+}
+
+TEST(JSON, Encode) {
+  EXPECT_EQ(cottontail::json_encode(""), cottontail::open_string_token + "" +
+                                             cottontail::close_string_token);
+  EXPECT_EQ(cottontail::json_encode("simple"),
+            cottontail::open_string_token + "simple" +
+                cottontail::close_string_token);
+  EXPECT_EQ(cottontail::json_encode("hello world"),
+            cottontail::open_string_token + "hello world" +
+                cottontail::close_string_token);
+  EXPECT_EQ(cottontail::json_encode("\""), cottontail::open_string_token +
+                                               "\\\"" +
+                                               cottontail::close_string_token);
+  EXPECT_EQ(cottontail::json_encode("\\"), cottontail::open_string_token +
+                                               "\\\\" +
+                                               cottontail::close_string_token);
+  EXPECT_EQ(cottontail::json_encode("/"), cottontail::open_string_token + "/" +
+                                              cottontail::close_string_token);
+  EXPECT_EQ(cottontail::json_encode("path/to/resource"),
+            cottontail::open_string_token + "path/to/resource" +
+                cottontail::close_string_token);
+  EXPECT_EQ(cottontail::json_encode("line\nbreak"),
+            cottontail::open_string_token + "line\\nbreak" +
+                cottontail::close_string_token);
+  EXPECT_EQ(cottontail::json_encode("\b\f\n\r\t"),
+            cottontail::open_string_token + "\\b\\f\\n\\r\\t" +
+                cottontail::close_string_token);
+  EXPECT_EQ(cottontail::json_encode("\x1F"),
+            cottontail::open_string_token + "\\u001f" +
+                cottontail::close_string_token);
+  EXPECT_EQ(cottontail::json_encode("\x01"),
+            cottontail::open_string_token + "\\u0001" +
+                cottontail::close_string_token);
+  EXPECT_EQ(cottontail::json_encode("emoji: ☺"),
+            cottontail::open_string_token + "emoji: ☺" +
+                cottontail::close_string_token);
+  EXPECT_EQ(cottontail::json_encode("mix\"/\\\b"),
+            cottontail::open_string_token + "mix\\\"/\\\\\\b" +
+                cottontail::close_string_token);
 }
 
 namespace {

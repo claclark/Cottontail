@@ -1,7 +1,9 @@
 #include "src/json.h"
 
 #include <cassert>
+#include <iomanip>
 #include <memory>
+#include <sstream>
 #include <string>
 
 #include "src/core.h"
@@ -251,5 +253,44 @@ std::string json_translate(const std::string &s) {
     }
   }
   return t;
+}
+
+std::string json_encode(const std::string &input) {
+  std::ostringstream o;
+  o << cottontail::open_string_token;
+  for (unsigned char c : input) {
+    switch (c) {
+    case '"':
+      o << "\\\"";
+      break;
+    case '\\':
+      o << "\\\\";
+      break;
+    case '\b':
+      o << "\\b";
+      break;
+    case '\f':
+      o << "\\f";
+      break;
+    case '\n':
+      o << "\\n";
+      break;
+    case '\r':
+      o << "\\r";
+      break;
+    case '\t':
+      o << "\\t";
+      break;
+    default:
+      if (c < 0x20) {
+        o << "\\u" << std::hex << std::setw(4) << std::setfill('0')
+          << static_cast<int>(c) << std::dec << std::setw(0);
+      } else {
+        o << c;
+      }
+    }
+  }
+  o << cottontail::close_string_token;
+  return o.str();
 }
 } // namespace cottontail
