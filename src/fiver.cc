@@ -123,7 +123,6 @@ private:
     if (text_->length() > 0 && text_->back() != '\n')
       *text_ += "\n";
     addr offset = text_->length();
-    ;
     *text_ += text;
     std::vector<Token> tokens = tokenizer_->tokenize(featurizer_, text);
     if (tokens.size() == 0) {
@@ -413,14 +412,14 @@ Fiver::merge(const std::vector<std::shared_ptr<Fiver>> &fivers,
     if (fiver->text_->length() > 0) {
       auto posting = fiver->index_->find(chunk_feature);
       if (posting != fiver->index_->end()) {
+        if (text->length() > 0 && text->back() != '\n')
+          *text += "\n";
         std::unique_ptr<Hopper> hopper = posting->second->hopper();
         addr p, q, v;
         for (hopper->tau(0, &p, &q, &v); p < maxfinity;
              hopper->tau(p + 1, &p, &q, &v))
           ann.emplace_back(chunk_feature, p, q, addr2fval(v + text->length()));
       }
-      if (text->length() > 0 && text->back() != '\n')
-        *text += "\n";
       *text += *(fiver->text_);
     }
   }
@@ -762,15 +761,15 @@ Fiver::unpickle(const std::string &filename, std::shared_ptr<Working> working,
   addr n;
   jar.read(reinterpret_cast<char *>(&n), sizeof(n));
   assert(!jar.fail());
-  n += fiver->text_compressor_->extra(n);
-  std::unique_ptr<char[]> uncompressed = std::unique_ptr<char[]>(new char[n]);
+  addr nx = n + fiver->text_compressor_->extra(n);
+  std::unique_ptr<char[]> uncompressed = std::unique_ptr<char[]>(new char[nx]);
   addr m;
   jar.read(reinterpret_cast<char *>(&m), sizeof(m));
   assert(!jar.fail());
   std::unique_ptr<char[]> compressed = std::unique_ptr<char[]>(new char[m]);
   jar.read(reinterpret_cast<char *>(compressed.get()), m);
-  fiver->text_compressor_->tang(compressed.get(), m, uncompressed.get(), n);
-  fiver->text_ = std::make_shared<std::string>(uncompressed.get());
+  fiver->text_compressor_->tang(compressed.get(), m, uncompressed.get(), nx);
+  fiver->text_ = std::make_shared<std::string>(uncompressed.get(), n);
   std::shared_ptr<SimplePostingFactory> factory = SimplePostingFactory::make(
       fiver->posting_compressor_, fiver->fvalue_compressor_);
   std::make_shared<std::map<addr, std::shared_ptr<SimplePosting>>>();

@@ -20,7 +20,7 @@ constexpr int8_t ACTION_UNIGRAM = 3;
 constexpr int8_t ACTION_BIGRAM = 4;
 
 std::vector<std::string> split_record(const std::string &line,
-                               const std::string &separator) {
+                                      const std::string &separator) {
   size_t start = 0;
   size_t end = line.find('#');
   if (end == std::string::npos)
@@ -545,7 +545,7 @@ const char *Utf8Tokenizer::skip_(const char *buffer, size_t length, addr n) {
         state = ACTION_NONTOKEN;
         --n;
         if (n <= 0)
-          return (const char *) s;
+          return (const char *)s;
         --n;
       }
       break;
