@@ -22,14 +22,14 @@ std::shared_ptr<Stats> IdfStats::make(const std::string &recipe,
   std::unique_ptr<Hopper> hopper =
       warren->idx()->hopper(featurizer.featurize("avgl"));
   if (hopper == nullptr) {
-    safe_set(error) = "No global statistics in warren";
+    safe_error(error) = "No global statistics in warren";
     return nullptr;
   }
   fval average_length;
   addr p, q;
   hopper->tau(minfinity + 1, &p, &q, &average_length);
   if (p == maxfinity) {
-    safe_set(error) = "No global statistics in warren";
+    safe_error(error) = "No global statistics in warren";
     return nullptr;
   }
   stats->average_length_ = average_length;
@@ -60,7 +60,7 @@ std::shared_ptr<Stats> IdfStats::make(const std::string &recipe,
 
 bool IdfStats::check(const std::string &recipe, std::string *error) {
   if (recipe != "") {
-    safe_set(error) = "Bad recipe for IdfStats: " + recipe;
+    safe_error(error) = "Bad recipe for IdfStats: " + recipe;
     return false;
   } else {
     return true;

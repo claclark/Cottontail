@@ -216,7 +216,7 @@ std::shared_ptr<Tokenizer> AsciiTokenizer::make(const std::string &recipe,
   } else if (recipe == "xml") {
     return std::make_shared<AsciiTokenizer>(true);
   } else {
-    safe_set(error) = "Can't make AsciiTokenizer from recipe: " + recipe;
+    safe_error(error) = "Can't make AsciiTokenizer from recipe: " + recipe;
     return nullptr;
   }
 }
@@ -225,7 +225,7 @@ bool AsciiTokenizer::check(const std::string &recipe, std::string *error) {
   if (recipe == "" || recipe == "xml" || recipe == "noxml") {
     return true;
   } else {
-    safe_set(error) = "Bad AsciiTokenizer recipe: " + recipe;
+    safe_error(error) = "Bad AsciiTokenizer recipe: " + recipe;
     return false;
   }
 }

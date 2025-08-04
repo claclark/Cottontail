@@ -19,7 +19,7 @@ bool duplicates_TREC_CAst(const std::string &location,
                           std::string *error) {
   std::ifstream f(location, std::istream::in);
   if (f.fail()) {
-    safe_set(error) = "Cannot open: " + location;
+    safe_error(error) = "Cannot open: " + location;
     return false;
   }
   std::string line;
@@ -29,7 +29,7 @@ bool duplicates_TREC_CAst(const std::string &location,
     for (s = line.c_str(); isspace(*s); s++)
       ;
     if (*s == ':' || *s == ',' || *s == '\0') {
-      safe_set(error) = "Format error in: " + location;
+      safe_error(error) = "Format error in: " + location;
       return false;
     }
     for (e = s + 1; !isspace(*e) && *e != ':' && *e != ',' && *e != '\0'; e++)
@@ -38,7 +38,7 @@ bool duplicates_TREC_CAst(const std::string &location,
     for (; isspace(*e); e++)
       ;
     if (*e != ':') {
-      safe_set(error) = "Format error in: " + location;
+      safe_error(error) = "Format error in: " + location;
       return false;
     }
     for (;;) {
@@ -47,7 +47,7 @@ bool duplicates_TREC_CAst(const std::string &location,
       if (*s == '\0')
         break;
       if (*s == ':' || *s == ',') {
-        safe_set(error) = "Format error in: " + location;
+        safe_error(error) = "Format error in: " + location;
         return false;
       }
       for (e = s + 1; !isspace(*e) && *e != ':' && *e != ',' && *e != '\0'; e++)
@@ -59,7 +59,7 @@ bool duplicates_TREC_CAst(const std::string &location,
       if (*e == '\0')
         break;
       if (*e != ',') {
-        safe_set(error) = "Format error in: " + location;
+        safe_error(error) = "Format error in: " + location;
         return false;
       }
     }
@@ -72,7 +72,7 @@ bool collection_TREC_WaPo2(const std::string &location,
                            std::string *error) {
   std::ifstream f(location, std::istream::in);
   if (f.fail()) {
-    safe_set(error) = "Cannot open: " + location;
+    safe_error(error) = "Cannot open: " + location;
     return false;
   }
   std::string line;
@@ -81,7 +81,7 @@ bool collection_TREC_WaPo2(const std::string &location,
     try {
       j = json::parse(line);
     } catch (json::parse_error &e) {
-      safe_set(error) = "A line in \"" + location + "\" is not json";
+      safe_error(error) = "A line in \"" + location + "\" is not json";
       return false;
     }
     try {
@@ -167,7 +167,7 @@ bool collection_TREC_WaPo2(const std::string &location,
                                    error))
         return false;
     } catch (json::exception &e) {
-      safe_set(error) = "TRECWaPo2 format error";
+      safe_error(error) = "TRECWaPo2 format error";
       return false;
     }
   }
@@ -179,7 +179,7 @@ bool collection_TREC_MARCO(const std::string &location,
                            std::string *error) {
   std::ifstream f(location, std::istream::in);
   if (f.fail()) {
-    safe_set(error) = "Cannot open: " + location;
+    safe_error(error) = "Cannot open: " + location;
     return false;
   }
   std::string line;
@@ -421,7 +421,7 @@ bool collection_TREC_CAR(const std::string &location,
                          std::string *error) {
   std::ifstream f(location, std::ios::binary);
   if (f.fail()) {
-    safe_set(error) = "Cannot open: " + location;
+    safe_error(error) = "Cannot open: " + location;
     return false;
   }
   CBORBuild cbor(builder);
@@ -429,7 +429,7 @@ bool collection_TREC_CAR(const std::string &location,
   while (from_CBOR(&f, &cbor, &have_break, 0, 0))
     if (have_break)
       return true;
-  safe_set(error) = "CBOR parse failure in: " + location;
+  safe_error(error) = "CBOR parse failure in: " + location;
   return true;
 }
 
@@ -438,7 +438,7 @@ bool collection_c4(const std::string &location,
                    std::string *error) {
   std::shared_ptr<std::string> everything = cottontail::inhale(location, error);
   if (everything == nullptr) {
-    safe_set(error) = "Cannot open: " + location;
+    safe_error(error) = "Cannot open: " + location;
     return false;
   }
   std::string::size_type pos;
@@ -450,16 +450,16 @@ bool collection_c4(const std::string &location,
     try {
       j = json::parse(everything->substr(prev, pos - prev));
     } catch (json::parse_error &e) {
-      safe_set(error) = "Non-json in: " + location;
+      safe_error(error) = "Non-json in: " + location;
       return false;
     }
     try {
       if (j["text"].is_null()) {
-        safe_set(error) = "Missing text field in: " + location;
+        safe_error(error) = "Missing text field in: " + location;
         return false;
       }
       if (j["url"].is_null()) {
-        safe_set(error) = "Missing url field in: " + location;
+        safe_error(error) = "Missing url field in: " + location;
         return false;
       }
       std::string text = j["text"];
@@ -477,7 +477,7 @@ bool collection_c4(const std::string &location,
       if (!builder->add_annotation(":", p_text, q_url, 0.0, error))
         return false;
     } catch (json::exception &e) {
-      safe_set(error) = "C4 format error";
+      safe_error(error) = "C4 format error";
       return false;
     }
   }
@@ -489,7 +489,7 @@ bool collection_MSMARCO_V2(const std::string &location,
                            std::string *error) {
   std::shared_ptr<std::string> everything = cottontail::inhale(location, error);
   if (everything == nullptr) {
-    safe_set(error) = "Cannot open: " + location;
+    safe_error(error) = "Cannot open: " + location;
     return false;
   }
   std::string::size_type pos;
@@ -501,7 +501,7 @@ bool collection_MSMARCO_V2(const std::string &location,
     try {
       j = json::parse(everything->substr(prev, pos - prev));
     } catch (json::parse_error &e) {
-      safe_set(error) = "Non-json in: " + location;
+      safe_error(error) = "Non-json in: " + location;
       return false;
     }
     std::string pid = j["pid"];
@@ -525,7 +525,7 @@ bool collection_CAsT2022_preprocessed(
     std::string *error) {
   std::shared_ptr<std::string> everything = cottontail::inhale(location, error);
   if (everything == nullptr) {
-    safe_set(error) = "Cannot open: " + location;
+    safe_error(error) = "Cannot open: " + location;
     return false;
   }
   std::string::size_type pos;
@@ -537,7 +537,7 @@ bool collection_CAsT2022_preprocessed(
     try {
       j = json::parse(everything->substr(prev, pos - prev));
     } catch (json::parse_error &e) {
-      safe_set(error) = "Non-json in: " + location;
+      safe_error(error) = "Non-json in: " + location;
       return false;
     }
     std::string id = j["id"];

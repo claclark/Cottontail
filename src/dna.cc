@@ -19,13 +19,13 @@ bool read_dna(std::shared_ptr<Working> working, std::string *dna,
   std::string dna_filename = working->make_name(DNA_NAME);
   std::fstream in(dna_filename, std::ios::in);
   if (in.fail()) {
-    safe_set(error) = "Can't read configuration from: " + dna_filename;
+    safe_error(error) = "Can't read configuration from: " + dna_filename;
     return false;
   }
   std::string line;
   std::getline(in, line);
   if (line != HEADER) {
-    safe_set(error) = "Invalid configuration: " + dna_filename;
+    safe_error(error) = "Invalid configuration: " + dna_filename;
     return false;
   }
   *dna = "";
@@ -40,7 +40,7 @@ bool write_dna(std::shared_ptr<Working> working, const std::string &dna,
   std::string temp_filename = working->make_temp("dna");
   std::fstream out(temp_filename, std::ios::out);
   if (out.fail()) {
-    safe_set(error) = "Can't write configuration to: " + temp_filename;
+    safe_error(error) = "Can't write configuration to: " + temp_filename;
     return false;
   }
   out << HEADER << "\n";
@@ -103,30 +103,30 @@ bool name_and_recipe(const std::string &dna, const std::string &key,
                      std::string *recipe) {
   std::map<std::string, std::string> parameters;
   if (!cook(dna, &parameters)) {
-    safe_set(error) = "Bad parameters";
+    safe_error(error) = "Bad parameters";
     return false;
   }
   std::map<std::string, std::string>::iterator v = parameters.find(key);
   if (v == parameters.end()) {
-    safe_set(error) = "No " + key + " found";
+    safe_error(error) = "No " + key + " found";
     return false;
   }
   std::map<std::string, std::string> k_parameters;
   if (!cook(v->second, &k_parameters)) {
-    safe_set(error) = "Bad " + key + " parameters";
+    safe_error(error) = "Bad " + key + " parameters";
     return false;
   }
   std::map<std::string, std::string>::iterator k_name =
       k_parameters.find("name");
   if (k_name == k_parameters.end()) {
-    safe_set(error) = "No " + key + " name found";
+    safe_error(error) = "No " + key + " name found";
     return false;
   }
   safe_set(name) = k_name->second;
   std::map<std::string, std::string>::iterator k_recipe =
       k_parameters.find("recipe");
   if (k_recipe == k_parameters.end()) {
-    safe_set(error) = "No " + key + " recipe found";
+    safe_error(error) = "No " + key + " recipe found";
     return false;
   }
   safe_set(recipe) = k_recipe->second;

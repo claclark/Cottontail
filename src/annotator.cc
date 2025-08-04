@@ -25,7 +25,7 @@ std::shared_ptr<Annotator> Annotator::make(const std::string &name,
     if (annotator != nullptr)
       annotator->name_ = "simple";
   } else {
-    safe_set(error) = "No Annotator named: " + name;
+    safe_error(error) = "No Annotator named: " + name;
   }
   return annotator;
 }
@@ -37,7 +37,7 @@ bool Annotator::check(const std::string &name, const std::string &recipe,
   } else if (name == "simple") {
     return SimpleAnnotator::check(recipe, error);
   } else {
-    safe_set(error) = "No Annotator named: " + name;
+    safe_error(error) = "No Annotator named: " + name;
     return false;
   }
 }
@@ -50,7 +50,7 @@ bool Annotator::recover(const std::string &name, const std::string &recipe,
   } else if (name == "simple") {
     return SimpleAnnotator::recover(recipe, commit, working, error);
   } else {
-    safe_set(error) = "No Annotator named: " + name;
+    safe_error(error) = "No Annotator named: " + name;
     return false;
   }
 }
@@ -59,7 +59,7 @@ bool Annotator::annotate_(const std::string &annotations_filename,
                           std::string *error) {
   std::fstream annf(annotations_filename, std::ios::binary | std::ios::in);
   if (annf.fail()) {
-    safe_set(error) =
+    safe_error(error) =
         "Annotator can't access annotations in: " + annotations_filename;
     return false;
   }
@@ -75,7 +75,7 @@ bool Annotator::annotate_(const std::string &annotations_filename,
 }
 
 bool Annotator::erase_(addr p, addr q, std::string *error) {
-  safe_set(error) = "Annotator " + name() + "can't erase content";
+  safe_error(error) = "Annotator " + name() + " can't erase content";
   return false;
 }
 

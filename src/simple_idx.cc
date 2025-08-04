@@ -41,14 +41,15 @@ bool interpret_simple_idx_recipe(const std::string &recipe,
     if (item != parameters.end()) {
       *fvalue_compressor_name = item->second;
     } else {
-      safe_set(error) = "interpret_simple_idx_recipe missing fvalue_compressor";
+      safe_error(error) =
+          "interpret_simple_idx_recipe missing fvalue_compressor";
       return false;
     }
     item = parameters.find("fvalue_compressor_recipe");
     if (item != parameters.end()) {
       *fvalue_compressor_recipe = item->second;
     } else {
-      safe_set(error) =
+      safe_error(error) =
           "interpret_simple_idx_recipe missing fvalue_compressor_recipe";
       return false;
     }
@@ -56,7 +57,7 @@ bool interpret_simple_idx_recipe(const std::string &recipe,
     if (item != parameters.end()) {
       *posting_compressor_name = item->second;
     } else {
-      safe_set(error) =
+      safe_error(error) =
           "interpret_simple_idx_recipe missing posting_compressor";
       return false;
     }
@@ -64,7 +65,7 @@ bool interpret_simple_idx_recipe(const std::string &recipe,
     if (item != parameters.end()) {
       *posting_compressor_recipe = item->second;
     } else {
-      safe_set(error) =
+      safe_error(error) =
           "interpret_simple_idx_recipe missing posting_compressor_recipe";
       return false;
     }
@@ -74,7 +75,7 @@ bool interpret_simple_idx_recipe(const std::string &recipe,
         try {
           *add_file_size = std::stoi(item->second);
         } catch (const std::invalid_argument &e) {
-          safe_set(error) =
+          safe_error(error) =
               "interpret_simple_idx_recipe got invalid add_file_size";
           return false;
         }
@@ -101,7 +102,7 @@ std::shared_ptr<Idx> SimpleIdx::make(const std::string &recipe,
     return nullptr;
 
   if (working == nullptr) {
-    safe_set(error) = "SimpleIdx requires a working directory (got nullptr)";
+    safe_error(error) = "SimpleIdx requires a working directory (got nullptr)";
     return nullptr;
   }
   std::shared_ptr<SimpleIdx> idx = std::shared_ptr<SimpleIdx>(new SimpleIdx());
@@ -134,13 +135,13 @@ std::shared_ptr<Idx> SimpleIdx::make(const std::string &recipe,
     if (have_new_pst) {
       if (have_new_idx) {
         if (std::rename(new_idx_filename.c_str(), idx->idx_filename_.c_str())) {
-          safe_set(error) =
+          safe_error(error) =
               "SimpleIdx can't rename idx update to: " + idx->idx_filename_;
           return nullptr;
         }
       }
       if (std::rename(new_pst_filename.c_str(), idx->pst_filename_.c_str())) {
-        safe_set(error) =
+        safe_error(error) =
             "SimpleIdx can't rename pst update to: " + idx->pst_filename_;
         return nullptr;
       }
@@ -150,14 +151,14 @@ std::shared_ptr<Idx> SimpleIdx::make(const std::string &recipe,
   }
   std::fstream idxf(idx->idx_filename_, std::ios::binary | std::ios::in);
   if (idxf.fail()) {
-    safe_set(error) = "SimpleIdx can't access: " + idx->idx_filename_;
+    safe_error(error) = "SimpleIdx can't access: " + idx->idx_filename_;
     return nullptr;
   }
   idxf.seekg(0, idxf.end);
   addr idxf_end = idxf.tellg();
   idxf.seekg(0, idxf.beg);
   if (idxf_end % sizeof(IdxRecord) != 0) {
-    safe_set(error) = "SimpleIdx sizing error in: " + idx->idx_filename_;
+    safe_error(error) = "SimpleIdx sizing error in: " + idx->idx_filename_;
     return nullptr;
   }
   size_t pst_map_size = idxf_end / sizeof(IdxRecord);
@@ -167,7 +168,7 @@ std::shared_ptr<Idx> SimpleIdx::make(const std::string &recipe,
        idxf.read(reinterpret_cast<char *>(&idxr), sizeof(idxr)))
     idx->pst_map_.push_back(idxr);
   if (pst_map_size != idx->pst_map_.size()) {
-    safe_set(error) = "SimpleIdx could not load: " + idx->idx_filename_;
+    safe_error(error) = "SimpleIdx could not load: " + idx->idx_filename_;
     return nullptr;
   }
   idx->pst_ = working->reader(PST_NAME, error);

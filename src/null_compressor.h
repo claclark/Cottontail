@@ -24,7 +24,7 @@ public:
     if (recipe == "") {
       return true;
     } else {
-      safe_set(error) = "Bad NullCompressor recipe";
+      safe_error(error) = "Bad NullCompressor recipe";
       return false;
     }
   }

@@ -21,7 +21,8 @@ public:
     lock_.lock();
     if (started_) {
       lock_.unlock();
-      safe_set(error) = "Commitable does not support concurrent transactions.";
+      safe_error(error) =
+          "Commitable does not support concurrent transactions.";
       return false;
     }
     started_ = transaction_(error);
@@ -42,7 +43,7 @@ public:
     }
     lock_.unlock();
     if (!result)
-      safe_set(error) = "Transaction cannot be commited.";
+      safe_error(error) = "Transaction cannot be commited.";
     return result;
   }
   inline void commit() {
@@ -59,9 +60,7 @@ public:
     started_ = readied_ = vote_ = false;
     lock_.unlock();
   }
-  inline bool transacting() {
-    return started_;
-  }
+  inline bool transacting() { return started_; }
 
 protected:
   Committable(){};
@@ -72,7 +71,7 @@ private:
   bool readied_ = false;
   bool vote_ = false;
   virtual bool transaction_(std::string *error = nullptr) {
-    safe_set(error) = "Committable does not support transactions";
+    safe_error(error) = "Committable does not support transactions";
     return false;
   };
   virtual bool ready_() { return false; };

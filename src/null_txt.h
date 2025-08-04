@@ -17,7 +17,7 @@ public:
     if (recipe == "") {
       return std::shared_ptr<Txt>(new NullTxt());
     } else {
-      safe_set(error) = "NullTxt can't make recipe: " + recipe;
+      safe_error(error) = "NullTxt can't make recipe: " + recipe;
       return nullptr;
     }
   };
@@ -25,7 +25,7 @@ public:
     if (recipe == "") {
       return true;
     } else {
-      safe_set(error) = "NullTxt can't make recipe: " + recipe;
+      safe_error(error) = "NullTxt can't make recipe: " + recipe;
       return false;
     }
   };

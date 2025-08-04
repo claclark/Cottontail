@@ -77,7 +77,7 @@ std::shared_ptr<std::string> inhale(const std::string &filename,
                                     std::string *error) {
   FILE *fp = fopen(filename.c_str(), "r");
   if (!fp) {
-    safe_set(error) = "Could not access: " + filename;
+    safe_error(error) = "Could not access: " + filename;
     return nullptr;
   }
   fclose(fp);

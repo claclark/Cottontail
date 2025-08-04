@@ -39,7 +39,7 @@ public:
   make(std::shared_ptr<std::vector<Annotation>> annotations,
        std::string *error = nullptr) {
     if (annotations == nullptr) {
-      safe_set(error) = "FiverAnnotator got null annotation vector";
+      safe_error(error) = "FiverAnnotator got null annotation vector";
       return nullptr;
     }
     std::shared_ptr<FiverAnnotator> annotator =
@@ -68,7 +68,7 @@ private:
   }
   bool transaction_(std::string *error) final {
     if (annotations_ == nullptr) {
-      safe_set(error) =
+      safe_error(error) =
           "FiverAnnotator does not support more than one transaction";
       return false;
     }
@@ -89,7 +89,7 @@ public:
                                         std::string *error = nullptr) {
     if (text == nullptr || featurizer == nullptr || tokenizer == nullptr ||
         annotator == nullptr) {
-      safe_set(error) = "FiverAnnotator got null pointer";
+      safe_error(error) = "FiverAnnotator got null pointer";
       return nullptr;
     }
     std::shared_ptr<FiverAppender> appender =
@@ -152,7 +152,7 @@ private:
   }
   bool transaction_(std::string *error) final {
     if (text_ == nullptr) {
-      safe_set(error) =
+      safe_error(error) =
           "FiverAppender does not support more than one transaction";
       return false;
     }
@@ -196,7 +196,7 @@ public:
   make(std::shared_ptr<std::map<addr, std::shared_ptr<SimplePosting>>> index,
        std::string *error = nullptr) {
     if (index == nullptr) {
-      safe_set(error) = "FiverIdx got null index";
+      safe_error(error) = "FiverIdx got null index";
       return nullptr;
     }
     std::shared_ptr<FiverIdx> idx = std::shared_ptr<FiverIdx>(new FiverIdx());
@@ -239,11 +239,11 @@ public:
                                    std::shared_ptr<std::string> text,
                                    std::string *error = nullptr) {
     if (idx == nullptr) {
-      safe_set(error) = "FiverIdx got null idx";
+      safe_error(error) = "FiverIdx got null idx";
       return nullptr;
     }
     if (text == nullptr) {
-      safe_set(error) = "FiverIdx got null text pointer";
+      safe_error(error) = "FiverIdx got null text pointer";
       return nullptr;
     }
     std::shared_ptr<FiverTxt> txt = std::shared_ptr<FiverTxt>(new FiverTxt());
@@ -338,11 +338,11 @@ Fiver::make(std::shared_ptr<Working> working,
             std::shared_ptr<Compressor> fvalue_compressor,
             std::shared_ptr<Compressor> text_compressor) {
   if (featurizer == nullptr) {
-    safe_set(error) = "Fiver needs a featurizer (got nullptr)";
+    safe_error(error) = "Fiver needs a featurizer (got nullptr)";
     return nullptr;
   }
   if (tokenizer == nullptr) {
-    safe_set(error) = "Fiver needs a tokenizer (got nullptr)";
+    safe_error(error) = "Fiver needs a tokenizer (got nullptr)";
     return nullptr;
   }
   std::shared_ptr<std::string> text = std::make_shared<std::string>();
@@ -400,7 +400,7 @@ Fiver::merge(const std::vector<std::shared_ptr<Fiver>> &fivers,
              std::shared_ptr<Compressor> fvalue_compressor,
              std::shared_ptr<Compressor> text_compressor) {
   if (fivers.size() == 0) {
-    safe_set(error) = "Fiver::merge got empty vector";
+    safe_error(error) = "Fiver::merge got empty vector";
     return nullptr;
   }
   if (fivers.size() == 1)
@@ -559,7 +559,7 @@ std::string Fiver::recipe_() {
 
 bool Fiver::transaction_(std::string *error = nullptr) {
   if (built_) {
-    safe_set(error) = "Fiver does not support more than one transaction";
+    safe_error(error) = "Fiver does not support more than one transaction";
     return false;
   }
   if (!appender_->transaction(error))
@@ -654,7 +654,7 @@ bool Fiver::pickle(std::string *error) {
       return false;
     std::string jarname = working()->make_name(name() + "." + recipe());
     if (link(tempname.c_str(), jarname.c_str()) != 0) {
-      safe_set(error) = "Fiver can't link pickle jar";
+      safe_error(error) = "Fiver can't link pickle jar";
       return false;
     }
     std::remove(tempname.c_str());
@@ -664,17 +664,17 @@ bool Fiver::pickle(std::string *error) {
 
 bool Fiver::pickle(const std::string &filename, std::string *error) {
   if (idx_ == nullptr || txt_ == nullptr) {
-    safe_set(error) = "Fiver must have Idx and Txt before pickling";
+    safe_error(error) = "Fiver must have Idx and Txt before pickling";
     return false;
   }
   if (text_compressor_->destructive()) {
-    safe_set(error) = "Fiver's text compressor can't be destructive";
+    safe_error(error) = "Fiver's text compressor can't be destructive";
     return false;
   }
   std::fstream jar;
   jar.open(filename, std::ios::binary | std::ios::out);
   if (jar.fail()) {
-    safe_set(error) = "Fiver can't create pickle jar: " + filename;
+    safe_error(error) = "Fiver can't create pickle jar: " + filename;
     return false;
   }
   jar.write(reinterpret_cast<char *>(&sequence_start_),
@@ -705,11 +705,11 @@ Fiver::unpickle(const std::string &filename, std::shared_ptr<Working> working,
                 std::shared_ptr<Compressor> fvalue_compressor,
                 std::shared_ptr<Compressor> text_compressor) {
   if (featurizer == nullptr) {
-    safe_set(error) = "Fiver needs a featurizer (got nullptr)";
+    safe_error(error) = "Fiver needs a featurizer (got nullptr)";
     return nullptr;
   }
   if (tokenizer == nullptr) {
-    safe_set(error) = "Fiver needs a tokenizer (got nullptr)";
+    safe_error(error) = "Fiver needs a tokenizer (got nullptr)";
     return nullptr;
   }
   std::string jarname;
@@ -725,7 +725,7 @@ Fiver::unpickle(const std::string &filename, std::shared_ptr<Working> working,
       jar.open(jarname, std::ios::binary | std::ios::in);
     }
     if (jar.fail()) {
-      safe_set(error) = "Fiver can't open pickle jar: " + jarname;
+      safe_error(error) = "Fiver can't open pickle jar: " + jarname;
       return nullptr;
     }
   }

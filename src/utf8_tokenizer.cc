@@ -236,12 +236,12 @@ bool utf8_tables(const std::string &unicode_filename,
                  std::string *error) {
   std::ifstream unicodef(unicode_filename);
   if (unicodef.fail()) {
-    safe_set(error) = "can't open file: " + unicode_filename;
+    safe_error(error) = "Can't open file: " + unicode_filename;
     return false;
   }
   std::ifstream foldingf(folding_filename);
   if (foldingf.fail()) {
-    safe_set(error) = "can't open file: " + folding_filename;
+    safe_error(error) = "Can't open file: " + folding_filename;
     return false;
   }
   std::vector<int8_t> actions;
@@ -256,7 +256,7 @@ bool utf8_tables(const std::string &unicode_filename,
     if (fields.size() == 0)
       continue;
     if (fields.size() < 3) {
-      safe_set(error) = "format error:" + unicode_filename + ": " + line;
+      safe_error(error) = "Format error:" + unicode_filename + ": " + line;
       return false;
     }
     uint32_t codepoint = dehex(fields[0]);
@@ -287,7 +287,7 @@ bool utf8_tables(const std::string &unicode_filename,
     if (fields.size() == 0)
       continue;
     if (fields.size() < 3) {
-      safe_set(error) = "format error:" + folding_filename + ": " + line;
+      safe_error(error) = "Format error:" + folding_filename + ": " + line;
       return false;
     }
     uint32_t source = dehex(fields[0]);
@@ -363,7 +363,7 @@ std::shared_ptr<Tokenizer> Utf8Tokenizer::make(const std::string &recipe,
         std::shared_ptr<Utf8Tokenizer>(new Utf8Tokenizer());
     return tokenizer;
   } else {
-    safe_set(error) = "Can't make Utf8Tokenizer from recipe: " + recipe;
+    safe_error(error) = "Can't make Utf8Tokenizer from recipe: " + recipe;
     return nullptr;
   }
 }
@@ -372,7 +372,7 @@ bool Utf8Tokenizer::check(const std::string &recipe, std::string *error) {
   if (recipe == "") {
     return true;
   } else {
-    safe_set(error) = "Bad Utf8Tokenizer recipe: " + recipe;
+    safe_error(error) = "Bad Utf8Tokenizer recipe: " + recipe;
     return false;
   }
 }

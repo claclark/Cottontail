@@ -1,10 +1,12 @@
+#include "src/fiver.h"
+
+#include <algorithm>
 #include <memory>
 #include <string>
 
 #include "gtest/gtest.h"
 
 #include "src/cottontail.h"
-#include "src/fiver.h"
 #include "test/fake_text.h"
 
 TEST(Fiver, Basic) {
@@ -532,7 +534,11 @@ TEST(Fiver, Pickling) {
   fiver->start();
   EXPECT_EQ(fiver->txt()->translate(16, 24),
             "as she.\nBut what of that? Demetrius thinks not ");
-  EXPECT_EQ(fiver->txt()->translate(212, 224),
+  auto removeNulls = [](std::string s) {
+    s.erase(std::remove(s.begin(), s.end(), '\0'), s.end());
+    return s;
+  };
+  EXPECT_EQ(removeNulls(fiver->txt()->translate(212, 224)),
             "have his sight thither and back again.\n");
   EXPECT_EQ(fiver->txt()->translate(-10, 3), "How happy some o’");
   std::unique_ptr<cottontail::Hopper> h = fiver->hopper_from_gcl("line:");

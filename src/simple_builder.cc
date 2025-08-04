@@ -51,17 +51,17 @@ bool merge_records(const std::string &in0_filename,
                    const std::string &out_filename, std::string *error) {
   std::fstream in0(in0_filename, std::ios::binary | std::ios::in);
   if (in0.fail()) {
-    safe_set(error) = "In merge_records, can't access: " + in0_filename;
+    safe_error(error) = "In merge_records, can't access: " + in0_filename;
     return false;
   }
   std::fstream in1(in1_filename, std::ios::binary | std::ios::in);
   if (in1.fail()) {
-    safe_set(error) = "In merge_records, can't access: " + in1_filename;
+    safe_error(error) = "In merge_records, can't access: " + in1_filename;
     return false;
   }
   std::fstream out(out_filename, std::ios::binary | std::ios::out);
   if (out.fail()) {
-    safe_set(error) = "In merge_records, can't create: " + out_filename;
+    safe_error(error) = "In merge_records, can't create: " + out_filename;
     return false;
   }
   T t0, t1;
@@ -85,7 +85,7 @@ bool merge_records(const std::string &in0_filename,
     in1.read(reinterpret_cast<char *>(&t1), sizeof(t1));
   }
   if (out.fail()) {
-    safe_set(error) = "In merge_records, write failure to: " + out_filename;
+    safe_error(error) = "In merge_records, write failure to: " + out_filename;
     return false;
   }
   return true;
@@ -98,7 +98,7 @@ bool sort_records(std::shared_ptr<Working> working,
   size_t LOTS = 64 * 1024 * 1024;
   std::fstream in(in_filename, std::ios::binary | std::ios::in);
   if (in.fail()) {
-    safe_set(error) = "In sort_records, can't access: " + in_filename;
+    safe_error(error) = "In sort_records, can't access: " + in_filename;
     return false;
   }
   T t;
@@ -112,14 +112,15 @@ bool sort_records(std::shared_ptr<Working> working,
       std::string temp_filename = working->make_temp();
       std::fstream tout(temp_filename, std::ios::binary | std::ios::out);
       if (tout.fail()) {
-        safe_set(error) =
+        safe_error(error) =
             "In sort_records, can't create working file: " + temp_filename;
         return false;
       }
       for (auto &tt : ts)
         tout.write(reinterpret_cast<char *>(&tt), sizeof(tt));
       if (tout.fail()) {
-        safe_set(error) = "In sort_records, write failure to: " + temp_filename;
+        safe_error(error) =
+            "In sort_records, write failure to: " + temp_filename;
         return false;
       }
       tout.close();
@@ -134,14 +135,14 @@ bool sort_records(std::shared_ptr<Working> working,
     std::string temp_filename = working->make_temp();
     std::fstream tout(temp_filename, std::ios::binary | std::ios::out);
     if (tout.fail()) {
-      safe_set(error) =
+      safe_error(error) =
           "In sort_records, can't create working file: " + temp_filename;
       return false;
     }
     for (auto &tt : ts)
       tout.write(reinterpret_cast<char *>(&tt), sizeof(tt));
     if (tout.fail()) {
-      safe_set(error) = "In sort_records, write failure to: " + temp_filename;
+      safe_error(error) = "In sort_records, write failure to: " + temp_filename;
       return false;
     }
     tout.close();
@@ -175,7 +176,7 @@ bool sort_records(std::shared_ptr<Working> working,
 bool check_annotations(const std::string &filename, std::string *error) {
   std::fstream in(filename, std::ios::binary | std::ios::in);
   if (in.fail()) {
-    safe_set(error) = "In check_annotations, can't access: " + filename;
+    safe_error(error) = "In check_annotations, can't access: " + filename;
     return false;
   }
   Annotation previous, current;
@@ -183,7 +184,7 @@ bool check_annotations(const std::string &filename, std::string *error) {
   if (in.fail())
     return true;
   if (!(previous.p <= previous.q)) {
-    safe_set(error) =
+    safe_error(error) =
         "In check_annotations, GCL invariant failure in: " + filename;
     return false;
   }
@@ -193,7 +194,7 @@ bool check_annotations(const std::string &filename, std::string *error) {
           (previous.feature < current.feature ||
            (previous.feature == current.feature && previous.p < current.p &&
             previous.q < current.q)))) {
-      safe_set(error) =
+      safe_error(error) =
           "In check_annotations, GCL invariant failure in: " + filename;
       return false;
     }
@@ -271,7 +272,7 @@ bool SimpleBuilder::check(const std::string &recipe, std::string *error) {
   if (!name_and_recipe(dna, idx_key, error, &idx_name, &idx_recipe))
     return false;
   if (idx_name != "simple") {
-    safe_set(error) = "SimpleBuilder can't build idx: " + idx_name;
+    safe_error(error) = "SimpleBuilder can't build idx: " + idx_name;
     return false;
   }
   if (!SimpleIdx::check(idx_recipe, error))
@@ -281,7 +282,7 @@ bool SimpleBuilder::check(const std::string &recipe, std::string *error) {
   if (!name_and_recipe(dna, txt_key, error, &txt_name, &txt_recipe))
     return false;
   if (txt_name != "simple") {
-    safe_set(error) = "SimpleBuilder can't build txt: " + txt_name;
+    safe_error(error) = "SimpleBuilder can't build txt: " + txt_name;
     return false;
   }
   if (!SimpleTxt::check(txt_recipe, error))
@@ -403,7 +404,7 @@ std::shared_ptr<SimpleBuilder> SimpleBuilder::make(
   builder->offset_ = 0;
   builder->txt_.open(builder->txt_filename_, std::ios::binary | std::ios::out);
   if (builder->txt_.fail()) {
-    safe_set(error) = "SimpleBuilder can't create :" + builder->txt_filename_;
+    safe_error(error) = "SimpleBuilder can't create :" + builder->txt_filename_;
     return nullptr;
   }
   std::shared_ptr<Compressor> posting_compressor = Compressor::make(
@@ -457,7 +458,7 @@ bool SimpleBuilder::maybe_flush_tokens(bool force, std::string *error) {
       std::string tok_filename = working_->make_temp();
       std::fstream tok(tok_filename, std::ios::binary | std::ios::out);
       if (tok.fail()) {
-        safe_set(error) =
+        safe_error(error) =
             "SimpleBuilder can't create temporary file for tokens";
         return false;
       }
@@ -477,12 +478,12 @@ bool SimpleBuilder::maybe_flush_tokens(bool force, std::string *error) {
 bool SimpleBuilder::build_index(std::string *error) {
   std::fstream idx(idx_filename_, std::ios::binary | std::ios::out);
   if (idx.fail()) {
-    safe_set(error) = "SimpleBuilder can't open: " + idx_filename_;
+    safe_error(error) = "SimpleBuilder can't open: " + idx_filename_;
     return false;
   }
   std::fstream pst(pst_filename_, std::ios::binary | std::ios::out);
   if (pst.fail()) {
-    safe_set(error) = "SimpleBuilder can't open: " + pst_filename_;
+    safe_error(error) = "SimpleBuilder can't open: " + pst_filename_;
     return false;
   }
   if (tokq_.empty())
@@ -496,7 +497,7 @@ bool SimpleBuilder::build_index(std::string *error) {
     posting_fstreams.emplace_back(tok_filename,
                                   std::ios::binary | std::ios::in);
     if (posting_fstreams.back().fail()) {
-      safe_set(error) =
+      safe_error(error) =
           "SimpleBuilder can't access token file: " + tok_filename;
       return false;
     }
@@ -510,7 +511,7 @@ bool SimpleBuilder::build_index(std::string *error) {
     posting_fstreams.emplace_back(ann_filename,
                                   std::ios::binary | std::ios::in);
     if (posting_fstreams.back().fail()) {
-      safe_set(error) =
+      safe_error(error) =
           "SimpleBuilder can't access annotation file: " + ann_filename;
       return false;
     }
@@ -547,7 +548,7 @@ bool SimpleBuilder::build_index(std::string *error) {
     IdxRecord idxr(feature, pst.tellp());
     idx.write(reinterpret_cast<char *>(&idxr), sizeof(idxr));
     if (idx.fail()) {
-      safe_set(error) = "SimpleBuilder can't write to: " + idx_filename_;
+      safe_error(error) = "SimpleBuilder can't write to: " + idx_filename_;
       return false;
     }
   }
@@ -599,7 +600,7 @@ bool SimpleBuilder::add_text_(const std::string &text, addr *p, addr *q,
       txtr.end = offset_ + token.offset + token.length - 1;
       txt_.write(reinterpret_cast<char *>(&txtr), sizeof(txtr));
       if (txt_.fail()) {
-        safe_set(error) = "SimpleBuilder can't write to: " + txt_filename_;
+        safe_error(error) = "SimpleBuilder can't write to: " + txt_filename_;
         return false;
       }
       last_pq = token.address;

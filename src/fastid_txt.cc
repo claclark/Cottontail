@@ -28,12 +28,12 @@ bool compressed_write(std::fstream *out, char *buffer, size_t n,
   size_t m = compressor->crush(buffer, n, compressed_buffer.get(), available);
   out->write(reinterpret_cast<char *>(&m), sizeof(size_t));
   if (out->fail()) {
-    safe_set(error) = "Fastid write failure";
+    safe_error(error) = "Fastid write failure";
     return false;
   }
   out->write(compressed_buffer.get(), m);
   if (out->fail()) {
-    safe_set(error) = "Fastid write failure";
+    safe_error(error) = "Fastid write failure";
     return false;
   }
   return true;
@@ -71,7 +71,7 @@ std::shared_ptr<Txt> FastidTxt::make(const std::string &recipe,
                                      std::shared_ptr<Tokenizer> tokenizer,
                                      std::shared_ptr<Working> working,
                                      std::string *error) {
-  safe_set(error) = "Can't make FastidTxt from a recipe";
+  safe_error(error) = "Can't make FastidTxt from a recipe";
   return nullptr;
 }
 
@@ -132,7 +132,7 @@ std::shared_ptr<Txt> FastidTxt::make(std::shared_ptr<Txt> txt,
 }
 
 bool FastidTxt::check(const std::string &recipe, std::string *error) {
-  safe_set(error) = "Can't check a FastidTxt recipe";
+  safe_error(error) = "Can't check a FastidTxt recipe";
   return false;
 }
 
@@ -157,11 +157,11 @@ bool fastid(std::shared_ptr<Warren> warren, std::string *error) {
   std::string id_gcl;
   std::string id_key = "id";
   if (!warren->get_parameter(id_key, &id_gcl)) {
-    safe_set(error) = "No ids in warren";
+    safe_error(error) = "No ids in warren";
     return false;
   }
   if (id_gcl == "") {
-    safe_set(error) = "No ids in warren";
+    safe_error(error) = "No ids in warren";
     return false;
   }
   std::unique_ptr<cottontail::Hopper> hopper =
@@ -211,17 +211,17 @@ bool fastid(std::shared_ptr<Warren> warren, std::string *error) {
   std::fstream out;
   out.open(fastid_filename, std::ios::binary | std::ios::out);
   if (out.fail()) {
-    safe_set(error) = "Fastid file creation failure";
+    safe_error(error) = "Fastid file creation failure";
     return false;
   }
   out.write(reinterpret_cast<char *>(&n), sizeof(size_t));
   if (out.fail()) {
-    safe_set(error) = "Fastid write failure";
+    safe_error(error) = "Fastid write failure";
     return false;
   }
   out.write(reinterpret_cast<char *>(&m), sizeof(size_t));
   if (out.fail()) {
-    safe_set(error) = "Fastid write failure";
+    safe_error(error) = "Fastid write failure";
     return false;
   }
   if (!compressed_write(&out, reinterpret_cast<char *>(p_buffer.get()),

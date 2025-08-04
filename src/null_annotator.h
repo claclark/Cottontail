@@ -17,7 +17,7 @@ public:
     if (recipe == "") {
       return std::shared_ptr<Annotator>(new NullAnnotator());
     } else {
-      safe_set(error) = "NullAnnotator can't make recipe: " + recipe;
+      safe_error(error) = "NullAnnotator can't make recipe: " + recipe;
       return nullptr;
     }
   };
@@ -25,7 +25,7 @@ public:
     if (recipe == "") {
       return true;
     } else {
-      safe_set(error) = "NullAnnotator can't make recipe: " + recipe;
+      safe_error(error) = "NullAnnotator can't make recipe: " + recipe;
       return false;
     }
   };

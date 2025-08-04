@@ -26,7 +26,7 @@ public:
         std::shared_ptr<FileReader>(new FileReader());
     reader->contents_.open(name, std::ios::binary | std::ios::in);
     if (reader->contents_.fail()) {
-      safe_set(error) = "Reader can't access: " + name;
+      safe_error(error) = "Reader can't access: " + name;
       return nullptr;
     } else {
       return reader;
@@ -214,7 +214,7 @@ std::shared_ptr<Reader> Reader::make(const std::string &name,
   } else if (recipe == "compressed" || "compression test") {
     return CompressReader::make(name, error);
   } else {
-    safe_set(error) = "Can't make reader with recipe: " + recipe;
+    safe_error(error) = "Can't make reader with recipe: " + recipe;
     return nullptr;
   }
 };
@@ -227,7 +227,7 @@ public:
         std::shared_ptr<FileWriter>(new FileWriter());
     writer->contents_.open(name, std::ios::binary | std::ios::out);
     if (writer->contents_.fail()) {
-      safe_set(error) = "Writer can't access: " + name;
+      safe_error(error) = "Writer can't access: " + name;
       return nullptr;
     } else {
       return writer;
@@ -333,7 +333,7 @@ std::shared_ptr<Writer> Writer::make(const std::string &name,
   } else if (recipe == "compression test") {
     return CompressWriter::make(name, error, true);
   } else {
-    safe_set(error) = "Can't make writer with recipe: " + recipe;
+    safe_error(error) = "Can't make writer with recipe: " + recipe;
     return nullptr;
   }
 };

@@ -17,14 +17,14 @@ namespace cottontail {
 bool SimpleTxt::load_map(const std::string &txt_filename, std::string *error) {
   std::fstream txtf(txt_filename, std::ios::binary | std::ios::in);
   if (txtf.fail()) {
-    safe_set(error) = "SimpleTxt can't access: " + txt_filename;
+    safe_error(error) = "SimpleTxt can't access: " + txt_filename;
     return false;
   }
   txtf.seekg(0, txtf.end);
   addr txtf_end = txtf.tellg();
   txtf.seekg(0, txtf.beg);
   if (txtf_end % static_cast<addr>(sizeof(struct TxtRecord)) != 0) {
-    safe_set(error) = "SimpleTxt found sizing error in: " + txt_filename;
+    safe_error(error) = "SimpleTxt found sizing error in: " + txt_filename;
     return false;
   }
   map_size_ = txtf_end / sizeof(TxtRecord) + 1;
@@ -39,7 +39,7 @@ bool SimpleTxt::load_map(const std::string &txt_filename, std::string *error) {
       addr current_blocking = txt.pq - last_pq;
       if (map_blocking_ > -1) {
         if (current_blocking != map_blocking_) {
-          safe_set(error) =
+          safe_error(error) =
               "SimpleTxt found blocking error in: " + txt_filename;
           return false;
         }
@@ -53,7 +53,7 @@ bool SimpleTxt::load_map(const std::string &txt_filename, std::string *error) {
   }
   *next++ = io_->size();
   if (next - map_.get() != map_size_) {
-    safe_set(error) = "SimpleTxt got loading error in: " + txt_filename;
+    safe_error(error) = "SimpleTxt got loading error in: " + txt_filename;
     return false;
   }
   return true;
@@ -97,11 +97,11 @@ std::shared_ptr<Txt> SimpleTxt::make(const std::string &recipe,
   if (!Compressor::check(compressor_name, compressor_recipe, error))
     return nullptr;
   if (tokenizer == nullptr) {
-    safe_set(error) = "SimpleTxt requires a tokenizer (got nullptr)";
+    safe_error(error) = "SimpleTxt requires a tokenizer (got nullptr)";
     return nullptr;
   }
   if (working == nullptr) {
-    safe_set(error) = "SimpleTxt requires a working directory (got nullptr)";
+    safe_error(error) = "SimpleTxt requires a working directory (got nullptr)";
     return nullptr;
   }
   std::shared_ptr<SimpleTxt> txt = std::shared_ptr<SimpleTxt>(new SimpleTxt());

@@ -128,7 +128,7 @@ SimpleTxtIO::make(const std::string &nameof_contents,
   }
   if (thing->contents_.fail()) {
     // We give up
-    safe_set(error) = "SimpleTxtIO can't access: " + nameof_contents;
+    safe_error(error) = "SimpleTxtIO can't access: " + nameof_contents;
     return nullptr;
   }
   std::fstream mapf;
@@ -147,7 +147,7 @@ SimpleTxtIO::make(const std::string &nameof_contents,
   }
   if (mapf.fail()) {
     // We give up
-    safe_set(error) = "SimpleTxtIO can't access: " + thing->nameof_chunk_map_;
+    safe_error(error) = "SimpleTxtIO can't access: " + thing->nameof_chunk_map_;
     return nullptr;
   }
   thing->last_chunk_ = read_limits(nameof_contents, &(thing->chunk_map_limit_),
@@ -178,7 +178,7 @@ SimpleTxtIO::make(const std::string &nameof_contents,
 
 std::shared_ptr<SimpleTxtIO> SimpleTxtIO::clone(std::string *error) {
   if (transacting()) {
-    safe_set(error) = "Can't clone SimpleTxtIo during transaction";
+    safe_error(error) = "Can't clone SimpleTxtIo during transaction";
     return nullptr;
   }
   std::shared_ptr<SimpleTxtIO> io =
@@ -192,7 +192,7 @@ std::shared_ptr<SimpleTxtIO> SimpleTxtIO::clone(std::string *error) {
   assert(io->buffer_ != nullptr);
   io->contents_.open(nameof_contents_, std::ios::binary | std::ios::in);
   if (io->contents_.fail()) {
-    safe_set(error) =
+    safe_error(error) =
         "SimpleTxtIO can't open file for cloning: " + io->nameof_contents_;
     return nullptr;
   }
@@ -416,12 +416,12 @@ void SimpleTxtIO::dump(std::ostream &output) {
 
 bool SimpleTxtIO::transaction_(std::string *error) {
   if (read_only_) {
-    safe_set(error) = "SimpleTxtIO is read only";
+    safe_error(error) = "SimpleTxtIO is read only";
     return false;
   }
   std::string nameof_lock = nameof_contents_ + ".lock";
   if (link(nameof_contents_.c_str(), nameof_lock.c_str()) != 0) {
-    safe_set(error) = "SimpleTxtIO can't obtain transaction lock";
+    safe_error(error) = "SimpleTxtIO can't obtain transaction lock";
     return false;
   }
   if (chunk_map_->size() > 0)
@@ -431,7 +431,7 @@ bool SimpleTxtIO::transaction_(std::string *error) {
   temp.open(nameof_temp, std::ios::binary | std::ios::out);
   if (temp.fail()) {
     std::remove(nameof_lock.c_str());
-    safe_set(error) = "SimpleTxtIO can't record transaction info";
+    safe_error(error) = "SimpleTxtIO can't record transaction info";
     return false;
   }
   addr transaction_chunk_map_limit = chunk_map_->size();
@@ -439,20 +439,20 @@ bool SimpleTxtIO::transaction_(std::string *error) {
              sizeof(addr));
   if (temp.fail()) {
     std::remove(nameof_lock.c_str());
-    safe_set(error) = "SimpleTxtIO can't record transaction info";
+    safe_error(error) = "SimpleTxtIO can't record transaction info";
     return false;
   }
   addr last_chunk_end = chunk_end_;
   temp.write(reinterpret_cast<char *>(&last_chunk_end), sizeof(addr));
   if (temp.fail()) {
     std::remove(nameof_lock.c_str());
-    safe_set(error) = "SimpleTxtIO can't record transaction info";
+    safe_error(error) = "SimpleTxtIO can't record transaction info";
     return false;
   }
   temp.write(chunk_.get(), chunk_end_);
   if (temp.fail()) {
     std::remove(nameof_lock.c_str());
-    safe_set(error) = "SimpleTxtIO can't record transaction info";
+    safe_error(error) = "SimpleTxtIO can't record transaction info";
     return false;
   }
   temp.close();
@@ -461,7 +461,7 @@ bool SimpleTxtIO::transaction_(std::string *error) {
     std::remove(nameof_temp.c_str());
     std::remove(nameof_limits.c_str());
     std::remove(nameof_lock.c_str());
-    safe_set(error) = "SimpleTxtIO can't initiate transaction";
+    safe_error(error) = "SimpleTxtIO can't initiate transaction";
     return false;
   }
   return true;

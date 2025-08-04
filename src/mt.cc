@@ -733,7 +733,7 @@ bool Mt::infix_expression(const std::string &expr, std::string *error) {
   gcl_q q = gcl_createQFromString(temp, &env_);
   free(temp);
   if (q == GCL_SYNTAX_ERROR) {
-    safe_set(error) = gcl_syntaxError;
+    safe_error(error) = gcl_syntaxError;
     return false;
   } else {
     s_expression_ = to_s_expression(q);

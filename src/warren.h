@@ -92,7 +92,7 @@ public:
     expr = expr->expand_phrases(tokenizer());
     std::unique_ptr<Hopper> hopper = expr->to_hopper(featurizer(), idx());
     if (hopper == nullptr)
-      safe_set(error) = "Could not construct hopper from valid gcl: " + gcl;
+      safe_error(error) = "Could not construct hopper from valid gcl: " + gcl;
     return hopper;
   }
   inline bool set_parameter(const std::string &key, const std::string &value,
@@ -105,7 +105,7 @@ public:
   }
   inline std::shared_ptr<Warren> clone(std::string *error = nullptr) {
     if (started_) {
-      safe_set(error) = "Can't clone warren after start of query processing";
+      safe_error(error) = "Can't clone warren after start of query processing";
       return nullptr;
     }
     return clone_(error);

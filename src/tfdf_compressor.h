@@ -30,7 +30,7 @@ public:
     if (recipe == "" || recipe == "component") {
       return true;
     } else {
-      safe_set(error) = "Bad TfdfCompressor recipe";
+      safe_error(error) = "Bad TfdfCompressor recipe";
       return false;
     }
   }

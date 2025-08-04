@@ -21,7 +21,7 @@ std::shared_ptr<Tokenizer> Tokenizer::make(const std::string &name,
     tokenizer = Utf8Tokenizer::make(recipe, error);
     tokenizer->name_ = "utf8";
   } else {
-    safe_set(error) = "No Tokenizer named: " + name;
+    safe_error(error) = "No Tokenizer named: " + name;
   }
   return tokenizer;
 }
@@ -34,7 +34,7 @@ bool Tokenizer::check(const std::string &name, const std::string &recipe,
   } else if (name == "utf8") {
     return Utf8Tokenizer::check(recipe, error);
   } else {
-    safe_set(error) = "No Tokenizer named: " + name;
+    safe_error(error) = "No Tokenizer named: " + name;
     return false;
   }
 }

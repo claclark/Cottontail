@@ -21,7 +21,7 @@ public:
     if (recipe == "") {
       return std::shared_ptr<Idx>(new NullIdx());
     } else {
-      safe_set(error) = "NullIdx can't make recipe: " + recipe;
+      safe_error(error) = "NullIdx can't make recipe: " + recipe;
       return nullptr;
     }
   };
@@ -29,7 +29,7 @@ public:
     if (recipe == "") {
       return true;
     } else {
-      safe_set(error) = "NullIdx can't make recipe: " + recipe;
+      safe_error(error) = "NullIdx can't make recipe: " + recipe;
       return false;
     }
   }

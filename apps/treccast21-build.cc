@@ -7,7 +7,7 @@ bool add_collection(const std::string &location,
                     std::string *error) {
   std::ifstream f(location, std::istream::in);
   if (f.fail()) {
-    cottontail::safe_set(error) = "Cannot open: " + location;
+    cottontail::safe_error(error) = "Cannot open: " + location;
     return false;
   }
   std::string line;

@@ -28,7 +28,7 @@ std::shared_ptr<Stats> DfStats::make(const std::string &recipe,
     return nullptr;
   hopper = warren->idx()->hopper(featurizer->featurize("items"));
   if (hopper == nullptr) {
-    safe_set(error) = "No global statistics in warren";
+    safe_error(error) = "No global statistics in warren";
     return nullptr;
   }
   addr p, q, n, items = 0;
@@ -36,13 +36,13 @@ std::shared_ptr<Stats> DfStats::make(const std::string &recipe,
        hopper->tau(p + 1, &p, &q, &n))
     items += n;
   if (items < 1) {
-    safe_set(error) = "No global statistics in warren";
+    safe_error(error) = "No global statistics in warren";
     return nullptr;
   }
   stats->items_ = items;
   hopper = warren->idx()->hopper(featurizer->featurize("length"));
   if (hopper == nullptr) {
-    safe_set(error) = "No global statistics in warren";
+    safe_error(error) = "No global statistics in warren";
     return nullptr;
   }
   addr length = 0;
@@ -50,7 +50,7 @@ std::shared_ptr<Stats> DfStats::make(const std::string &recipe,
        hopper->tau(p + 1, &p, &q, &n))
     length += n;
   if (length < 1) {
-    safe_set(error) = "No global statistics in warren";
+    safe_error(error) = "No global statistics in warren";
     return nullptr;
   }
   stats->average_length_ = length / stats->items_;
@@ -63,7 +63,7 @@ std::shared_ptr<Stats> DfStats::make(const std::string &recipe,
 
 bool DfStats::check(const std::string &recipe, std::string *error) {
   if (recipe != "") {
-    safe_set(error) = "Bad recipe for DfStats: " + recipe;
+    safe_error(error) = "Bad recipe for DfStats: " + recipe;
     return false;
   } else {
     return true;

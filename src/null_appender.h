@@ -21,7 +21,7 @@ public:
     if (recipe == "") {
       return std::shared_ptr<Appender>(new NullAppender());
     } else {
-      safe_set(error) = "NullAppender can't make recipe: " + recipe;
+      safe_error(error) = "NullAppender can't make recipe: " + recipe;
       return nullptr;
     }
   }
@@ -29,7 +29,7 @@ public:
     if (recipe == "") {
       return true;
     } else {
-      safe_set(error) = "NullAppender can't make recipe: " + recipe;
+      safe_error(error) = "NullAppender can't make recipe: " + recipe;
       return false;
     }
   }

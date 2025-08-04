@@ -27,7 +27,7 @@ public:
   static std::shared_ptr<Annotator> make(std::shared_ptr<Fiver> fiver,
                                          std::string *error = nullptr) {
     if (fiver == nullptr) {
-      safe_set(error) = "BigwigAnnotator got null Fiver";
+      safe_error(error) = "BigwigAnnotator got null Fiver";
       return nullptr;
     }
     std::shared_ptr<BigwigAnnotator> annotator =
@@ -61,7 +61,7 @@ public:
   static std::shared_ptr<Appender> make(std::shared_ptr<Fiver> fiver,
                                         std::string *error = nullptr) {
     if (fiver == nullptr) {
-      safe_set(error) = "BigwigAppender got null Fiver";
+      safe_error(error) = "BigwigAppender got null Fiver";
       return nullptr;
     }
     std::shared_ptr<BigwigAppender> appender =
@@ -221,12 +221,12 @@ bool fiver_files(std::shared_ptr<Working> working,
       addr start = std::stol(suffix.substr(0, suffix.find(".")));
       addr end = std::stol(suffix.substr(suffix.find(".") + 1));
       if (start < 0 || end < 0 || start > end) {
-        safe_set(error) = "fiver filename range error: " + fiver;
+        safe_error(error) = "Filename range error for fiver: " + fiver;
         return false;
       }
       found.emplace_back(start, end, fiver);
     } catch (const std::invalid_argument &e) {
-      safe_set(error) = "fiver filename format error: " + fiver;
+      safe_error(error) = "Filename format error for fiver: " + fiver;
       return false;
     }
   }
@@ -242,7 +242,7 @@ bool fiver_files(std::shared_ptr<Working> working,
     } else if (living.back().end >= fiver.end) {
       dead.emplace_back(fiver);
     } else {
-      safe_set(error) = "fiver filename sequence error: " + fiver.name;
+      safe_error(error) = "Filename sequence error for fiver: " + fiver.name;
       return false;
     }
   // can't see a situation when it isn't okay to remove
@@ -306,7 +306,7 @@ std::shared_ptr<Bigwig> Bigwig::make(const std::string &burrow,
     return nullptr;
   std::string dna;
   if (read_dna(working, &dna)) {
-    safe_set(error) = "Burrow already has cottontail dna";
+    safe_error(error) = "Burrow already has cottontail dna";
     return nullptr;
   }
   dna = default_dna;
@@ -459,16 +459,16 @@ std::shared_ptr<Bigwig> Bigwig::make(
   if (working != nullptr) {
     std::string dna;
     if (read_dna(working, &dna, error)) {
-      safe_set(error) = "Burrow already has cottontail dna";
+      safe_error(error) = "Burrow already has cottontail dna";
       return nullptr;
     }
   }
   if (featurizer == nullptr) {
-    safe_set(error) = "Bigwig needs a featurizer (got nullptr)";
+    safe_error(error) = "Bigwig needs a featurizer (got nullptr)";
     return nullptr;
   }
   if (tokenizer == nullptr) {
-    safe_set(error) = "Bigwig needs a tokenizer (got nullptr)";
+    safe_error(error) = "Bigwig needs a tokenizer (got nullptr)";
     return nullptr;
   }
   std::shared_ptr<Bigwig> bigwig = std::shared_ptr<Bigwig>(

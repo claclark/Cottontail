@@ -17,7 +17,7 @@ bool fetch_text(std::shared_ptr<cottontail::Warren> warren,
   cottontail::addr p, q;
   hopper->tau(cottontail::minfinity + 1, &p, &q);
   if (p == cottontail::maxfinity) {
-    cottontail::safe_set(error) =
+    cottontail::safe_error(error) =
         "can't find item with identifier: " + identifier;
     return false;
   }

@@ -5,10 +5,10 @@
 
 #include "src/core.h"
 #include "src/df_stats.h"
+#include "src/field_stats.h"
 #include "src/hopper.h"
 #include "src/idf_stats.h"
 #include "src/warren.h"
-#include "src/field_stats.h"
 
 namespace cottontail {
 std::shared_ptr<Stats> Stats::make(std::shared_ptr<Warren> warren,
@@ -52,7 +52,7 @@ std::shared_ptr<Stats> Stats::make(const std::string &name,
       return nullptr;
     stats->name_ = name;
   } else {
-    safe_set(error) = "No Stats named: " + name;
+    safe_error(error) = "No Stats named: " + name;
     stats = nullptr;
   }
   return stats;
@@ -69,7 +69,7 @@ bool Stats::check(const std::string &name, const std::string &recipe,
   } else if (name == "field") {
     return FieldStats::check(recipe, error);
   } else {
-    safe_set(error) = "No Stats named: " + name;
+    safe_error(error) = "No Stats named: " + name;
     return false;
   }
 }
@@ -100,13 +100,13 @@ std::unique_ptr<Hopper> content_hopper(std::shared_ptr<Warren> warren,
   if (content_query == "")
     content_query = warren->default_container();
   if (content_query == "") {
-    safe_set(error) = "No items to rank defined by warren";
+    safe_error(error) = "No items to rank defined by warren";
     return nullptr;
   }
   std::unique_ptr<cottontail::Hopper> hopper =
       warren->hopper_from_gcl(content_query, error);
   if (hopper == nullptr) {
-    safe_set(error) = "No items to rank defined by warren";
+    safe_error(error) = "No items to rank defined by warren";
     return nullptr;
   }
   return hopper;

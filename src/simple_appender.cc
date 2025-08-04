@@ -29,20 +29,20 @@ SimpleAppender::make(const std::string &recipe, std::string *error,
   if (!Compressor::check(compressor_name, compressor_recipe, error))
     return nullptr;
   if (working == nullptr) {
-    safe_set(error) =
+    safe_error(error) =
         "SimpleAppender requires a working directory (got nullptr)";
     return nullptr;
   }
   if (featurizer == nullptr) {
-    safe_set(error) = "SimpleAppender requires a featurizer (got nullptr)";
+    safe_error(error) = "SimpleAppender requires a featurizer (got nullptr)";
     return nullptr;
   }
   if (tokenizer == nullptr) {
-    safe_set(error) = "SimpleAppender requires a tokenizer (got nullptr)";
+    safe_error(error) = "SimpleAppender requires a tokenizer (got nullptr)";
     return nullptr;
   }
   if (annotator == nullptr) {
-    safe_set(error) = "SimpleAppender requires an annotator (got nullptr)";
+    safe_error(error) = "SimpleAppender requires an annotator (got nullptr)";
     return nullptr;
   }
   std::shared_ptr<SimpleAppender> appender =
@@ -75,7 +75,7 @@ bool SimpleAppender::recover(const std::string &recipe, bool commit,
                              std::string *error,
                              std::shared_ptr<Working> working) {
   if (working == nullptr) {
-    safe_set(error) =
+    safe_error(error) =
         "SimpleAppender recovery requires a working directory (got nullptr)";
     return false;
   }
@@ -106,12 +106,12 @@ bool SimpleAppender::append_(const std::string &text, addr *p, addr *q,
                              std::string *error) {
   lock_.lock();
   if (failed_) {
-    safe_set(error) = "SimpleAppender in failed state";
+    safe_error(error) = "SimpleAppender in failed state";
     lock_.unlock();
     return false;
   }
   if (!adding_) {
-    safe_set(error) = "SimpleAppender not in transaction";
+    safe_error(error) = "SimpleAppender not in transaction";
     lock_.unlock();
     return false;
   }
@@ -151,7 +151,7 @@ bool SimpleAppender::append_(const std::string &text, addr *p, addr *q,
       txtr.end = offset_ + token.offset + token.length - 1;
       txt_.write(reinterpret_cast<char *>(&txtr), sizeof(txtr));
       if (txt_.fail()) {
-        safe_set(error) = "SimpleAppender can't write to: " + txt_filename_;
+        safe_error(error) = "SimpleAppender can't write to: " + txt_filename_;
         failed_ = true;
         lock_.unlock();
         return false;
@@ -169,13 +169,13 @@ bool SimpleAppender::append_(const std::string &text, addr *p, addr *q,
 bool SimpleAppender::transaction_(std::string *error) {
   lock_.lock();
   if (failed_) {
-    safe_set(error) = "SimpleAppender in failed state";
+    safe_error(error) = "SimpleAppender in failed state";
     lock_.unlock();
     return false;
   }
   std::string lock_filename = txt_filename_ + ".lock";
   if (link(txt_filename_.c_str(), lock_filename.c_str()) != 0) {
-    safe_set(error) = "SimpleAppender can't obtain transaction lock";
+    safe_error(error) = "SimpleAppender can't obtain transaction lock";
     lock_.unlock();
     return false;
   }
@@ -205,7 +205,7 @@ bool SimpleAppender::transaction_(std::string *error) {
   }
   std::fstream old(txt_filename_, std::ios::binary | std::ios::in);
   if (old.fail()) {
-    safe_set(error) = "SimpleAppender can't access: " + txt_filename_;
+    safe_error(error) = "SimpleAppender can't access: " + txt_filename_;
     failed_ = true;
     io_->abort();
     std::remove(lock_filename.c_str());
@@ -216,7 +216,8 @@ bool SimpleAppender::transaction_(std::string *error) {
   addr old_end = old.tellg();
   old.seekg(0, old.beg);
   if (old_end % static_cast<addr>(sizeof(struct TxtRecord)) != 0) {
-    safe_set(error) = "SimpleAppender found sizing error in: " + txt_filename_;
+    safe_error(error) =
+        "SimpleAppender found sizing error in: " + txt_filename_;
     failed_ = true;
     io_->abort();
     std::remove(lock_filename.c_str());
@@ -226,7 +227,7 @@ bool SimpleAppender::transaction_(std::string *error) {
   std::string new_filename = txt_filename_ + ".new";
   txt_.open(new_filename, std::ios::binary | std::ios::out);
   if (txt_.fail()) {
-    safe_set(error) = "SimpleAppender can't create :" + new_filename;
+    safe_error(error) = "SimpleAppender can't create :" + new_filename;
     failed_ = true;
     io_->abort();
     std::remove(lock_filename.c_str());
@@ -240,7 +241,7 @@ bool SimpleAppender::transaction_(std::string *error) {
     records++;
     txt_.write(reinterpret_cast<char *>(&txtr), sizeof(txtr));
     if (txt_.fail()) {
-      safe_set(error) = "SimpleAppender can't write :" + new_filename;
+      safe_error(error) = "SimpleAppender can't write :" + new_filename;
       failed_ = true;
       txt_.close();
       std::remove(new_filename.c_str());
@@ -256,7 +257,8 @@ bool SimpleAppender::transaction_(std::string *error) {
   if (records == 0) {
     address_ = 0;
   } else if (offset_ <= txtr.start) {
-    safe_set(error) = "SimpleAppender found sizing error in: " + txt_filename_;
+    safe_error(error) =
+        "SimpleAppender found sizing error in: " + txt_filename_;
     failed_ = true;
     txt_.close();
     std::remove(new_filename.c_str());
@@ -269,7 +271,7 @@ bool SimpleAppender::transaction_(std::string *error) {
     std::unique_ptr<char[]> tail =
         io_->read(txtr.start, offset_ - txtr.start, &actual);
     if (tail == nullptr || actual != offset_ - txtr.start) {
-      safe_set(error) =
+      safe_error(error) =
           "SimpleAppender found sizing error in: " + txt_filename_;
       failed_ = true;
       txt_.close();
@@ -282,7 +284,7 @@ bool SimpleAppender::transaction_(std::string *error) {
     std::string tail_string = tail.get();
     std::vector<std::string> tail_tokens = tokenizer_->split(tail_string);
     if (tail_tokens.size() == 0) {
-      safe_set(error) =
+      safe_error(error) =
           "SimpleAppender found sizing error in: " + txt_filename_;
       failed_ = true;
       txt_.close();

@@ -27,7 +27,7 @@ std::shared_ptr<Appender> Appender::make(const std::string &name,
     appender = SimpleAppender::make(recipe, error, working, featurizer,
                                     tokenizer, annotator);
   else
-    safe_set(error) = "No Appender named: " + name;
+    safe_error(error) = "No Appender named: " + name;
   if (appender != nullptr)
     appender->name_ = name;
   return appender;
@@ -40,7 +40,7 @@ bool Appender::check(const std::string &name, const std::string &recipe,
   } else if (name == "simple") {
     return SimpleAppender::check(recipe, error);
   } else {
-    safe_set(error) = "No Appender named: " + name;
+    safe_error(error) = "No Appender named: " + name;
     return false;
   }
 }
@@ -53,7 +53,7 @@ bool Appender::recover(const std::string &name, const std::string &recipe,
   } else if (name == "simple") {
     return SimpleAppender::recover(recipe, commit, error, working);
   } else {
-    safe_set(error) = "No Appender named: " + name;
+    safe_error(error) = "No Appender named: " + name;
     return false;
   }
 }

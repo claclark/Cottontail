@@ -24,7 +24,7 @@ std::shared_ptr<Annotator>
 SimpleAnnotator::make(const std::string &recipe,
                       std::shared_ptr<Working> working, std::string *error) {
   if (working == nullptr) {
-    safe_set(error) =
+    safe_error(error) =
         "SimpleAnnotator requires a working directory (got nullptr)";
     return nullptr;
   }
@@ -85,7 +85,7 @@ bool SimpleAnnotator::recover(const std::string &recipe, bool commit,
                               std::shared_ptr<Working> working,
                               std::string *error) {
   if (working == nullptr) {
-    safe_set(error) =
+    safe_error(error) =
         "SimpleAnnotator requires a working directory (got nullptr)";
     return false;
   }
@@ -109,18 +109,18 @@ std::string SimpleAnnotator::recipe_() { return the_recipe_; }
 
 bool SimpleAnnotator::transaction_(std::string *error) {
   if (failed_) {
-    safe_set(error) = "SimpleAnnotator in failed state";
+    safe_error(error) = "SimpleAnnotator in failed state";
     return false;
   }
   lock_.lock();
   if (adding_) {
-    safe_set(error) = "SimpleAnnotator already in transaction";
+    safe_error(error) = "SimpleAnnotator already in transaction";
     lock_.unlock();
     return false;
   }
   std::string lock_filename = idx_filename_ + std::string(".lock");
   if (link(idx_filename_.c_str(), lock_filename.c_str()) != 0) {
-    safe_set(error) = "SimpleAnnotator can't obtain transaction lock";
+    safe_error(error) = "SimpleAnnotator can't obtain transaction lock";
     lock_.unlock();
     return false;
   }
@@ -137,12 +137,12 @@ bool merge_updates(const std::vector<std::string> &posting_filenames,
                    std::string *error = nullptr) {
   std::fstream pst(pst_filename, std::ios::binary | std::ios::out);
   if (pst.fail()) {
-    safe_set(error) = "SimpleAnnotator can't create: " + pst_filename;
+    safe_error(error) = "SimpleAnnotator can't create: " + pst_filename;
     return false;
   }
   std::fstream idx(idx_filename, std::ios::binary | std::ios::out);
   if (idx.fail()) {
-    safe_set(error) = "SimpleAnnotator can't create: " + idx_filename;
+    safe_error(error) = "SimpleAnnotator can't create: " + idx_filename;
     return false;
   }
   std::vector<std::fstream> posting_fstreams;
@@ -150,7 +150,7 @@ bool merge_updates(const std::vector<std::string> &posting_filenames,
   for (auto &filename : posting_filenames) {
     posting_fstreams.emplace_back(filename, std::ios::binary | std::ios::in);
     if (posting_fstreams.back().fail()) {
-      safe_set(error) =
+      safe_error(error) =
           "SimpleAnnotator can't access posting file: " + filename;
       return false;
     }
@@ -181,7 +181,7 @@ bool merge_updates(const std::vector<std::string> &posting_filenames,
       std::shared_ptr<SimplePosting> merged_posting =
           posting_factory->posting_from_merge(posting_with_feature);
       if (!merged_posting->invariants()) {
-        safe_set(error) =
+        safe_error(error) =
             "SimpleAnnotator can't store a posting list that isn't a GC list";
         return false;
       }
@@ -194,7 +194,7 @@ bool merge_updates(const std::vector<std::string> &posting_filenames,
     IdxRecord idxr(feature, pst.tellp());
     idx.write(reinterpret_cast<char *>(&idxr), sizeof(idxr));
     if (idx.fail()) {
-      safe_set(error) = "SimpleAnnotator can't write to: " + idx_filename;
+      safe_error(error) = "SimpleAnnotator can't write to: " + idx_filename;
       return false;
     }
   }
@@ -244,19 +244,19 @@ void SimpleAnnotator::maybe_flush_additions(bool force) {
 bool SimpleAnnotator::annotate_(addr feature, addr p, addr q, fval v,
                                 std::string *error) {
   if (failed_) {
-    safe_set(error) = "SimpleAnnotator in failed state";
+    safe_error(error) = "SimpleAnnotator in failed state";
     return false;
   }
   lock_.lock();
   if (!adding_) {
-    safe_set(error) = "SimpleAnnotator not in transaction";
+    safe_error(error) = "SimpleAnnotator not in transaction";
     lock_.unlock();
     return false;
   }
   bool outcome = true;
   if (p >= 0 && p <= q) {
     if (*cannot_create_temp_files_) {
-      safe_set(error) = "SimpleAnnotator cannot create temporary files";
+      safe_error(error) = "SimpleAnnotator cannot create temporary files";
       outcome = false;
     } else {
       added_->emplace_back(feature, p, q, v);

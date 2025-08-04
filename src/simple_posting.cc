@@ -398,27 +398,27 @@ void SimplePosting::write(std::fstream *f) {
 
 bool SimplePosting::invariants(std::string *error) {
   if (qostings_.size() != 0 && qostings_.size() != postings_.size()) {
-    safe_set(error) = "Postings and qostings have inconsistent sizes";
+    safe_error(error) = "Postings and qostings have inconsistent sizes";
     return false;
   }
   if (fostings_.size() != 0 && fostings_.size() != fostings_.size()) {
-    safe_set(error) = "Postings and fostings have inconsistent sizes";
+    safe_error(error) = "Postings and fostings have inconsistent sizes";
     return false;
   }
   if (postings_.size() > 0 &&
       !std::is_sorted(postings_.begin(), postings_.end())) {
-    safe_set(error) = "Postings not sorted";
+    safe_error(error) = "Postings not sorted";
     return false;
   }
   if (qostings_.size() > 0 &&
       !std::is_sorted(qostings_.begin(), qostings_.end())) {
-    safe_set(error) = "Qostings not sorted";
+    safe_error(error) = "Qostings not sorted";
     return false;
   }
   if (postings_.size() > 0 && qostings_.size() > 0) {
     for (size_t i = 0; i < postings_.size(); i++)
       if (postings_[i] > qostings_[i]) {
-        safe_set(error) = "Posting list not gc list";
+        safe_error(error) = "Posting list not gc list";
         return false;
       }
   }

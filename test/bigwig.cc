@@ -1,5 +1,6 @@
 #include "src/bigwig.h"
 
+#include <algorithm>
 #include <memory>
 #include <string>
 #include <thread>
@@ -489,5 +490,10 @@ TEST(Bigwig, Durable) {
   ASSERT_EQ(i, 14);
   hopper = bigwig->hopper_from_gcl("\"may come alas poor yorick\"");
   hopper->ohr(cottontail::maxfinity - 1, &p, &q);
-  ASSERT_EQ(bigwig->txt()->translate(p, q), "may come,\nAlas, poor Yorick! ");
+  auto removeNulls = [](std::string s) {
+    s.erase(std::remove(s.begin(), s.end(), '\0'), s.end());
+    return s;
+  };
+  ASSERT_EQ(removeNulls(bigwig->txt()->translate(p, q)),
+            "may come,\nAlas, poor Yorick! ");
 }

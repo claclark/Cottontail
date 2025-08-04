@@ -89,7 +89,7 @@ public:
   static std::shared_ptr<Annotator> make(std::shared_ptr<Builder> builder,
                                          std::string *error = nullptr) {
     if (builder == nullptr) {
-      safe_set(error) = "BuilderAnnotator got null builder";
+      safe_error(error) = "BuilderAnnotator got null builder";
       return nullptr;
     }
     std::shared_ptr<BuilderAnnotator> annotator =
@@ -110,7 +110,7 @@ private:
   bool annotate_(addr feature, addr p, addr q, fval v,
                  std::string *error = nullptr) final {
     if (builder_ == nullptr) {
-      safe_set(error) = "BuilderAnnotator has null builder";
+      safe_error(error) = "BuilderAnnotator has null builder";
       return false;
     }
     builder_->add_annotation(feature, p, q, v, error);
@@ -129,7 +129,7 @@ public:
   static std::shared_ptr<Appender> make(std::shared_ptr<Builder> builder,
                                         std::string *error = nullptr) {
     if (builder == nullptr) {
-      safe_set(error) = "BuilderAppender got null builder";
+      safe_error(error) = "BuilderAppender got null builder";
       return nullptr;
     }
     std::shared_ptr<BuilderAppender> appender =
@@ -150,7 +150,7 @@ private:
   bool append_(const std::string &text, addr *p, addr *q,
                std::string *error) final {
     if (builder_ == nullptr) {
-      safe_set(error) = "BuilderAppender has null builder";
+      safe_error(error) = "BuilderAppender has null builder";
       return false;
     }
     return builder_->add_text(text, p, q, error);
@@ -185,7 +185,7 @@ private:
   std::shared_ptr<Appender> appender_() final { return builder_appender_; };
   bool set_(const std::string &key, const std::string &value,
             std::string *error) final {
-    safe_set(error) = "BuilderScribe does not support parameters";
+    safe_error(error) = "BuilderScribe does not support parameters";
     return false;
   };
   bool finalize_(std::string *error) { return builder_->finalize(error); }
@@ -208,7 +208,7 @@ std::shared_ptr<Scribe> Scribe::null(std::string *error) {
 std::shared_ptr<Scribe> Scribe::make(std::shared_ptr<Warren> warren,
                                      std::string *error) {
   if (warren == nullptr) {
-    safe_set(error) = "Scribe got null warren";
+    safe_error(error) = "Scribe got null warren";
     return nullptr;
   }
   return std::shared_ptr<Scribe>(new WarrenScribe(warren));
@@ -217,7 +217,7 @@ std::shared_ptr<Scribe> Scribe::make(std::shared_ptr<Warren> warren,
 std::shared_ptr<Scribe> Scribe::make(std::shared_ptr<Builder> builder,
                                      std::string *error) {
   if (builder == nullptr) {
-    safe_set(error) = "Scribe got null builder";
+    safe_error(error) = "Scribe got null builder";
     return nullptr;
   }
   return std::shared_ptr<Scribe>(new BuilderScribe(builder));
@@ -227,7 +227,7 @@ bool scribe_files(const std::vector<std::string> &filenames,
                   std::shared_ptr<Scribe> scribe, std::string *error,
                   bool verbose) {
   if (scribe == nullptr) {
-    safe_set(error) = "Function scribe_files passed null scribe";
+    safe_error(error) = "Function scribe_files passed null scribe";
     return false;
   }
   addr file_feature = scribe->featurizer()->featurize("file:");
@@ -257,7 +257,8 @@ bool scribe_files(const std::vector<std::string> &filenames,
       if (verbose)
         std::cerr << "scribe_files commiting: " << filename << "\n";
       if (!scribe->ready()) {
-        safe_set(error) = "Function scribe_files unable to commit transaction";
+        safe_error(error) =
+            "Function scribe_files unable to commit transaction";
         return false;
       }
       scribe->commit();
@@ -281,7 +282,7 @@ bool scribe_jsonl(const std::vector<std::string> &filenames,
                   std::shared_ptr<Scribe> scribe, std::string *error,
                   bool verbose) {
   if (scribe == nullptr) {
-    safe_set(error) = "Function scribe_jsonl passed null scribe";
+    safe_error(error) = "Function scribe_jsonl passed null scribe";
   }
   for (auto &filename : filenames) {
     if (verbose)
@@ -289,7 +290,7 @@ bool scribe_jsonl(const std::vector<std::string> &filenames,
     std::shared_ptr<std::string> everything =
         cottontail::inhale(filename, error);
     if (everything == nullptr) {
-      safe_set(error) = "Cannot inhale: " + filename;
+      safe_error(error) = "Cannot inhale: " + filename;
       return false;
     }
     if (!scribe->transaction(error))
@@ -304,8 +305,8 @@ bool scribe_jsonl(const std::vector<std::string> &filenames,
       addr p0, q0;
       if (!json_scribe(everything->substr(prev, pos - prev), scribe, &p0,
                        &q0)) {
-        safe_set(error) = "Cannot scribe json line: " + filename + ":" +
-                          std::to_string(number);
+        safe_error(error) = "Cannot scribe json line: " + filename + ":" +
+                            std::to_string(number);
         return false;
       }
       p = std::min(p, p0);
@@ -317,7 +318,7 @@ bool scribe_jsonl(const std::vector<std::string> &filenames,
               scribe->featurizer()->featurize(path(filename)), p, q, error))
         return false;
     if (!scribe->ready()) {
-      safe_set(error) = "Function scribe_jsonl unable to commit transaction";
+      safe_error(error) = "Function scribe_jsonl unable to commit transaction";
       return false;
     }
     scribe->commit();

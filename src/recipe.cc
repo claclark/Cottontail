@@ -174,7 +174,7 @@ bool cook(const std::string &recipe,
           std::map<std::string, std::string> *parameters, std::string *error) {
   const char *s = parse(recipe.c_str(), parameters);
   if (s) {
-    safe_set(error) = "Can't cook recipe";
+    safe_error(error) = "Can't cook recipe";
     return false;
   }
   return true;
@@ -214,7 +214,7 @@ bool interpret_option(std::string *recipe, const std::string &option,
     return true;
   std::map<std::string, std::string> parameters;
   if (!cook(*recipe, &parameters)) {
-    safe_set(error) = "Bad recipe";
+    safe_error(error) = "Bad recipe";
     return false;
   }
   {
@@ -225,7 +225,7 @@ bool interpret_option(std::string *recipe, const std::string &option,
       std::map<std::string, std::string>::iterator item =
           parameters.find(pieces[0]);
       if (item == parameters.end()) {
-        safe_set(error) = "Option not found: " + pieces[0];
+        safe_error(error) = "Option not found: " + pieces[0];
         return false;
       }
       std::map<std::string, std::string> package;
@@ -240,17 +240,17 @@ bool interpret_option(std::string *recipe, const std::string &option,
   std::vector<std::string> pieces{
       std::sregex_token_iterator(option.begin(), option.end(), sep, -1), {}};
   if (pieces.size() < 2 || pieces.size() > 3) {
-    safe_set(error) = "Malformed option: " + option;
+    safe_error(error) = "Malformed option: " + option;
   }
   std::map<std::string, std::string>::iterator item =
       parameters.find(pieces[0]);
   if (item == parameters.end()) {
-    safe_set(error) = "Option not found: " + pieces[0];
+    safe_error(error) = "Option not found: " + pieces[0];
     return false;
   }
   std::map<std::string, std::string> item_parameters;
   if (!cook(item->second, &item_parameters)) {
-    safe_set(error) = "There are no options for: " + pieces[0];
+    safe_error(error) = "There are no options for: " + pieces[0];
     return false;
   }
   if (pieces.size() == 2) {
@@ -262,18 +262,18 @@ bool interpret_option(std::string *recipe, const std::string &option,
     std::map<std::string, std::string>::iterator item_recipe =
         item_parameters.find("recipe");
     if (item_recipe == parameters.end()) {
-      safe_set(error) = "Option parameters not found for: " + pieces[0];
+      safe_error(error) = "Option parameters not found for: " + pieces[0];
       return false;
     }
     std::map<std::string, std::string> item_recipe_parameters;
     if (!cook(item_recipe->second, &item_recipe_parameters)) {
-      safe_set(error) = "Malformed option parameters for: " + pieces[0];
+      safe_error(error) = "Malformed option parameters for: " + pieces[0];
       return false;
     }
     std::map<std::string, std::string>::iterator item_recipe_item =
         item_recipe_parameters.find(pieces[1]);
     if (item_recipe_item == item_recipe_parameters.end()) {
-      safe_set(error) = "No option: " + pieces[0] + ":" + pieces[1];
+      safe_error(error) = "No option: " + pieces[0] + ":" + pieces[1];
       return false;
     }
     item_recipe_parameters[pieces[1]] = pieces[2];
@@ -293,36 +293,36 @@ bool extract_option(const std::string &recipe, const std::string &option,
                     std::string *value, std::string *error) {
   std::map<std::string, std::string> parameters;
   if (!cook(recipe, &parameters)) {
-    safe_set(error) = "Bad recipe";
+    safe_error(error) = "Bad recipe";
     return false;
   }
   std::regex sep(":");
   std::vector<std::string> pieces{
       std::sregex_token_iterator(option.begin(), option.end(), sep, -1), {}};
   if (pieces.size() < 1 || pieces.size() > 3) {
-    safe_set(error) = "Malformed option: " + option;
+    safe_error(error) = "Malformed option: " + option;
   }
   std::map<std::string, std::string>::iterator item =
       parameters.find(pieces[0]);
   if (item == parameters.end()) {
-    safe_set(error) = "Option item not found: " + pieces[0];
+    safe_error(error) = "Option item not found: " + pieces[0];
     return false;
   }
   std::map<std::string, std::string> item_parameters;
   if (!cook(item->second, &item_parameters)) {
-    safe_set(error) = "There are no options for: " + pieces[0];
+    safe_error(error) = "There are no options for: " + pieces[0];
     return false;
   }
   std::map<std::string, std::string>::iterator item_name =
       item_parameters.find("name");
   if (item_name == parameters.end()) {
-    safe_set(error) = "Option setting not found for: " + pieces[0];
+    safe_error(error) = "Option setting not found for: " + pieces[0];
     return false;
   }
   std::map<std::string, std::string>::iterator item_recipe =
       item_parameters.find("recipe");
   if (item_recipe == parameters.end()) {
-    safe_set(error) = "Option parameters not found for: " + pieces[0];
+    safe_error(error) = "Option parameters not found for: " + pieces[0];
     return false;
   }
   if (pieces.size() == 1) {
@@ -332,7 +332,7 @@ bool extract_option(const std::string &recipe, const std::string &option,
   } else {
     std::map<std::string, std::string> item_recipe_parameters;
     if (!cook(item_recipe->second, &item_recipe_parameters)) {
-      safe_set(error) = "Malformed option parameters for: " + pieces[0];
+      safe_error(error) = "Malformed option parameters for: " + pieces[0];
       return false;
     }
     std::map<std::string, std::string>::iterator item_recipe_item =
@@ -346,17 +346,17 @@ bool unwrap(const std::string &package, std::string *name, std::string *recipe,
             std::string *error) {
   std::map<std::string, std::string> parameters;
   if (!cook(package, &parameters)) {
-    safe_set(error) = "Strange package";
+    safe_error(error) = "Strange package";
     return false;
   }
   auto y = parameters.find("name");
   if (y == parameters.end()) {
-    safe_set(error) = "No name in package";
+    safe_error(error) = "No name in package";
     return false;
   }
   auto z = parameters.find("recipe");
   if (z == parameters.end()) {
-    safe_set(error) = "No recipe in package";
+    safe_error(error) = "No recipe in package";
     return false;
   }
   *name = y->second;

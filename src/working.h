@@ -81,7 +81,7 @@ public:
     std::shared_ptr<Working> working =
         std::make_shared<Working>(working_name, false);
     if (working == nullptr)
-      safe_set(error) = "Can't access working directory: " + working_name;
+      safe_error(error) = "Can't access working directory: " + working_name;
     return working;
   }
   static std::shared_ptr<Working> mkdir(const std::string &working_name,
@@ -89,7 +89,7 @@ public:
     std::shared_ptr<Working> working =
         std::make_shared<Working>(working_name, true);
     if (working == nullptr)
-      safe_set(error) = "Can't access working directory: " + working_name;
+      safe_error(error) = "Can't access working directory: " + working_name;
     return working;
   }
   Working(const std::string &working, bool mkdir)

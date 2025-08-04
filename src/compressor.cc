@@ -17,17 +17,17 @@ std::shared_ptr<Compressor> Compressor::make(const std::string &name,
                                              std::string *error) {
   std::shared_ptr<Compressor> compressor = nullptr;
   if (name == "" || name == "zlib") {
-    compressor =  ZlibCompressor::make(recipe, error);
+    compressor = ZlibCompressor::make(recipe, error);
   } else if (name == "null") {
-    compressor =  NullCompressor::make(recipe, error);
+    compressor = NullCompressor::make(recipe, error);
   } else if (name == "post") {
-    compressor =  PostCompressor::make(recipe, error);
+    compressor = PostCompressor::make(recipe, error);
   } else if (name == "tfdf") {
-    compressor =  TfdfCompressor::make(recipe, error);
+    compressor = TfdfCompressor::make(recipe, error);
   } else if (name == "bad") {
-    compressor =  BadCompressor::make(recipe, error);
+    compressor = BadCompressor::make(recipe, error);
   } else {
-    safe_set(error) = "No Compressor named: " + name;
+    safe_error(error) = "No Compressor named: " + name;
     return nullptr;
   }
   if (compressor == nullptr)
@@ -50,7 +50,7 @@ bool Compressor::check(const std::string &name, const std::string &recipe,
   } else if (name == "bad") {
     return BadCompressor::check(recipe, error);
   } else {
-    safe_set(error) = "No Compressor named: " + name;
+    safe_error(error) = "No Compressor named: " + name;
     return false;
   }
 }

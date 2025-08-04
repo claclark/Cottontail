@@ -727,7 +727,8 @@ bool tf_annotations(std::shared_ptr<Warren> warren, std::string *error,
   if (!warren->get_parameter(content_key, &content_query, error))
     content_query = warren->default_container();
   if (content_query == "") {
-    safe_set(error) = "tf_annotations can't find a definition for item content";
+    safe_error(error) =
+        "tf_annotations can't find a definition for item content";
   }
   std::unique_ptr<cottontail::Hopper> hopper =
       warren->hopper_from_gcl(content_query, error);
@@ -784,7 +785,7 @@ bool tf_annotations(std::shared_ptr<Warren> warren, std::string *error,
     }
   }
   if (total_items == 0) {
-    safe_set(error) = "tf_annotations can't find any items for ranking";
+    safe_error(error) = "tf_annotations can't find any items for ranking";
     warren->abort();
     return false;
   }
@@ -800,7 +801,7 @@ bool tf_annotations(std::shared_ptr<Warren> warren, std::string *error,
   }
   if (!warren->ready()) {
     warren->abort();
-    safe_set(error) = "tf_annotations can't commit changes";
+    safe_error(error) = "tf_annotations can't commit changes";
     return false;
   }
   warren->commit();
@@ -819,7 +820,7 @@ bool tf_df_annotations(std::shared_ptr<Warren> warren, std::string *error) {
   if (!warren->get_parameter(content_key, &content_query, error))
     content_query = warren->default_container();
   if (content_query == "") {
-    safe_set(error) =
+    safe_error(error) =
         "tf_df_annotations can't find a definition for item content";
     return false;
   }
@@ -887,7 +888,7 @@ bool tf_df_annotations(std::shared_ptr<Warren> warren, std::string *error) {
   }
   if (total_items == 0) {
     warren->abort();
-    safe_set(error) = "tf_df_annotations can't find any items for ranking";
+    safe_error(error) = "tf_df_annotations can't find any items for ranking";
     return false;
   }
   for (auto &feature : df)
@@ -908,7 +909,7 @@ bool tf_df_annotations(std::shared_ptr<Warren> warren, std::string *error) {
   }
   if (!warren->ready()) {
     warren->abort();
-    safe_set(error) = "tf_df_annotations can't commit changes";
+    safe_error(error) = "tf_df_annotations can't commit changes";
     return false;
   }
   warren->commit();
@@ -931,7 +932,7 @@ bool tf_idf_annotations(std::shared_ptr<Warren> warren, std::string *error,
   std::ofstream anf(working_filename, std::ios::binary);
   if (anf.fail()) {
     warren->abort();
-    safe_set(error) =
+    safe_error(error) =
         "Cannot create file for tf-idf annotations: " + working_filename;
     return false;
   }
@@ -1044,7 +1045,7 @@ bool tf_idf_annotations(std::shared_ptr<Warren> warren, std::string *error,
   std::remove(working_filename.c_str());
   if (!warren->ready()) {
     warren->abort();
-    safe_set(error) = "tf_idf_annotations can't commit changes";
+    safe_error(error) = "tf_idf_annotations can't commit changes";
     return false;
   }
   warren->commit();
@@ -1596,7 +1597,7 @@ bool tf_field_annotations(std::shared_ptr<Warren> warren, std::string *error) {
                                  fields_parameter.end(), tab, -1),
       {}};
   if (field_queries.size() == 0) {
-    safe_set(error) = "No fields defined by warren";
+    safe_error(error) = "No fields defined by warren";
     return false;
   }
   std::vector<std::unique_ptr<Hopper>> fhoppers;
@@ -1684,7 +1685,7 @@ bool tf_field_annotations(std::shared_ptr<Warren> warren, std::string *error) {
     total_length += length;
   }
   if (total_items == 0) {
-    safe_set(error) = "Can't find any items for ranking";
+    safe_error(error) = "Can't find any items for ranking";
     warren->abort();
     return false;
   }
@@ -1706,7 +1707,7 @@ bool tf_field_annotations(std::shared_ptr<Warren> warren, std::string *error) {
   }
   if (!warren->ready()) {
     warren->abort();
-    safe_set(error) = "Can't commit annotations";
+    safe_error(error) = "Can't commit annotations";
     return false;
   }
   warren->commit();

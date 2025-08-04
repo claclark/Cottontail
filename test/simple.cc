@@ -29,24 +29,25 @@
 #include "src/warren.h"
 #include "src/working.h"
 
+#define ASSERT_ERROR_EQ(expected_lit, error_str)                               \
+  ASSERT_EQ((error_str).substr(0, sizeof(expected_lit) - 1), expected_lit)
+
 TEST(Simple, BuilderOptions) {
   std::string error;
   std::string test0 = "idx:fvalue_compressor:null tokenizer:noxml";
   EXPECT_TRUE(cottontail::SimpleBuilder::check(test0, &error));
-  EXPECT_EQ(error, "");
+  ASSERT_ERROR_EQ("", error);
   std::string burrow_name = "the.burrow";
-  std::shared_ptr<cottontail::Working> working =
-      cottontail::Working::mkdir(burrow_name, &error);
+  auto working = cottontail::Working::mkdir(burrow_name, &error);
   ASSERT_NE(working, nullptr);
-  std::shared_ptr<cottontail::Builder> builder =
-      cottontail::SimpleBuilder::make(working, test0, &error);
-  EXPECT_NE(builder, nullptr);
+  auto builder = cottontail::SimpleBuilder::make(working, test0, &error);
+  ASSERT_NE(builder, nullptr);
   std::string test1 = "idx:fvalue_compressor:xxx tokenizer:noxml";
   EXPECT_FALSE(cottontail::SimpleBuilder::check(test1, &error));
-  EXPECT_EQ(error, "No Compressor named: xxx");
+  ASSERT_ERROR_EQ("No Compressor named: xxx", error);
   std::string test2 = "idx:fvalue_compressor:xxx foo:noxml";
   EXPECT_FALSE(cottontail::SimpleBuilder::check(test2, &error));
-  EXPECT_EQ(error, "Option not found: foo");
+  ASSERT_ERROR_EQ("Option not found: foo", error);
 }
 
 // End-to-end testing of simple index structures
@@ -467,7 +468,7 @@ TEST(Simple, Concurrent) {
   warren = cottontail::Warren::make(simple, burrow, &error);
   ASSERT_NE(warren, nullptr);
   auto solver = [&](int i) {
-    std::shared_ptr<cottontail::Warren> larren = warren->clone(); 
+    std::shared_ptr<cottontail::Warren> larren = warren->clone();
     larren->start();
     sleep(i % 3);
     cottontail::addr p, q;

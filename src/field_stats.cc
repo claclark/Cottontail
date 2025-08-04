@@ -33,7 +33,7 @@ std::shared_ptr<Stats> FieldStats::make(const std::string &recipe,
                                  fields_parameter.end(), tab, -1),
       {}};
   if (field_queries.size() == 0) {
-    safe_set(error) = "No fields defined by warren";
+    safe_error(error) = "No fields defined by warren";
     return nullptr;
   }
   std::string weights_parameter;
@@ -46,14 +46,14 @@ std::shared_ptr<Stats> FieldStats::make(const std::string &recipe,
   if (weight_strings.size() == 0)
     return Stats::make("df", recipe, warren, error);
   if (weight_strings.size() != field_queries.size()) {
-    safe_set(error) = "Warren fields and weights have inconsistent lengths";
+    safe_error(error) = "Warren fields and weights have inconsistent lengths";
     return nullptr;
   }
   for (size_t i = 0; i < weight_strings.size(); i++)
     try {
       fval w = std::stof(weight_strings[i]);
       if (w < 0.0) {
-        safe_set(error) = "Negative field weight";
+        safe_error(error) = "Negative field weight";
         return nullptr;
       }
       if (w > 0.0) {
@@ -65,11 +65,11 @@ std::shared_ptr<Stats> FieldStats::make(const std::string &recipe,
         stats->tf_featurizers_.push_back(featurizer);
       }
     } catch (const std::invalid_argument &e) {
-      safe_set(error) = "Non-numberic field weight";
+      safe_error(error) = "Non-numberic field weight";
       return nullptr;
     }
   if (stats->weights_.size() == 0) {
-    safe_set(error) = "No positive field weights";
+    safe_error(error) = "No positive field weights";
     return nullptr;
   }
   std::shared_ptr<Featurizer> df_featurizer =
@@ -83,7 +83,7 @@ std::shared_ptr<Stats> FieldStats::make(const std::string &recipe,
     return nullptr;
   hopper = warren->idx()->hopper(featurizer->featurize("items"));
   if (hopper == nullptr) {
-    safe_set(error) = "No global statistics in warren";
+    safe_error(error) = "No global statistics in warren";
     return nullptr;
   }
   addr p, q, n, items = 0;
@@ -91,13 +91,13 @@ std::shared_ptr<Stats> FieldStats::make(const std::string &recipe,
        hopper->tau(p + 1, &p, &q, &n))
     items += n;
   if (items < 1) {
-    safe_set(error) = "No global statistics in warren";
+    safe_error(error) = "No global statistics in warren";
     return nullptr;
   }
   stats->items_ = items;
   hopper = warren->idx()->hopper(featurizer->featurize("length"));
   if (hopper == nullptr) {
-    safe_set(error) = "No global statistics in warren";
+    safe_error(error) = "No global statistics in warren";
     return nullptr;
   }
   addr length = 0;
@@ -105,7 +105,7 @@ std::shared_ptr<Stats> FieldStats::make(const std::string &recipe,
        hopper->tau(p + 1, &p, &q, &n))
     length += n;
   if (length < 1) {
-    safe_set(error) = "No global statistics in warren";
+    safe_error(error) = "No global statistics in warren";
     return nullptr;
   }
   stats->average_length_ = length / stats->items_;
@@ -114,7 +114,7 @@ std::shared_ptr<Stats> FieldStats::make(const std::string &recipe,
 
 bool FieldStats::check(const std::string &recipe, std::string *error) {
   if (recipe != "") {
-    safe_set(error) = "Bad recipe for FieldStats: " + recipe;
+    safe_error(error) = "Bad recipe for FieldStats: " + recipe;
     return false;
   } else {
     return true;

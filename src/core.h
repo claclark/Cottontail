@@ -44,6 +44,36 @@ template <typename T> T &safe_set(T *thing) {
     return *thing;
 }
 
+struct safe_error_helper {
+  std::string *ptr;
+  const char *full_file;
+  int line;
+  safe_error_helper(std::string *p, const char *f, int l)
+      : ptr(p), full_file(f), line(l) {}
+
+  safe_error_helper &operator=(const char *msg) {
+    std::string fname(full_file);
+    auto pos = fname.find_last_of("/\\");
+    if (pos != std::string::npos)
+      fname = fname.substr(pos + 1);
+    safe_set(ptr) =
+        std::string(msg) + " [" + fname + ":" + std::to_string(line) + "]";
+    return *this;
+  }
+  safe_error_helper &operator=(const std::string &msg) {
+    std::string fname(full_file);
+    auto pos = fname.find_last_of("/\\");
+    if (pos != std::string::npos)
+      fname = fname.substr(pos + 1);
+    safe_set(ptr) =
+        std::string(msg) + " [" + fname + ":" + std::to_string(line) + "]";
+    return *this;
+  }
+  operator std::string &() const { return safe_set(ptr); }
+};
+
+#define safe_error(ptr) safe_error_helper((ptr), __FILE__, __LINE__)
+
 template <typename T> std::shared_ptr<T> shared_array(addr size) {
   return std::shared_ptr<T>(new T[size], [](T *p) { delete[] p; });
 }
@@ -52,7 +82,7 @@ bool okay(const std::string &value);
 std::string okay(bool yes);
 void stamp(std::string label = "");
 addr now();
-std::vector<std::string> split (std::string str, std::string pattern = "\\s+");
+std::vector<std::string> split(std::string str, std::string pattern = "\\s+");
 
 struct Token {
   Token() = default;

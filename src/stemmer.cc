@@ -19,7 +19,7 @@ std::shared_ptr<Stemmer> Stemmer::make(const std::string &name,
     if (stemmer != nullptr)
       stemmer->name_ = name;
   } else {
-    safe_set(error) = "No Stemmer named: " + name;
+    safe_error(error) = "No Stemmer named: " + name;
   }
   return stemmer;
 }

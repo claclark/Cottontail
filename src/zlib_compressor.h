@@ -24,7 +24,7 @@ public:
     if (recipe == "") {
       return true;
     } else {
-      safe_set(error) = "Bad ZlibCompressor recipe";
+      safe_error(error) = "Bad ZlibCompressor recipe";
       return false;
     }
   }

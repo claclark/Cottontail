@@ -350,7 +350,7 @@ std::shared_ptr<Ranker> Ranker::from_pipeline(const std::string &pipeline,
     if (transformer != nullptr) {
       rpp->add_transformer(transformer);
     } else {
-      safe_set(error) = "invalid ranking stage: " + stage;
+      safe_error(error) = "Invalid ranking stage: " + stage;
       return nullptr;
     }
   }

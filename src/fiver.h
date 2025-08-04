@@ -67,12 +67,12 @@ private:
   std::string recipe_() final;
   bool set_parameter_(const std::string &key, const std::string &value,
                       std::string *error) final {
-    safe_set(error) = "Fiver can't set its parameters";
+    safe_error(error) = "Fiver can't set its parameters";
     return false;
   };
   bool get_parameter_(const std::string &key, std::string *value,
                       std::string *error) final {
-    safe_set(error) = "Fiver can't get its parameters";
+    safe_error(error) = "Fiver can't get its parameters";
     return false;
   };
   bool transaction_(std::string *error) final;

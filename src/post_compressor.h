@@ -24,7 +24,7 @@ public:
     if (recipe == "") {
       return true;
     } else {
-      safe_set(error) = "Bad Postcompressor recipe";
+      safe_error(error) = "Bad Postcompressor recipe";
       return false;
     }
   }

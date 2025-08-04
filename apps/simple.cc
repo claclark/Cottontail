@@ -28,7 +28,7 @@ bool marco_build(const std::vector<std::string> &text, std::string options,
   if (text.size() == 0)
     return true;
   if (text.size() > 1) {
-    cottontail::safe_set(error) = "multiple files for MS MARCO build";
+    cottontail::safe_error(error) = "multiple files for MS MARCO build";
     return false;
   }
   options += " tokenizer:noxml";

@@ -158,17 +158,16 @@ std::shared_ptr<Featurizer> HashingFeaturizer::make(const std::string &recipe,
   if (recipe == "") {
     return std::make_shared<HashingFeaturizer>();
   } else {
-    safe_set(error) = "Can't make HashingFeaturizer from recipe : " + recipe;
+    safe_error(error) = "Can't make HashingFeaturizer from recipe : " + recipe;
     return nullptr;
   }
 }
 
-bool HashingFeaturizer::check(const std::string &recipe,
-                                     std::string *error) {
+bool HashingFeaturizer::check(const std::string &recipe, std::string *error) {
   if (recipe == "") {
     return true;
   } else {
-    safe_set(error) = "Can't make HashingFeaturizer from recipe : " + recipe;
+    safe_error(error) = "Can't make HashingFeaturizer from recipe : " + recipe;
     return false;
   }
 }

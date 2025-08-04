@@ -177,7 +177,7 @@ std::shared_ptr<SExpression> SExpression::from_string(std::string s,
   const char *where = parse_expr(s.c_str(), expr, &okay);
   if (okay)
     return expr;
-  safe_set(error) =
+  safe_error(error) =
       "parse error at offset " + std::to_string(where - s.c_str()) + ":" + s;
   return nullptr;
 }

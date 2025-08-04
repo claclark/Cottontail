@@ -49,7 +49,7 @@ std::shared_ptr<Featurizer> Featurizer::make(const std::string &name,
       featurizer->name_ = "null";
     return featurizer;
   } else {
-    safe_set(error) = "No Featurizer named: " + name;
+    safe_error(error) = "No Featurizer named: " + name;
     return nullptr;
   }
 }
@@ -71,7 +71,7 @@ bool Featurizer::check(const std::string &name, const std::string &recipe,
   } else if (name == "vocab") {
     return NullFeaturizer::check(recipe, error);
   } else {
-    safe_set(error) = "No Featurizer named: " + name;
+    safe_error(error) = "No Featurizer named: " + name;
     return false;
   }
 }

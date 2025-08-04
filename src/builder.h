@@ -20,10 +20,10 @@ public:
   bool add_text(const std::string &text, addr *p, addr *q,
                 std::string *error = nullptr) {
     if (failed_) {
-      safe_set(error) = "Can't add text after build failed";
+      safe_error(error) = "Can't add text after build failed";
       return false;
     } else if (finalized_) {
-      safe_set(error) = "Can't add text after build finalized";
+      safe_error(error) = "Can't add text after build finalized";
       return false;
     } else {
       failed_ = !add_text_(text, p, q, error);
@@ -37,10 +37,10 @@ public:
   bool add_annotation(const std::string &tag, addr p, addr q, fval v,
                       std::string *error = nullptr) {
     if (failed_) {
-      safe_set(error) = "Can't add annotations after build failed";
+      safe_error(error) = "Can't add annotations after build failed";
       return false;
     } else if (finalized_) {
-      safe_set(error) = "Can't add annotations after build finalized";
+      safe_error(error) = "Can't add annotations after build finalized";
       return false;
     } else {
       failed_ = !add_annotation_(tag, p, q, v, error);
@@ -58,10 +58,10 @@ public:
   bool add_annotation(addr feature, addr p, addr q, fval v,
                       std::string *error = nullptr) {
     if (failed_) {
-      safe_set(error) = "Can't add annotations after build failed";
+      safe_error(error) = "Can't add annotations after build failed";
       return false;
     } else if (finalized_) {
-      safe_set(error) = "Can't add annotations after build finalized";
+      safe_error(error) = "Can't add annotations after build finalized";
       return false;
     } else {
       failed_ = !add_annotation_(feature, p, q, v, error);
@@ -78,7 +78,7 @@ public:
   };
   bool finalize(std::string *error = nullptr) {
     if (failed_) {
-      safe_set(error) = "Can't finalize a failed build";
+      safe_error(error) = "Can't finalize a failed build";
       return false;
     } else if (finalized_) {
       return true;

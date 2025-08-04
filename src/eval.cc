@@ -31,7 +31,7 @@ bool translate_docno(std::shared_ptr<Warren> warren, const std::string &docno,
                      addr *p, addr *q, std::string *error) {
   std::string container_query = warren->default_container();
   if (container_query == "") {
-    safe_set(error) = "warren has no rankable items";
+    safe_error(error) = "No rankable items in warren";
     return false;
   }
   std::string identifier_key = "id";
@@ -39,7 +39,7 @@ bool translate_docno(std::shared_ptr<Warren> warren, const std::string &docno,
   if (!warren->get_parameter(identifier_key, &identifier_query, error))
     return false;
   if (identifier_query == "") {
-    safe_set(error) = "rankable items in warren don't have identifiers";
+    safe_error(error) = "Rankable items in warren don't have identifiers";
     return false;
   }
   // (>> container_query (>> identifier_query "docno"))
@@ -56,7 +56,7 @@ bool translate_docno(std::shared_ptr<Warren> warren, const std::string &docno,
     return false;
   hopper->tau(minfinity + 1, p, q);
   if (*p == maxfinity) {
-    safe_set(error) = "item not found in warren: " + docno;
+    safe_error(error) = "Item not found in warren: " + docno;
     return false;
   }
   return true;
@@ -81,7 +81,7 @@ bool load_trec_qrels(std::shared_ptr<Warren> warren,
                      bool microsoft_interpretation_of_grades) {
   std::ifstream qrelsf(filename);
   if (qrelsf.fail()) {
-    safe_set(error) = "cannot open qrels file \"" + filename + "\"";
+    safe_error(error) = "Cannot open qrels file \"" + filename + "\"";
     return false;
   }
   std::regex ws_re("\\s+");
@@ -91,7 +91,7 @@ bool load_trec_qrels(std::shared_ptr<Warren> warren,
     std::vector<std::string> field{
         std::sregex_token_iterator(line.begin(), line.end(), ws_re, -1), {}};
     if (field.size() != 4) {
-      safe_set(error) = "format error in qrels file \"" + filename + "\"";
+      safe_error(error) = "Format error in qrels file \"" + filename + "\"";
       return false;
     }
     fval level = std::max(0.0, atof(field[3].c_str()));

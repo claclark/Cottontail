@@ -24,7 +24,7 @@ std::shared_ptr<Idx> Idx::make(const std::string &name,
     if (idx != nullptr)
       idx->name_ = "null";
   } else {
-    safe_set(error) = "No Idx named: " + name;
+    safe_error(error) = "No Idx named: " + name;
     idx = nullptr;
   }
   if (idx != nullptr)
@@ -37,7 +37,7 @@ bool Idx::check(const std::string &name, const std::string &recipe,
   if (name == "" || name == "simple") {
     return SimpleIdx::check(recipe, error);
   } else {
-    safe_set(error) = "No Idx named: " + name;
+    safe_error(error) = "No Idx named: " + name;
     return false;
   }
 }

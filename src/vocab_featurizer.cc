@@ -26,7 +26,7 @@ bool interpret_recipe(const std::string &recipe, std::string *wrapped_name,
   if (cook(recipe, &parameters, error)) {
     if (parameters.find("name") == parameters.end() ||
         parameters.find("recipe") == parameters.end()) {
-      safe_set(error) = "VocabFeaturizer got a bad recipe";
+      safe_error(error) = "VocabFeaturizer got a bad recipe";
       return false;
     } else {
       *wrapped_name = parameters["name"];
@@ -45,7 +45,7 @@ std::shared_ptr<Featurizer>
 VocabFeaturizer::make(const std::string &recipe,
                       std::shared_ptr<Working> working, std::string *error) {
   if (working == nullptr) {
-    safe_set(error) = "VocabFeaturizer requires a working directory";
+    safe_error(error) = "VocabFeaturizer requires a working directory";
     return nullptr;
   }
   std::string wrapped_name;
