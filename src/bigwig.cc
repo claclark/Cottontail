@@ -1,6 +1,7 @@
 #include "src/bigwig.h"
 
 #include <algorithm>
+#include <cassert>
 #include <map>
 #include <memory>
 #include <regex>
@@ -381,6 +382,7 @@ std::shared_ptr<Bigwig> Bigwig::make(const std::string &burrow,
   std::map<std::string, std::string> extra_parameters;
   std::string container_query;
   std::shared_ptr<Stemmer> stemmer;
+  std::string do_merge;
   if (parameters.find("parameters") != parameters.end()) {
     if (!cook(parameters["parameters"], &extra_parameters, error))
       return nullptr;
@@ -398,9 +400,13 @@ std::shared_ptr<Bigwig> Bigwig::make(const std::string &burrow,
       if (stemmer == nullptr)
         return nullptr;
     }
+    auto do_merge_element = extra_parameters.find("merge");
+    if (do_merge_element != extra_parameters.end())
+      do_merge = do_merge_element->second;
   }
   std::shared_ptr<Fluffle> fluffle = Fluffle::make();
   (*fluffle->parameters) = extra_parameters;
+  fluffle->merge = (do_merge == "" || okay(do_merge));
   std::vector<std::string> fivernames;
   if (!fiver_files(working, &fivernames, error))
     return nullptr;
@@ -443,9 +449,6 @@ std::shared_ptr<Bigwig> Bigwig::make(const std::string &burrow,
     bigwig->set_stemmer(stemmer);
   if (container_query != "")
     bigwig->set_default_container(container_query);
-  std::string do_merge;
-  assert(bigwig->get_parameter("merge", &do_merge));
-  fluffle->merge = (do_merge == "" || okay(do_merge));
   bigwig->try_merge();
   return bigwig;
 }

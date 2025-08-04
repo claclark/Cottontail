@@ -679,18 +679,34 @@ bool Fiver::pickle(const std::string &filename, std::string *error) {
   }
   jar.write(reinterpret_cast<char *>(&sequence_start_),
             sizeof(sequence_start_));
-  assert(!jar.fail());
+  if (jar.fail()) {
+    safe_error(error) = "Fiver failed to pickle into: " + filename;
+    jar.close();
+    return false;
+  }
   jar.write(reinterpret_cast<char *>(&sequence_end_), sizeof(sequence_end_));
-  assert(!jar.fail());
+  if (jar.fail()) {
+    safe_error(error) = "Fiver failed to pickle into: " + filename;
+    jar.close();
+    return false;
+  }
   addr n = text_->length() + 1;
   jar.write(reinterpret_cast<char *>(&n), sizeof(n));
   addr m = n + text_compressor_->extra(n);
   std::unique_ptr<char[]> buffer = std::unique_ptr<char[]>(new char[m]);
   m = text_compressor_->crush((char *)(text_->c_str()), n, buffer.get(), m);
   jar.write(reinterpret_cast<char *>(&m), sizeof(m));
-  assert(!jar.fail());
+  if (jar.fail()) {
+    safe_error(error) = "Fiver failed to pickle into: " + filename;
+    jar.close();
+    return false;
+  }
   jar.write(buffer.get(), m);
-  assert(!jar.fail());
+  if (jar.fail()) {
+    safe_error(error) = "Fiver failed to pickle into: " + filename;
+    return false;
+    jar.close();
+  }
   for (auto &posting : *index_)
     posting.second->write(&jar);
   jar.close();
@@ -754,18 +770,34 @@ Fiver::unpickle(const std::string &filename, std::shared_ptr<Working> working,
     fiver->text_compressor_ = text_compressor;
   jar.read(reinterpret_cast<char *>(&fiver->sequence_start_),
            sizeof(fiver->sequence_start_));
-  assert(!jar.fail());
+  if (jar.fail()) {
+    safe_error(error) = "Fiver can't unpickle: " + jarname;
+    jar.close();
+    return nullptr;
+  }
   jar.read(reinterpret_cast<char *>(&fiver->sequence_end_),
            sizeof(fiver->sequence_end_));
-  assert(!jar.fail());
+  if (jar.fail()) {
+    safe_error(error) = "Fiver can't unpickle: " + jarname;
+    jar.close();
+    return nullptr;
+  }
   addr n;
   jar.read(reinterpret_cast<char *>(&n), sizeof(n));
-  assert(!jar.fail());
+  if (jar.fail()) {
+    safe_error(error) = "Fiver can't unpickle: " + jarname;
+    jar.close();
+    return nullptr;
+  }
   addr nx = n + fiver->text_compressor_->extra(n);
   std::unique_ptr<char[]> uncompressed = std::unique_ptr<char[]>(new char[nx]);
   addr m;
   jar.read(reinterpret_cast<char *>(&m), sizeof(m));
-  assert(!jar.fail());
+  if (jar.fail()) {
+    safe_error(error) = "Fiver can't unpickle: " + jarname;
+    jar.close();
+    return nullptr;
+  }
   std::unique_ptr<char[]> compressed = std::unique_ptr<char[]>(new char[m]);
   jar.read(reinterpret_cast<char *>(compressed.get()), m);
   fiver->text_compressor_->tang(compressed.get(), m, uncompressed.get(), nx);

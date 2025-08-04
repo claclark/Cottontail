@@ -29,7 +29,7 @@ inline bool has_zcat_extension(const std::string &filename) {
 }
 
 std::shared_ptr<std::string> inhale_with_zcat(const std::string &filename,
-                                              std::string *error) {
+                                              std::string *error, bool *okay) {
   // All this is pretty ugly..
   // ...and won't work at all on things that aren't fairly unix-like.
   // TODO: replace with a call to a library function?
@@ -43,12 +43,21 @@ std::shared_ptr<std::string> inhale_with_zcat(const std::string &filename,
     zcat_command = "/usr/bin/zcat " + filename;
   } else {
     fp = fopen("/bin/zcat", "r");
-    assert(fp);
+    if (!fp) {
+      safe_error(error) = "Can't find zcat in any of the usual places";
+      safe_set(okay) = false;
+      fclose(fp);
+      return nullptr;
+    }
     fclose(fp);
     zcat_command = "/bin/zcat " + filename;
   }
   FILE *pipe = popen(zcat_command.c_str(), "r");
-  assert(pipe);
+  if (!pipe) {
+    safe_error(error) = "Can't run zcat command: " + zcat_command;
+    safe_set(okay) = false;
+    return nullptr;
+  }
   std::shared_ptr<std::string> contents = std::make_shared<std::string>();
   const size_t buffer_size = 256 * 1024;
   std::array<char, buffer_size> buffer;
@@ -61,7 +70,10 @@ std::shared_ptr<std::string> inhale_with_zcat(const std::string &filename,
 std::shared_ptr<std::string>
 inhale_assuming_uncompressed(const std::string &filename, std::string *error) {
   FILE *fp = fopen(filename.c_str(), "r");
-  assert(fp);
+  if (!fp) {
+    safe_error(error) = "Can't open: " + filename;
+    return nullptr;
+  }
   std::shared_ptr<std::string> contents = std::make_shared<std::string>();
   const size_t buffer_size = 256 * 1024;
   std::array<char, buffer_size> buffer;
@@ -81,8 +93,10 @@ std::shared_ptr<std::string> inhale(const std::string &filename,
     return nullptr;
   }
   fclose(fp);
-  std::shared_ptr<std::string> contents = inhale_with_zcat(filename, error);
-  if (contents)
+  bool okay = true;
+  std::shared_ptr<std::string> contents =
+      inhale_with_zcat(filename, error, &okay);
+  if (contents || !okay)
     return contents;
   return inhale_assuming_uncompressed(filename, error);
 }
