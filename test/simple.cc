@@ -30,17 +30,19 @@
 #include "src/working.h"
 
 #define ASSERT_ERROR_EQ(expected_lit, error_str)                               \
-  ASSERT_EQ((error_str).substr(0, sizeof(expected_lit) - 1), expected_lit)
+  ASSERT_EQ((error_str).substr(0, sizeof((expected_lit)) - 1), (expected_lit))
 
 TEST(Simple, BuilderOptions) {
   std::string error;
   std::string test0 = "idx:fvalue_compressor:null tokenizer:noxml";
   EXPECT_TRUE(cottontail::SimpleBuilder::check(test0, &error));
-  ASSERT_ERROR_EQ("", error);
+  ASSERT_EQ(error, "");
   std::string burrow_name = "the.burrow";
-  auto working = cottontail::Working::mkdir(burrow_name, &error);
+  std::shared_ptr<cottontail::Working> working =
+      cottontail::Working::mkdir(burrow_name, &error);
   ASSERT_NE(working, nullptr);
-  auto builder = cottontail::SimpleBuilder::make(working, test0, &error);
+  std::shared_ptr<cottontail::Builder> builder =
+      cottontail::SimpleBuilder::make(working, test0, &error);
   ASSERT_NE(builder, nullptr);
   std::string test1 = "idx:fvalue_compressor:xxx tokenizer:noxml";
   EXPECT_FALSE(cottontail::SimpleBuilder::check(test1, &error));
