@@ -6,6 +6,7 @@
 
 #include "src/core.h"
 #include "src/hopper.h"
+#include "src/hints.h"
 
 namespace cottontail {
 
@@ -71,7 +72,7 @@ private:
   void uat_(addr k, addr *p, addr *q, fval *v) final;
   void ohr_(addr k, addr *p, addr *q, fval *v) final;
   inline void wait() {
-    if (!ready_) {
+    if (UNLIKELY(!ready_)) {
       cache_line_->wait();
       assert(cache_line_->postings != nullptr &&
              cache_line_->qostings != nullptr);

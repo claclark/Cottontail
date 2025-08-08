@@ -12,14 +12,13 @@ namespace cottontail {
 namespace {
 
 inline addr hopping(const addr *addrs, addr n, addr *current, addr k) {
-  if (addrs[*current] == k)
-    return addrs[*current];
-
-  addr low, high, hop;
-  if (addrs[*current] < k) {
+  assert(n > 0);
+  assert(*current >= 0 && *current < n);
+  addr low, high, hop, c = *current;
+  if (addrs[c] < k) {
     if (addrs[n - 1] < k)
       return maxfinity;
-    low = *current;
+    low = c;
     assert(addrs[low] < k && addrs[n - 1] >= k);
     for (hop = 1; low + hop < n && addrs[low + hop] < k; hop *= 2)
       ;
@@ -27,8 +26,7 @@ inline addr hopping(const addr *addrs, addr n, addr *current, addr k) {
       high = n - 1;
     else
       high = low + hop;
-  } else {
-    assert(addrs[*current] > k);
+  } else if (addrs[c] > k) {
     if (addrs[0] >= k) {
       if (k == minfinity) {
         return minfinity;
@@ -37,14 +35,13 @@ inline addr hopping(const addr *addrs, addr n, addr *current, addr k) {
         return addrs[0];
       }
     }
-    high = *current;
+    high = c;
     assert(addrs[0] < k && addrs[high] > k);
     for (hop = 1; high - hop >= 0 && addrs[high - hop] >= k; hop *= 2)
       ;
-    if (high - hop < 0)
-      low = 0;
-    else
-      low = high - hop;
+    low = (hop > high ? 0 : (high - hop));
+  } else {
+    return addrs[c];
   }
 
   assert(addrs[low] < k && addrs[high] >= k);
@@ -60,11 +57,18 @@ inline addr hopping(const addr *addrs, addr n, addr *current, addr k) {
 }
 
 inline addr gnippoh(const addr *addrs, addr n, addr *current, addr k) {
-  if (addrs[*current] == k)
-    return addrs[*current];
-
-  addr low, high, hop;
-  if (addrs[*current] < k) {
+  assert(n > 0);
+  assert(*current >= 0 && *current < n);
+  addr low, high, hop, c = *current;
+  if (addrs[c] > k) {
+    if (addrs[0] > k)
+      return minfinity;
+    high = c;
+    assert(addrs[0] <= k && addrs[high] > k);
+    for (hop = 1; high - hop >= 0 && addrs[high - hop] > k; hop *= 2)
+      ;
+    low = (hop > high ? 0 : high - hop);
+  } else if (addrs[c] < k) {
     if (addrs[n - 1] <= k) {
       if (k == maxfinity) {
         return maxfinity;
@@ -73,7 +77,7 @@ inline addr gnippoh(const addr *addrs, addr n, addr *current, addr k) {
         return addrs[n - 1];
       }
     }
-    low = *current;
+    low = c;
     assert(addrs[low] < k && addrs[n - 1] > k);
     for (hop = 1; low + hop < n && addrs[low + hop] <= k; hop *= 2)
       ;
@@ -82,17 +86,7 @@ inline addr gnippoh(const addr *addrs, addr n, addr *current, addr k) {
     else
       high = low + hop;
   } else {
-    assert(addrs[*current] > k);
-    if (addrs[0] > k)
-      return minfinity;
-    high = *current;
-    assert(addrs[0] <= k && addrs[high] > k);
-    for (hop = 1; high - hop >= 0 && addrs[high - hop] > k; hop *= 2)
-      ;
-    if (high - hop < 0)
-      low = 0;
-    else
-      low = high - hop;
+    return addrs[c];
   }
 
   assert(addrs[low] <= k && addrs[high] > k);
