@@ -6,3 +6,4 @@ MODULE.bazel.lock
 /bazel-bin
 /bazel-out
 /bazel-testlogs
+/Scrapheap
