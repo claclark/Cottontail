@@ -1,4 +1,4 @@
-#include "src/meadowlark/meadowlark.h"
+#include "meadowlark/meadowlark.h"
 
 #include <cassert>
 #include <iostream>

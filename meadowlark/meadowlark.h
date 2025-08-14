@@ -1,5 +1,5 @@
-#ifndef COTTONTAIL_SRC_MEADOWLARK_MEADOWLARK_H_
-#define COTTONTAIL_SRC_MEADOWLARK_MEADOWLARK_H_
+#ifndef COTTONTAIL_MEADOWLARK_MEADOWLARK_H_
+#define COTTONTAIL_MEADOWLARK_MEADOWLARK_H_
 
 #include <memory>
 #include <string>
@@ -15,4 +15,4 @@ bool append_jsonl(std::shared_ptr<Warren> warren, const std::string &filename,
 } // namespace meadowlark
 } // namespace cottontail
 
-#endif // COTTONTAIL_SRC_MEADOWLARK_MEADOWLARK_H_
+#endif // COTTONTAIL_MEADOWLARK_MEADOWLARK_H_
