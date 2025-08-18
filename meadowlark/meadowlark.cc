@@ -160,10 +160,15 @@ bool append_tsv(std::shared_ptr<Warren> warren, const std::string &filename,
   std::istringstream in(*contents);
   if (header) {
     std::string line;
-    if (!std::getline(in, line)) {
+    if (std::getline(in, line)) {
       std::sregex_token_iterator it(line.begin(), line.end(), delim, -1), end;
       std::vector<std::string> fields(it, end);
-      for (auto &field : fields) {
+      line = "";
+      for (size_t i = 0; i < fields.size(); i++) {
+        std::string field = fields[i];
+        if (i)
+          line += "\t";
+        line += field;
         std::replace_if(field.begin(), field.end(), ::isspace, '_');
         field = ":" + field + ":";
         tags.push_back(warren->featurizer()->featurize(field));
@@ -179,6 +184,8 @@ bool append_tsv(std::shared_ptr<Warren> warren, const std::string &filename,
         warren->end();
         return false;
       }
+      warren->commit();
+      warren->end();
     } else {
       safe_error(error) = "Missing header in: " + filename;
       return false;
@@ -226,7 +233,10 @@ bool append_tsv(std::shared_ptr<Warren> warren, const std::string &filename,
             ":" + std::to_string(tags.size()) + ":"));
       for (size_t i = 0; i < fields.size(); i++) {
         addr p1, q1;
-        if (!twarren->appender()->append(fields[i], &p1, &q1, &terror) ||
+        std::string field = fields[i];
+        if (i + 1 < fields.size())
+          field += "\t";
+        if (!twarren->appender()->append(field, &p1, &q1, &terror) ||
             !twarren->annotator()->annotate(tags[i], p1, q1, &terror)) {
           twarren->abort();
           twarren->end();

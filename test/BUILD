@@ -17,6 +17,7 @@ cc_test(
         "sonnet0.txt",
         "sonnet1.txt",
         "sonnet2.txt",
+        "test.tsv",
         "test0.txt",
         "test.qrels",
     ],
