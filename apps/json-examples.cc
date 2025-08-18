@@ -12,7 +12,7 @@
 #include "src/cottontail.h"
 
 void usage(std::string program_name) {
-  std::cerr << "usage: " << program_name << " [--burrow burrow] \n";
+  std::cerr << "usage: " << program_name << " [--verbose] [--burrow burrow] \n";
 }
 
 void timestamp(size_t number, cottontail::addr t) {
@@ -132,7 +132,7 @@ void example4(std::shared_ptr<cottontail::Warren> warren, bool verbose) {
     std::string the_title = warren->txt()->translate(p_title, q_title);
     if (the_title == "\"\"") // ignore empty titles
       continue;
-   // Explode author array
+    // Explode author array
     for (size_t i = 0;; i++) {
       if (authors.size() <= i) { // explode author array
         std::string feature = ":authors:[" + std::to_string(i) + "]:";
@@ -456,7 +456,7 @@ int main(int argc, char **argv) {
     std::cerr << program_name << ": " << error << "\n";
     return 1;
   }
-  warren->end(); // release read snapshot
+  warren->end();   // release read snapshot
   warren->start(); // new read snapshot; date annoations are now visible
   example8(warren, verbose);
   example9(warren, verbose);

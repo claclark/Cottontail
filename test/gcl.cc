@@ -59,7 +59,7 @@ TEST(GCLTest, E2E) {
   EXPECT_EQ(txt->translate(0, 1), "<DOC>\n<DOCNO> ");
   EXPECT_EQ(txt->translate(-1000, 1), "<DOC>\n<DOCNO> ");
   EXPECT_EQ(txt->translate(8, 10), "Hello world hello ");
-  EXPECT_EQ(txt->translate(14, 10000), "</DOC>\n\n");
+  EXPECT_EQ(txt->translate(14, 10000), "</DOC>\n");
   EXPECT_EQ(txt->translate(100, 10000), "");
 
   std::unique_ptr<cottontail::Hopper> h0 = compile("hello");

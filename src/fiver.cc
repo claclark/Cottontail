@@ -120,10 +120,10 @@ private:
       *q = address_;
       return true;
     }
-    if (text_->length() > 0 && text_->back() != '\n')
-      *text_ += "\n";
     addr offset = text_->length();
     *text_ += text;
+    if (!separator(text.back()))
+      *text_ += "\n";
     std::vector<Token> tokens = tokenizer_->tokenize(featurizer_, text);
     if (tokens.size() == 0) {
       *p = address_ + 1;

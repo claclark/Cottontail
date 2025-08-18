@@ -168,6 +168,8 @@ bool append_tsv(std::shared_ptr<Warren> warren, const std::string &filename,
         std::string field = fields[i];
         if (i)
           line += "\t";
+        else
+          line += "\n";
         line += field;
         std::replace_if(field.begin(), field.end(), ::isspace, '_');
         field = ":" + field + ":";
@@ -236,6 +238,8 @@ bool append_tsv(std::shared_ptr<Warren> warren, const std::string &filename,
         std::string field = fields[i];
         if (i + 1 < fields.size())
           field += "\t";
+        else
+          field += "\n";
         if (!twarren->appender()->append(field, &p1, &q1, &terror) ||
             !twarren->annotator()->annotate(tags[i], p1, q1, &terror)) {
           twarren->abort();

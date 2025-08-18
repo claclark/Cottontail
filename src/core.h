@@ -100,6 +100,12 @@ struct Annotation {
   fval v;
 };
 
+// If an append doesn't end in one of these character we add a newline.
+// Otherwise, we may get a token splice.
+inline bool separator(char c) {
+  return c == ' ' || c == '\t' || c == '\n';
+}
+
 } // namespace cottontail
 
 #endif // COTTONTAIL_SRC_CORE_H_

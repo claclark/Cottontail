@@ -567,15 +567,18 @@ bool SimpleBuilder::build_index(std::string *error) {
 
 bool SimpleBuilder::add_text_(const std::string &text, addr *p, addr *q,
                               std::string *error) {
-  // Even if there's no text, we still add a newline character,
-  // which makes sure that a token at the end of one text doesn't get
-  // glued to a token at the start of the next text.
+  if (text.size() == 0) {
+    *p = address_ + 1;
+    *q = address_;
+    return true;
+  }
+  addr length = text.size();
   std::unique_ptr<char[]> buffer =
-      std::unique_ptr<char[]>(new char[text.size() + 2]);
-  memcpy(buffer.get(), text.c_str(), text.size());
-  buffer[text.size()] = '\n';
-  buffer[text.size() + 1] = '\0';
-  addr length = text.size() + 1;
+      std::unique_ptr<char[]>(new char[length + 2]);
+  memcpy(buffer.get(), text.c_str(), length);
+  if (!separator(buffer[length - 1]))
+    buffer[length++] = '\n';
+  buffer[length] = '\0';
   io_->append(buffer.get(), length);
   std::vector<Token> tokens =
       tokenizer_->tokenize(featurizer_, buffer.get(), length);

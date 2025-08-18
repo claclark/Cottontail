@@ -115,12 +115,19 @@ bool SimpleAppender::append_(const std::string &text, addr *p, addr *q,
     lock_.unlock();
     return false;
   }
+  if (text.size() == 0) {
+    *p = address_ + 1;
+    *q = address_;
+    lock_.unlock();
+    return true;
+  }
+  addr length = text.size();
   std::unique_ptr<char[]> buffer =
-      std::unique_ptr<char[]>(new char[text.size() + 2]);
-  memcpy(buffer.get(), text.c_str(), text.size());
-  buffer[text.size()] = '\n';
-  buffer[text.size() + 1] = '\0';
-  addr length = text.size() + 1;
+      std::unique_ptr<char[]>(new char[length + 2]);
+  memcpy(buffer.get(), text.c_str(), length);
+  if (!separator(buffer[length - 1]))
+    buffer[length++] = '\n';
+  buffer[length] = '\0';
   io_->append(buffer.get(), length);
   std::vector<Token> tokens =
       tokenizer_->tokenize(featurizer_, buffer.get(), length);
