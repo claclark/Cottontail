@@ -9,3 +9,4 @@ MODULE.bazel.lock
 /bazel-out
 /bazel-testlogs
 /Scrapheap
+*.o
