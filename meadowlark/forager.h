@@ -8,6 +8,7 @@
 
 #include "src/annotator.h"
 #include "src/core.h"
+#include "src/featurizer.h"
 #include "src/tokenizer.h"
 #include "src/warren.h"
 
@@ -17,14 +18,16 @@ namespace meadowlark {
 class Forager {
 public:
   static std::shared_ptr<Forager>
-  make(const std::string &name, const std::string &tag,
+  make(std::shared_ptr<Featurizer> featurizer, const std::string &name,
+       const std::string &tag,
        const std::map<std::string, std::string> &parameters,
        std::string *error = nullptr);
-  static std::shared_ptr<Forager> make(const std::string &name,
+  static std::shared_ptr<Forager> make(std::shared_ptr<Featurizer> featurizer,
+                                       const std::string &name,
                                        const std::string &tag,
                                        std::string *error = nullptr) {
     std::map<std::string, std::string> parameters;
-    return make(name, tag, parameters, error);
+    return make(featurizer, name, tag, parameters, error);
   };
   inline bool forage(std::shared_ptr<Forager> annotator,
                      const std::string &text, const std::vector<Token> &tokens,
@@ -39,8 +42,9 @@ public:
   Forager &operator=(Forager &&) = delete;
 
 protected:
-  Forager() {};
+  Forager(){};
   std::string tag_;
+  std::shared_ptr<Featurizer> featurizer_;
 
 private:
   virtual bool forage_(std::shared_ptr<Forager> annotator,
