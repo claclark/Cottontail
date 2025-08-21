@@ -9,6 +9,8 @@
 #include "src/core.h"
 #include "src/tokenizer.h"
 #include "src/warren.h"
+#include "meadowlark/null_forager.h"
+#include "meadowlark/tf-idf_forager.h"
 
 namespace cottontail {
 namespace meadowlark {
@@ -18,7 +20,14 @@ Forager::make(const std::string &name, const std::string &tag,
               std::string *error)
 {
   std::shared_ptr<Forager> forager = nullptr;
-  safe_error(error) = "No Forager named: " + name;
+  if (name == "" || name == "null")
+     forager =  NullForager::make(parameters, error);
+  else if (name == "tf-idf")
+     forager  = TfIdfForager::make(parameters, error);
+  else
+    safe_error(error) = "No Forager named: " + name;
+  if (forager != nullptr)
+    forager->tag_ = name + ":" + tag + ":";
   return forager;
 }
 

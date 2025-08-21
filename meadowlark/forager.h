@@ -39,7 +39,8 @@ public:
   Forager &operator=(Forager &&) = delete;
 
 protected:
-  Forager();
+  Forager() {};
+  std::string tag_;
 
 private:
   virtual bool forage_(std::shared_ptr<Forager> annotator,
