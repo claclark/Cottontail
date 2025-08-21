@@ -180,7 +180,10 @@ VectorHopper::VectorHopper(std::vector<std::unique_ptr<Hopper>> *hoppers) {
 std::unique_ptr<Hopper>
 VectorHopper::make(std::vector<std::unique_ptr<Hopper>> *hoppers, bool outer,
                    std::string *error) {
-  assert(!outer);
+  if (outer) {
+    safe_error(error) = "VectorHopper cannot be used as outer hopper";
+    return nullptr;
+  }
   if (hoppers == nullptr)
     return std::make_unique<EmptyHopper>();
   std::unique_ptr<Hopper> hopper;

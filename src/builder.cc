@@ -103,7 +103,10 @@ std::shared_ptr<std::string> inhale(const std::string &filename,
 
 bool build_trec(const std::vector<std::string> &text,
                 std::shared_ptr<Builder> builder, std::string *error) {
-  assert(builder != nullptr);
+  if (builder == nullptr) {
+    safe_error(error) = "Builder cannot be null";
+    return false;
+  }
   for (auto &filename : text) {
     if (builder->verbose())
       std::cout << "Builder inhaling: " << filename << "\n";

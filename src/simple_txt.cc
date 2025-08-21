@@ -148,7 +148,10 @@ std::shared_ptr<Txt> SimpleTxt::clone_(std::string *error) {
   if (io == nullptr)
     return nullptr;
   std::shared_ptr<SimpleTxt> txt = std::shared_ptr<SimpleTxt>(new SimpleTxt());
-  assert(txt != nullptr);
+  if (txt == nullptr) {
+    safe_error(error) = "Failed to create SimpleTxt clone";
+    return nullptr;
+  }
   txt->io_ = io;
   txt->tokenizer_ = tokenizer_;
   txt->map_ = map_;

@@ -54,7 +54,10 @@ std::shared_ptr<Txt> JsonTxt::wrap(std::shared_ptr<Txt> txt,
   if (txt == nullptr)
     return nullptr;
   std::shared_ptr<JsonTxt> jtxt = std::shared_ptr<JsonTxt>(new JsonTxt());
-  assert(jtxt != nullptr);
+  if (jtxt == nullptr) {
+    safe_error(error) = "Failed to create JsonTxt wrapper";
+    return nullptr;
+  }
   jtxt->txt_ = txt;
   return jtxt;
 }

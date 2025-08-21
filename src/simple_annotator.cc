@@ -70,10 +70,16 @@ SimpleAnnotator::make(const std::string &recipe,
     ann->add_file_size_ = add_file_size;
   ann->posting_factory_ = SimplePostingFactory::make(ann->posting_compressor_,
                                                      ann->fvalue_compressor_);
-  assert(ann->posting_factory_ != nullptr);
+  if (ann->posting_factory_ == nullptr) {
+    safe_error(error) = "Failed to create SimplePostingFactory";
+    return nullptr;
+  }
   ann->added_files_.push_back(ann->pst_filename_);
   ann->added_ = std::make_unique<std::vector<Annotation>>();
-  assert(ann->added_ != nullptr);
+  if (ann->added_ == nullptr) {
+    safe_error(error) = "Failed to create annotations vector";
+    return nullptr;
+  }
   return ann;
 }
 
