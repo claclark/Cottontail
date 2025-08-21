@@ -33,7 +33,10 @@ public:
     }
     std::shared_ptr<BigwigAnnotator> annotator =
         std::shared_ptr<BigwigAnnotator>(new BigwigAnnotator());
-    assert(annotator != nullptr);
+    if (annotator == nullptr) {
+      safe_error(error) = "Failed to create BigwigAnnotator";
+      return nullptr;
+    }
     annotator->fiver_ = fiver;
     return annotator;
   }
@@ -67,7 +70,10 @@ public:
     }
     std::shared_ptr<BigwigAppender> appender =
         std::shared_ptr<BigwigAppender>(new BigwigAppender());
-    assert(appender != nullptr);
+    if (appender == nullptr) {
+      safe_error(error) = "Failed to create BigwigAppender";
+      return nullptr;
+    }
     appender->fiver_ = fiver;
     return appender;
   }

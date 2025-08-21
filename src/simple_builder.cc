@@ -364,7 +364,10 @@ std::shared_ptr<SimpleBuilder> SimpleBuilder::make(
     std::string posting_compressor_name, std::string posting_compressor_recipe,
     std::string fvalue_compressor_name, std::string fvalue_compressor_recipe,
     std::string text_compressor_name, std::string text_compressor_recipe) {
-  assert(working != nullptr && featurizer != nullptr && tokenizer != nullptr);
+  if (working == nullptr || featurizer == nullptr || tokenizer == nullptr) {
+    safe_error(error) = "SimpleBuilder requires valid working, featurizer, and tokenizer";
+    return nullptr;
+  }
   std::shared_ptr<SimpleBuilder> builder =
       std::shared_ptr<SimpleBuilder>(new SimpleBuilder());
   builder->working_ = working;
@@ -417,11 +420,20 @@ std::shared_ptr<SimpleBuilder> SimpleBuilder::make(
     return nullptr;
   builder->posting_factory_ =
       SimplePostingFactory::make(posting_compressor, fvalue_compressor);
-  assert(builder->posting_factory_ != nullptr);
+  if (builder->posting_factory_ == nullptr) {
+    safe_error(error) = "Failed to create SimplePostingFactory";
+    return nullptr;
+  }
   builder->tokens_ = std::make_unique<std::vector<TokRecord>>();
-  assert(builder->tokens_ != nullptr);
+  if (builder->tokens_ == nullptr) {
+    safe_error(error) = "Failed to create tokens vector";
+    return nullptr;
+  }
   builder->annotations_ = std::make_unique<std::vector<Annotation>>();
-  assert(builder->annotations_ != nullptr);
+  if (builder->annotations_ == nullptr) {
+    safe_error(error) = "Failed to create annotations vector";
+    return nullptr;
+  }
   return builder;
 };
 
