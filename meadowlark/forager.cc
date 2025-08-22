@@ -20,18 +20,19 @@ Forager::make(std::shared_ptr<Featurizer> featurizer, const std::string &name,
               const std::map<std::string, std::string> &parameters,
               std::string *error) {
   std::shared_ptr<Forager> forager = nullptr;
+  std::string combined_tag;
+  if (name != "")
+    combined_tag = name + ":";
+  if (tag != "")
+    combined_tag += tag + ":";
   if (featurizer == nullptr)
-    safe_error(error) = "Featurizer can be a nullptr";
-  else if (name == "" || name == "null")
-    forager = NullForager::make(parameters, error);
-  else if (name == "tf-idf")
-    forager = TfIdfForager::make(parameters, error);
+    safe_error(error) = "Featurizer can't be a nullptr";
+  else if (name == "null")
+    forager = NullForager::make(featurizer, combined_tag, parameters, error);
+  else if (name == "" || name == "tf-idf")
+    forager = TfIdfForager::make(featurizer, combined_tag, parameters, error);
   else
     safe_error(error) = "No Forager named: " + name;
-  if (forager != nullptr) {
-    forager->tag_ = name + ":" + tag + ":";
-    forager->featurizer_ = featurizer;
-  }
   return forager;
 }
 

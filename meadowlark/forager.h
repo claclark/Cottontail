@@ -5,6 +5,7 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <mutex>
 
 #include "src/annotator.h"
 #include "src/core.h"
@@ -32,6 +33,7 @@ public:
   inline bool forage(std::shared_ptr<Forager> annotator,
                      const std::string &text, const std::vector<Token> &tokens,
                      std::string *error = nullptr) {
+    std::lock_guard<std::mutex> _(mutex_);
     return forage_(annotator, text, tokens, error);
   };
 
@@ -43,8 +45,7 @@ public:
 
 protected:
   Forager(){};
-  std::string tag_;
-  std::shared_ptr<Featurizer> featurizer_;
+  std::mutex mutex_;
 
 private:
   virtual bool forage_(std::shared_ptr<Forager> annotator,
