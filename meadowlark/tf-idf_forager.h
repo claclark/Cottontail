@@ -7,7 +7,6 @@
 #include <vector>
 
 #include "meadowlark/forager.h"
-#include "src/annotator.h"
 #include "src/core.h"
 #include "src/stemmer.h"
 #include "src/tokenizer.h"
@@ -19,15 +18,9 @@ namespace meadowlark {
 class TfIdfForager : public Forager {
 public:
   static std::shared_ptr<Forager>
-  make(std::shared_ptr<Featurizer> featurizer, const std::string &tag,
+  make(std::shared_ptr<Warren> warren, const std::string &tag,
        const std::map<std::string, std::string> &parameters,
        std::string *error = nullptr);
-  static std::shared_ptr<Forager> make(std::shared_ptr<Featurizer> featurizer,
-                                       const std::string &tag,
-                                       std::string *error = nullptr) {
-    std::map<std::string, std::string> parameters;
-    return make(featurizer, tag, parameters, error);
-  };
   virtual ~TfIdfForager(){};
   TfIdfForager(const TfIdfForager &) = delete;
   TfIdfForager &operator=(const TfIdfForager &) = delete;
@@ -36,16 +29,21 @@ public:
 
 private:
   TfIdfForager(){};
-  bool forage_(std::shared_ptr<Forager> annotator, const std::string &text,
-               const std::vector<Token> &tokens, std::string *error) final;
+  bool forage_(addr p, addr q, std::string *error) final;
+  bool ready_() final;
   std::string tag_;
+  addr p_min_ = maxfinity;
+  addr total_items_ = 0;
+  addr total_length_ = 0;
+  std::map<addr, addr> df_;
   std::shared_ptr<Stemmer> stemmer_;
-  std::map<std::string, std::string> stems;
+  std::map<std::string, std::string> stems_;
   std::shared_ptr<Tokenizer> tokenizer_;
   std::shared_ptr<Featurizer> df_featurizer_;
   std::shared_ptr<Featurizer> tf_featurizer_;
   std::shared_ptr<Featurizer> total_featurizer_;
 };
+
 } // namespace meadowlark
 } // namespace cottontail
 

@@ -15,7 +15,7 @@
 namespace cottontail {
 namespace meadowlark {
 std::shared_ptr<Forager>
-Forager::make(std::shared_ptr<Featurizer> featurizer, const std::string &name,
+Forager::make(std::shared_ptr<Warren> warren, const std::string &name,
               const std::string &tag,
               const std::map<std::string, std::string> &parameters,
               std::string *error) {
@@ -25,14 +25,15 @@ Forager::make(std::shared_ptr<Featurizer> featurizer, const std::string &name,
     combined_tag = name + ":";
   if (tag != "")
     combined_tag += tag + ":";
-  if (featurizer == nullptr)
-    safe_error(error) = "Featurizer can't be a nullptr";
-  else if (name == "null")
-    forager = NullForager::make(featurizer, combined_tag, parameters, error);
-  else if (name == "" || name == "tf-idf")
-    forager = TfIdfForager::make(featurizer, combined_tag, parameters, error);
+  if (name == "null")
+    forager = NullForager::make(warren, combined_tag, parameters, error);
+  else if (name == "" || name == "tf-idf" || name == "tfidf" ||
+           name == "tf_idf")
+    forager = TfIdfForager::make(warren, combined_tag, parameters, error);
   else
     safe_error(error) = "No Forager named: " + name;
+  if (forager != nullptr)
+    forager->warren_ = warren;
   return forager;
 }
 

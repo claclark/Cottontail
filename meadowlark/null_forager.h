@@ -18,17 +18,11 @@ namespace meadowlark {
 class NullForager : public Forager {
 public:
   static std::shared_ptr<Forager>
-  make(std::shared_ptr<Featurizer> featurizer, const std::string &tag,
+  make(std::shared_ptr<Warren> warren, const std::string &tag,
        const std::map<std::string, std::string> &parameters,
        std::string *error = nullptr) {
     return std::shared_ptr<Forager>(new NullForager());
   }
-  static std::shared_ptr<Forager> make(std::shared_ptr<Featurizer> featurizer,
-                                       const std::string &tag,
-                                       std::string *error = nullptr) {
-    std::map<std::string, std::string> parameters;
-    return make(featurizer, tag, parameters, error);
-  };
   virtual ~NullForager(){};
   NullForager(const NullForager &) = delete;
   NullForager &operator=(const NullForager &) = delete;
@@ -37,10 +31,7 @@ public:
 
 private:
   NullForager(){};
-  bool forage_(std::shared_ptr<Forager> annotator, const std::string &text,
-               const std::vector<Token> &tokens, std::string *error) final {
-    return true;
-  }
+  bool forage_(addr p, addr q, std::string *error) final { return true; }
 };
 } // namespace meadowlark
 } // namespace cottontail
