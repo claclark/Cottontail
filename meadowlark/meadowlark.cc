@@ -9,12 +9,34 @@
 #include <string>
 #include <thread>
 
+#include "src/bigwig.h"
 #include "src/core.h"
 #include "src/json.h"
 #include "src/warren.h"
 
 namespace cottontail {
 namespace meadowlark {
+
+const std::string DEFAULT_MEADOW = "a.meadow";
+
+std::shared_ptr<Warren> create_meadow(const std::string &meadow,
+                                      std::string *error) {
+  std::string options = "tokenizer:name:utf8 featurizer@json";
+  return Bigwig::make(meadow, options, error);
+}
+
+std::shared_ptr<Warren> create_meadow(std::string *error) {
+  return create_meadow(DEFAULT_MEADOW, error);
+}
+
+std::shared_ptr<Warren> open_meadow(const std::string &meadow,
+                                    std::string *error) {
+  return Warren::make(meadow, error);
+}
+
+std::shared_ptr<Warren> open_meadow(std::string *error) {
+  return Warren::make(DEFAULT_MEADOW, error);
+}
 
 bool append_path(std::shared_ptr<Warren> warren, const std::string &filename,
                  addr *path_feature, std::string *error) {

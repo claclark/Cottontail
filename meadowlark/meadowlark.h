@@ -8,6 +8,12 @@
 
 namespace cottontail {
 namespace meadowlark {
+std::shared_ptr<Warren> create_meadow(const std::string &meadow,
+                                      std::string *error = nullptr);
+std::shared_ptr<Warren> create_meadow(std::string *error = nullptr);
+std::shared_ptr<Warren> open_meadow(const std::string &meadow,
+                                    std::string *error = nullptr);
+std::shared_ptr<Warren> open_meadow(std::string *error = nullptr);
 bool append_path(std::shared_ptr<Warren> warren, const std::string &filename,
                  addr *path_feature, std::string *error = nullptr);
 bool append_tsv(std::shared_ptr<Warren> warren, const std::string &filename,
