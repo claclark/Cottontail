@@ -219,6 +219,7 @@ bool append_tsv(std::shared_ptr<Warren> warren, const std::string &filename,
   bool failed = false;
   std::mutex sync;
   auto append_worker = [&]() {
+    std::vector<addr> ttags = tags;
     std::string terror;
     std::shared_ptr<cottontail::Warren> twarren;
     {
@@ -228,12 +229,14 @@ bool append_tsv(std::shared_ptr<Warren> warren, const std::string &filename,
       twarren = warren->clone(error);
       if (twarren == nullptr) {
         done = failed = true;
+        safe_error(error) = terror;
         return;
       }
       twarren->start();
       if (!twarren->transaction(&terror)) {
         twarren->end();
         done = failed = true;
+        safe_error(error) = terror;
         return;
       }
     }
@@ -252,9 +255,9 @@ bool append_tsv(std::shared_ptr<Warren> warren, const std::string &filename,
       }
       std::sregex_token_iterator it(line.begin(), line.end(), delim, -1), end;
       fields.assign(it, end);
-      while (fields.size() > tags.size())
-        tags.push_back(warren->featurizer()->featurize(
-            ":" + std::to_string(tags.size()) + ":"));
+      while (fields.size() > ttags.size())
+        ttags.push_back(warren->featurizer()->featurize(
+            ":" + std::to_string(ttags.size()) + ":"));
       for (size_t i = 0; i < fields.size(); i++) {
         addr p1, q1;
         std::string field = fields[i];
@@ -263,7 +266,7 @@ bool append_tsv(std::shared_ptr<Warren> warren, const std::string &filename,
         else
           field += "\n";
         if (!twarren->appender()->append(field, &p1, &q1, &terror) ||
-            !twarren->annotator()->annotate(tags[i], p1, q1, &terror)) {
+            !twarren->annotator()->annotate(ttags[i], p1, q1, &terror)) {
           twarren->abort();
           twarren->end();
           std::lock_guard<std::mutex> _(sync);
