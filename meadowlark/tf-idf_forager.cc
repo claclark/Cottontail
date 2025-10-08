@@ -47,6 +47,12 @@ TfIdfForager::make(std::shared_ptr<Warren> warren, const std::string &tag,
   return forager;
 }
 
+bool TfIdfForager::check(const std::string &tag,
+                         const std::map<std::string, std::string> &parameters,
+                         std::string *error) {
+  return true;
+}
+
 bool TfIdfForager::forage_(addr p, addr q, std::string *error) {
   if (p > q || p == minfinity || q == maxfinity) {
     safe_error(error) = "Invalid range.";
@@ -96,13 +102,13 @@ bool TfIdfForager::ready_() {
     return true;
   for (auto &feature : df_)
     if (!warren_->annotator()->annotate(feature.first, p_min_, p_min_,
-                                       feature.second))
+                                        feature.second))
       return false;
   if (!warren_->annotator()->annotate(total_featurizer_->featurize("items"),
-                                     p_min_, p_min_, total_items_))
+                                      p_min_, p_min_, total_items_))
     return false;
   if (!warren_->annotator()->annotate(total_featurizer_->featurize("length"),
-                                     p_min_, p_min_, total_length_))
+                                      p_min_, p_min_, total_length_))
     return false;
   return true;
 }

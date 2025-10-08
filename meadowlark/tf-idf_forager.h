@@ -21,6 +21,9 @@ public:
   make(std::shared_ptr<Warren> warren, const std::string &tag,
        const std::map<std::string, std::string> &parameters,
        std::string *error = nullptr);
+  static bool check(const std::string &tag,
+                    const std::map<std::string, std::string> &parameters,
+                    std::string *error = nullptr);
   virtual ~TfIdfForager(){};
   TfIdfForager(const TfIdfForager &) = delete;
   TfIdfForager &operator=(const TfIdfForager &) = delete;

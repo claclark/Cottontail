@@ -22,7 +22,12 @@ public:
        const std::map<std::string, std::string> &parameters,
        std::string *error = nullptr) {
     return std::shared_ptr<Forager>(new NullForager());
-  }
+  };
+  static bool check(const std::string &tag,
+                    const std::map<std::string, std::string> &parameters,
+                    std::string *error = nullptr) {
+    return true;
+  };
   virtual ~NullForager(){};
   NullForager(const NullForager &) = delete;
   NullForager &operator=(const NullForager &) = delete;

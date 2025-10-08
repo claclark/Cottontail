@@ -31,6 +31,9 @@ public:
     std::map<std::string, std::string> parameters;
     return make(warren, name, tag, parameters, error);
   };
+  static bool check(const std::string &name, const std::string &tag,
+                    const std::map<std::string, std::string> &parameters,
+                    std::string *error = nullptr);
   inline bool forage(addr p, addr q, std::string *error = nullptr) {
     std::lock_guard<std::mutex> _(mutex_);
     return forage_(p, q, error);
