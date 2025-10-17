@@ -2,6 +2,7 @@
 
 #include <cassert>
 #include <iostream>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <regex>
@@ -9,6 +10,7 @@
 #include <string>
 #include <thread>
 
+#include "meadowlark/forager.h"
 #include "src/bigwig.h"
 #include "src/core.h"
 #include "src/json.h"
@@ -158,6 +160,13 @@ size_t lines(std::shared_ptr<std::string> s) {
   return count;
 }
 constexpr size_t SMALL = 64 * 1024;
+size_t thread_count(size_t threads, size_t count) {
+  if (count <= SMALL)
+    threads = 1;
+  if (threads == 0)
+    threads = std::thread::hardware_concurrency() + 1;
+  return threads;
+}
 } // namespace
 
 bool append_tsv(std::shared_ptr<Warren> warren, const std::string &filename,
@@ -170,10 +179,7 @@ bool append_tsv(std::shared_ptr<Warren> warren, const std::string &filename,
   addr path_feature;
   if (!append_path(warren, filename, &path_feature, error))
     return false;
-  if (lines(contents) <= SMALL)
-    threads = 1;
-  if (threads == 0)
-    threads = std::thread::hardware_concurrency() + 1;
+  threads = thread_count(threads, lines(contents));
   std::string sep = separator;
   if (sep == "")
     sep = "[\t]";
@@ -322,6 +328,77 @@ bool append_tsv(std::shared_ptr<Warren> warren, const std::string &filename,
   for (auto &worker : workers)
     worker.join();
   return !failed;
+}
+
+bool forage(std::shared_ptr<Warren> warren,
+            const std::vector<std::pair<addr, addr>> &intervals,
+            const std::string &name, const std::string &tag,
+            const std::map<std::string, std::string> &parameters,
+            std::string *error, size_t threads) {
+  if (intervals.size() == 0)
+    return true;
+  if (!Forager::check(name, tag, parameters, error))
+    return false;
+  assert(warren != nullptr);
+  threads = thread_count(threads, intervals.size());
+  bool done = false;
+  bool failed = false;
+  std::mutex sync;
+  auto worker = [&](const std::vector<std::pair<addr, addr>> &intervals,
+                    size_t start, size_t n) {
+    std::string terror;
+    std::shared_ptr<cottontail::Warren> twarren;
+    static std::shared_ptr<Forager> forager;
+    {
+      std::lock_guard<std::mutex> _(sync);
+      if (done)
+        return;
+      twarren = warren->clone(error);
+      if (twarren == nullptr) {
+        done = failed = true;
+        safe_error(error) = terror;
+        return;
+      }
+      twarren->start();
+      forager = Forager::make(warren, name, tag, parameters, &terror);
+      if (!forager->transaction(&terror)) {
+        twarren->end();
+        done = failed = true;
+        safe_error(error) = terror;
+        return;
+      }
+    }
+    if (!forager->forage(intervals, start, n, &terror) || !forager->ready()) {
+      std::lock_guard<std::mutex> _(sync);
+      forager->abort();
+      twarren->end();
+      if (!failed) {
+        done = failed = true;
+        safe_error(error) = terror;
+      }
+    }
+    forager->commit();
+    twarren->end();
+  };
+  size_t start = 0;
+  size_t split = intervals.size() / threads;
+  std::vector<std::thread> workers;
+  for (size_t i = 0; i < threads; i++) {
+    size_t n = (i == threads - 1 ? intervals.size() - start : split);
+    workers.emplace_back(std::thread(worker, intervals, start, n));
+    start += split;
+  }
+  for (auto &worker : workers)
+    worker.join();
+  return !failed;
+}
+
+bool forage(std::shared_ptr<Warren> warren,
+            const std::vector<std::pair<addr, addr>> &intervals,
+            const std::string &name, const std::string &tag,
+            std::string *error, size_t threads) {
+  std::map<std::string, std::string> parameters;
+  return forage(warren, intervals, name, tag, parameters, error, threads);
 }
 } // namespace meadowlark
 } // namespace cottontail

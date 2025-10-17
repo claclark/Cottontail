@@ -1,6 +1,7 @@
 #ifndef COTTONTAIL_MEADOWLARK_MEADOWLARK_H_
 #define COTTONTAIL_MEADOWLARK_MEADOWLARK_H_
 
+#include <map>
 #include <memory>
 #include <string>
 
@@ -21,6 +22,15 @@ bool append_tsv(std::shared_ptr<Warren> warren, const std::string &filename,
                 const std::string &separator = "", size_t threads = 0);
 bool append_jsonl(std::shared_ptr<Warren> warren, const std::string &filename,
                   std::string *error = nullptr, size_t threads = 0);
+bool forage(std::shared_ptr<Warren> warren,
+            const std::vector<std::pair<addr, addr>> &intervals,
+            const std::string &name, const std::string &tag,
+            const std::map<std::string, std::string> &parameters,
+            std::string *error = nullptr, size_t threads = 0);
+bool forage(std::shared_ptr<Warren> warren,
+            const std::vector<std::pair<addr, addr>> &intervals,
+            const std::string &name, const std::string &tag,
+            std::string *error = nullptr, size_t threads = 0);
 } // namespace meadowlark
 } // namespace cottontail
 

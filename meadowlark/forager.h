@@ -34,10 +34,15 @@ public:
   static bool check(const std::string &name, const std::string &tag,
                     const std::map<std::string, std::string> &parameters,
                     std::string *error = nullptr);
+  static bool check(const std::string &name, const std::string &tag,
+                    std::string *error = nullptr) {
+    std::map<std::string, std::string> parameters;
+    return check(name, tag, parameters, error);
+  };
   inline bool forage(addr p, addr q, std::string *error = nullptr) {
     std::lock_guard<std::mutex> _(mutex_);
     return forage_(p, q, error);
-  }
+  };
   inline bool forage(const std::vector<std::pair<addr, addr>> &intervals,
                      size_t start, size_t n, std::string *error = nullptr) {
     std::lock_guard<std::mutex> _(mutex_);
