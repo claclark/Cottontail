@@ -395,10 +395,39 @@ bool forage(std::shared_ptr<Warren> warren,
 
 bool forage(std::shared_ptr<Warren> warren,
             const std::vector<std::pair<addr, addr>> &intervals,
-            const std::string &name, const std::string &tag,
-            std::string *error, size_t threads) {
+            const std::string &name, const std::string &tag, std::string *error,
+            size_t threads) {
   std::map<std::string, std::string> parameters;
   return forage(warren, intervals, name, tag, parameters, error, threads);
+}
+
+bool forage(std::shared_ptr<Warren> warren, const std::string &gcl, addr start,
+            addr end, const std::string &name, const std::string &tag,
+            const std::map<std::string, std::string> &parameters,
+            std::string *error, size_t threads) {
+  assert(warren != nullptr);
+  warren->start();
+  std::shared_ptr<cottontail::Hopper> hopper =
+      warren->hopper_from_gcl(gcl, error);
+  if (hopper == nullptr) {
+    warren->end();
+    return false;
+  }
+  end = (end < maxfinity ? end + 1 : maxfinity);
+  addr q, p = (start == minfinity ? minfinity + 1 : start);
+  std::vector<std::pair<addr, addr>> intervals;
+  for (hopper->tau(p, &p, &q); q < end; hopper->tau(p + 1, &p, &q))
+    intervals.emplace_back(p, q);
+  warren->end();
+  return forage(warren, intervals, name, tag, error, threads);
+}
+
+bool forage(std::shared_ptr<Warren> warren, const std::string &gcl,
+            const std::string &name, const std::string &tag,
+            const std::map<std::string, std::string> &parameters,
+            std::string *error, size_t threads) {
+  return forage(warren, gcl, minfinity, maxfinity, name, tag, parameters, error,
+                threads);
 }
 } // namespace meadowlark
 } // namespace cottontail
