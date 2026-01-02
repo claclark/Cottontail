@@ -31,6 +31,14 @@ bool forage(std::shared_ptr<Warren> warren,
             const std::vector<std::pair<addr, addr>> &intervals,
             const std::string &name, const std::string &tag,
             std::string *error = nullptr, size_t threads = 0);
+bool forage(std::shared_ptr<Warren> warren, const std::string &gcl, addr start,
+            addr end, const std::string &name, const std::string &tag,
+            const std::map<std::string, std::string> &parameters,
+            std::string *error = nullptr, size_t threads = 0);
+bool forage(std::shared_ptr<Warren> warren, const std::string &gcl,
+            const std::string &name, const std::string &tag,
+            const std::map<std::string, std::string> &parameters,
+            std::string *error = nullptr, size_t threads = 0);
 } // namespace meadowlark
 } // namespace cottontail
 
