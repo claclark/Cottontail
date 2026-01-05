@@ -23,7 +23,9 @@ const std::string DEFAULT_MEADOW = "a.meadow";
 
 std::shared_ptr<Warren> create_meadow(const std::string &meadow,
                                       std::string *error) {
-  std::string options = "tokenizer:name:utf8 featurizer@json";
+  std::string options =
+      "tokenizer:name:utf8 featurizer@json idx:fvalue_compressor:zlib "
+      "idx:posting_compressor:post txt:compressor:zlib ";
   return Bigwig::make(meadow, options, error);
 }
 

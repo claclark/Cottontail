@@ -157,6 +157,19 @@ cc_binary(
 )
 
 cc_binary(
+    name = "meadowlark",
+    srcs = [
+      "meadowlark.cc",
+    ],
+    deps = [
+      "//src:cottontail",
+    ],
+    linkopts = [
+      "-pthread",
+    ],
+)
+
+cc_binary(
     name = "mt",
     srcs = [
       "mt.cc",
@@ -165,7 +178,7 @@ cc_binary(
       "//src:cottontail",
     ],
     linkopts = [
-      "-lreadline -pthread"
+      "-lreadline -pthread",
     ],
 )
 
