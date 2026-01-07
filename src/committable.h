@@ -20,9 +20,9 @@ public:
   inline bool transaction(std::string *error = nullptr) {
     lock_.lock();
     if (started_) {
-      lock_.unlock();
       safe_error(error) =
           "Commitable does not support concurrent transactions.";
+      lock_.unlock();
       return false;
     }
     started_ = transaction_(error);
@@ -41,9 +41,9 @@ public:
       vote_ = ready_();
       result = vote_;
     }
-    lock_.unlock();
     if (!result)
       safe_error(error) = "Transaction cannot be commited.";
+    lock_.unlock();
     return result;
   }
   inline void commit() {
@@ -55,8 +55,8 @@ public:
   }
   inline void abort() {
     lock_.lock();
-    assert(started_);
-    abort_();
+    if (started_)
+      abort_();
     started_ = readied_ = vote_ = false;
     lock_.unlock();
   }

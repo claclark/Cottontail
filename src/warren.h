@@ -44,9 +44,10 @@ public:
     started_ = true;
   };
   inline void end() {
-    assert(started_);
-    started_ = false;
-    end_();
+    if (started_) {
+      started_ = false;
+      end_();
+    }
   }
   inline bool started() { return started_; }
   inline std::shared_ptr<Working> working() { return working_; };
