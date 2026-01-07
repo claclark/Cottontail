@@ -171,6 +171,25 @@ size_t thread_count(size_t threads, size_t count) {
 }
 } // namespace
 
+namespace {
+struct Barrier {
+  std::mutex mu;
+  std::condition_variable cv;
+  size_t arrived = 0;
+  size_t total;
+
+  explicit Barrier(size_t n) : total(n) {}
+
+  void arrive_and_wait() {
+    std::unique_lock<std::mutex> lk(mu);
+    if (++arrived == total)
+      cv.notify_all();
+    else
+      cv.wait(lk, [&] { return arrived == total; });
+  }
+};
+} // namespace
+
 bool append_tsv(std::shared_ptr<Warren> warren, const std::string &filename,
                 std::string *error, bool header, const std::string &separator,
                 size_t threads) {
@@ -226,6 +245,7 @@ bool append_tsv(std::shared_ptr<Warren> warren, const std::string &filename,
   bool done = false;
   bool failed = false;
   std::mutex sync;
+  Barrier barrier(threads);
   auto append_worker = [&]() {
     std::vector<addr> ttags = tags;
     std::string terror;
@@ -234,19 +254,22 @@ bool append_tsv(std::shared_ptr<Warren> warren, const std::string &filename,
       std::lock_guard<std::mutex> _(sync);
       if (done)
         return;
-      twarren = warren->clone(error);
+      twarren = warren->clone(&terror);
       if (twarren == nullptr) {
         done = failed = true;
         safe_error(error) = terror;
         return;
       }
-      twarren->start();
-      if (!twarren->transaction(&terror)) {
-        twarren->end();
-        done = failed = true;
-        safe_error(error) = terror;
+    }
+    twarren->start();
+    if (!twarren->transaction(&terror)) {
+      twarren->end();
+      std::lock_guard<std::mutex> _(sync);
+      if (failed)
         return;
-      }
+      done = failed = true;
+      safe_error(error) = terror;
+      return;
     }
     addr record_feature = twarren->featurizer()->featurize(":");
     addr p = maxfinity, q = minfinity;
@@ -255,16 +278,36 @@ bool append_tsv(std::shared_ptr<Warren> warren, const std::string &filename,
       addr p0 = maxfinity, q0 = minfinity;
       std::string line;
       {
-        std::lock_guard<std::mutex> _(sync);
-        if (done || !std::getline(in, line)) {
-          done = true;
+        sync.lock();
+        if (failed) {
+          sync.unlock();
+          twarren->abort();
+          twarren->end();
+          return;
+        }
+        if (done) {
+          sync.unlock();
           break;
         }
+        if (!std::getline(in, line)) {
+          done = true;
+          if (!in.eof()) {
+            failed = true;
+            safe_error(error) = "Read error while reading: " + filename;
+            sync.unlock();
+            twarren->abort();
+            twarren->end();
+            return;
+          }
+          sync.unlock();
+          break;
+        }
+        sync.unlock();
       }
       std::sregex_token_iterator it(line.begin(), line.end(), delim, -1), end;
       fields.assign(it, end);
       while (fields.size() > ttags.size())
-        ttags.push_back(warren->featurizer()->featurize(
+        ttags.push_back(twarren->featurizer()->featurize(
             ":" + std::to_string(ttags.size()) + ":"));
       for (size_t i = 0; i < fields.size(); i++) {
         addr p1, q1;
@@ -321,6 +364,7 @@ bool append_tsv(std::shared_ptr<Warren> warren, const std::string &filename,
       }
       return;
     }
+    // sync threads
     twarren->commit();
     twarren->end();
   };
