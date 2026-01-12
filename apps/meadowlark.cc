@@ -33,6 +33,8 @@ int main(int argc, char **argv) {
       warren = cottontail::meadowlark::create_meadow(&error);
     else
       warren = cottontail::meadowlark::create_meadow(meadow, &error);
+    --argc;
+    argv++;
   } else {
     if (meadow == "")
       warren = cottontail::meadowlark::open_meadow(&error);
@@ -43,12 +45,12 @@ int main(int argc, char **argv) {
     std::cerr << program_name << ": " << error << "\n";
     return 1;
   }
-#if 0
   if (!cottontail::meadowlark::append_tsv(warren, std::string(argv[1]),
                                           &error)) {
     std::cerr << program_name << ": " << error << "\n";
     return 1;
   }
+#if 0
   std::shared_ptr<cottontail::Warren> warren =
       cottontail::meadowlark::open_meadow(&error);
   if (warren == nullptr) {

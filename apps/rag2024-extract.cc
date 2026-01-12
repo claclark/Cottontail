@@ -53,7 +53,7 @@ int main(int argc, char **argv) {
       warren->hopper_from_gcl("segment:");
   std::string line;
   while (std::getline(std::cin, line)) {
-    std::vector<std::string> fields = cottontail::split(line);
+    std::vector<std::string> fields = cottontail::split_re(line);
     if (fields.size() < 2) {
       std::cerr << argv[0] << ": format error: " << line << "\n";
       return 1;

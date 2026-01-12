@@ -1,6 +1,8 @@
 #include "meadowlark/meadowlark.h"
 
+#include <atomic>
 #include <cassert>
+#include <cctype>
 #include <iostream>
 #include <map>
 #include <memory>
@@ -153,14 +155,6 @@ bool append_jsonl(std::shared_ptr<Warren> warren, const std::string &filename,
 }
 
 namespace {
-size_t lines(std::shared_ptr<std::string> s) {
-  size_t count = 0;
-  for (char c : *s) {
-    if (c == '\n')
-      ++count;
-  }
-  return count;
-}
 constexpr size_t SMALL = 64 * 1024;
 size_t thread_count(size_t threads, size_t count) {
   if (count <= SMALL)
@@ -171,158 +165,74 @@ size_t thread_count(size_t threads, size_t count) {
 }
 } // namespace
 
-namespace {
-struct Barrier {
-  std::mutex mu;
-  std::condition_variable cv;
-  size_t arrived = 0;
-  size_t total;
-
-  explicit Barrier(size_t n) : total(n) {}
-
-  void arrive_and_wait() {
-    std::unique_lock<std::mutex> lk(mu);
-    if (++arrived == total)
-      cv.notify_all();
-    else
-      cv.wait(lk, [&] { return arrived == total; });
-  }
-};
-} // namespace
-
 bool append_tsv(std::shared_ptr<Warren> warren, const std::string &filename,
-                std::string *error, bool header, const std::string &separator,
-                size_t threads) {
+                std::string *error, std::string separator, size_t threads) {
   assert(warren != nullptr);
-  std::shared_ptr<std::string> contents = inhale(filename, error);
-  if (contents == nullptr)
-    return false;
+  std::vector<std::string> lines;
+  {
+    std::shared_ptr<std::string> contents = inhale(filename, error);
+    if (contents == nullptr)
+      return false;
+    lines = split_lines(*contents);
+  }
   addr path_feature;
   if (!append_path(warren, filename, &path_feature, error))
     return false;
-  threads = thread_count(threads, lines(contents));
-  std::string sep = separator;
-  if (sep == "")
-    sep = "[\t]";
-  std::regex delim(sep);
-  std::vector<addr> tags;
-  std::istringstream in(*contents);
-  if (header) {
-    std::string line;
-    if (std::getline(in, line)) {
-      std::sregex_token_iterator it(line.begin(), line.end(), delim, -1), end;
-      std::vector<std::string> fields(it, end);
-      line = "";
-      for (size_t i = 0; i < fields.size(); i++) {
-        std::string field = fields[i];
-        if (i)
-          line += "\t";
-        else
-          line += "\n";
-        line += field;
-        std::replace_if(field.begin(), field.end(), ::isspace, '_');
-        field = ":" + field + ":";
-        tags.push_back(warren->featurizer()->featurize(field));
+  if (lines.size() == 0)
+    return true;
+  threads = thread_count(threads, lines.size());
+  std::string wsep = separator;
+  if (wsep == "")
+    wsep = "\t";
+  std::vector<std::shared_ptr<cottontail::Warren>> clones;
+  for (size_t i = 0; i < threads; i++) {
+    std::shared_ptr<cottontail::Warren> clone = warren->clone(error);
+    if (clone == nullptr) {
+      for (auto &c : clones) {
+        c->abort();
+        c->end();
       }
-      warren->start();
-      if (!warren->transaction(error))
-        return false;
-      addr p, q;
-      if (!warren->appender()->append(line, &p, &q, error) ||
-          !warren->annotator()->annotate(path_feature, p, q, error) ||
-          !warren->ready(error)) {
-        warren->abort();
-        warren->end();
-        return false;
-      }
-      warren->commit();
-      warren->end();
-    } else {
-      safe_error(error) = "Missing header in: " + filename;
       return false;
     }
+    clone->start();
+    if (!clone->transaction(error)) {
+      clone->end();
+      for (auto &c : clones) {
+        c->abort();
+        c->end();
+      }
+      return false;
+    }
+    clones.push_back(clone);
   }
-  bool done = false;
-  bool failed = false;
-  std::mutex sync;
-  Barrier barrier(threads);
-  auto append_worker = [&]() {
-    std::vector<addr> ttags = tags;
+  std::mutex sync_error;
+  std::atomic<bool> failed(false);
+  auto append_worker = [&](size_t n) {
     std::string terror;
-    std::shared_ptr<cottontail::Warren> twarren;
-    {
-      std::lock_guard<std::mutex> _(sync);
-      if (done)
-        return;
-      twarren = warren->clone(&terror);
-      if (twarren == nullptr) {
-        done = failed = true;
-        safe_error(error) = terror;
-        return;
-      }
-    }
-    twarren->start();
-    if (!twarren->transaction(&terror)) {
-      twarren->end();
-      std::lock_guard<std::mutex> _(sync);
-      if (failed)
-        return;
-      done = failed = true;
-      safe_error(error) = terror;
-      return;
-    }
+    std::shared_ptr<cottontail::Warren> twarren = clones[n];
     addr record_feature = twarren->featurizer()->featurize(":");
+    std::vector<addr> tags;
     addr p = maxfinity, q = minfinity;
-    for (;;) {
-      std::vector<std::string> fields;
+    size_t start = (lines.size() * n) / threads;
+    size_t end = (lines.size() * (n + 1)) / threads;
+    for (size_t i = start; i < end; i++) {
+      if (failed.load(std::memory_order_relaxed))
+        return;
       addr p0 = maxfinity, q0 = minfinity;
-      std::string line;
-      {
-        sync.lock();
-        if (failed) {
-          sync.unlock();
-          twarren->abort();
-          twarren->end();
-          return;
-        }
-        if (done) {
-          sync.unlock();
-          break;
-        }
-        if (!std::getline(in, line)) {
-          done = true;
-          if (!in.eof()) {
-            failed = true;
-            safe_error(error) = "Read error while reading: " + filename;
-            sync.unlock();
-            twarren->abort();
-            twarren->end();
-            return;
-          }
-          sync.unlock();
-          break;
-        }
-        sync.unlock();
-      }
-      std::sregex_token_iterator it(line.begin(), line.end(), delim, -1), end;
-      fields.assign(it, end);
-      while (fields.size() > ttags.size())
-        ttags.push_back(twarren->featurizer()->featurize(
-            ":" + std::to_string(ttags.size()) + ":"));
-      for (size_t i = 0; i < fields.size(); i++) {
+      std::vector<std::string> fields = split_tsv(lines[i], separator);
+      while (fields.size() > tags.size())
+        tags.push_back(twarren->featurizer()->featurize(
+            ":" + std::to_string(tags.size()) + ":"));
+      for (size_t j = 0; j < fields.size(); j++) {
         addr p1, q1;
-        std::string field = fields[i];
-        if (i + 1 < fields.size())
-          field += "\t";
-        else
-          field += "\n";
+        std::string field = fields[j];
+        if (j + 1 < fields.size())
+          field += wsep;
         if (!twarren->appender()->append(field, &p1, &q1, &terror) ||
-            !twarren->annotator()->annotate(ttags[i], p1, q1, &terror)) {
-          twarren->abort();
-          twarren->end();
-          std::lock_guard<std::mutex> _(sync);
-          if (!failed) {
-            done = failed = true;
+            (p1 <= q1 &&
+             !twarren->annotator()->annotate(tags[j], p1, q1, &terror))) {
+          if (!failed.exchange(true, std::memory_order_relaxed)) {
+            std::lock_guard<std::mutex> _(sync_error);
             safe_error(error) = terror;
           }
           return;
@@ -330,12 +240,10 @@ bool append_tsv(std::shared_ptr<Warren> warren, const std::string &filename,
         p0 = std::min(p0, p1);
         q0 = std::max(q0, q1);
       }
-      if (!twarren->annotator()->annotate(record_feature, p0, q0, &terror)) {
-        twarren->abort();
-        twarren->end();
-        std::lock_guard<std::mutex> _(sync);
-        if (!failed) {
-          done = failed = true;
+      if (p0 <= q0 &&
+          !twarren->annotator()->annotate(record_feature, p0, q0, &terror)) {
+        if (!failed.exchange(true, std::memory_order_relaxed)) {
+          std::lock_guard<std::mutex> _(sync_error);
           safe_error(error) = terror;
         }
         return;
@@ -345,35 +253,39 @@ bool append_tsv(std::shared_ptr<Warren> warren, const std::string &filename,
     }
     if (p <= q &&
         !twarren->annotator()->annotate(path_feature, p, q, &terror)) {
-      twarren->abort();
-      twarren->end();
-      std::lock_guard<std::mutex> _(sync);
-      if (!failed) {
-        done = failed = true;
+      if (!failed.exchange(true, std::memory_order_relaxed)) {
+        std::lock_guard<std::mutex> _(sync_error);
         safe_error(error) = terror;
       }
-      return;
     }
-    if (!twarren->ready(&terror)) {
-      twarren->abort();
-      twarren->end();
-      std::lock_guard<std::mutex> _(sync);
-      if (!failed) {
-        done = failed = true;
-        safe_error(error) = terror;
-      }
-      return;
-    }
-    // sync threads
-    twarren->commit();
-    twarren->end();
   };
   std::vector<std::thread> workers;
   for (size_t i = 0; i < threads; i++)
-    workers.emplace_back(std::thread(append_worker));
+    workers.emplace_back(std::thread(append_worker, i));
   for (auto &worker : workers)
     worker.join();
-  return !failed;
+  if (failed.load(std::memory_order_relaxed)) {
+    for (auto &c : clones) {
+      c->abort();
+      c->end();
+    }
+    return false;
+  }
+  for (size_t i = 0; i < clones.size(); i++) {
+    if (!clones[i]->ready(error)) {
+      for (size_t j = 0; j < clones.size(); j++) {
+        if (j < i)
+          clones[j]->abort();
+        clones[j]->end();
+      }
+      return false;
+    }
+  }
+  for (auto &c : clones) {
+    c->commit();
+    c->end();
+  }
+  return true;
 }
 
 bool forage(std::shared_ptr<Warren> warren,
