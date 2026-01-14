@@ -12,7 +12,8 @@ TEST(Meadowlark, TSV) {
   std::shared_ptr<cottontail::Bigwig> warren =
       cottontail::Bigwig::make(burrow, options);
   ASSERT_NE(warren, nullptr);
-  ASSERT_TRUE(cottontail::meadowlark::append_tsv(warren, "test/test.tsv", nullptr));
+  ASSERT_TRUE(cottontail::meadowlark::append_tsv(warren, "test/test.tsv",
+                                                 nullptr, true));
   warren->start();
   std::shared_ptr<cottontail::Hopper> hopper =
       warren->hopper_from_gcl("(<< :0: (>> : (>> :3: \"Mud bath\")))");
@@ -21,8 +22,7 @@ TEST(Meadowlark, TSV) {
   hopper->rho(0, &p, &q);
   std::string pig = warren->txt()->translate(p, q).substr(0, 3);
   EXPECT_EQ(pig, "Pig");
-  hopper = warren->hopper_from_gcl(
-      "(<< :2: (>> : (>> :0: \"Owl\")))");
+  hopper = warren->hopper_from_gcl("(<< :2: (>> : (>> :0: \"Owl\")))");
   ASSERT_NE(hopper, nullptr);
   hopper->ohr(10000, &p, &q);
   std::string mouse = warren->txt()->translate(p, q).substr(0, 5);

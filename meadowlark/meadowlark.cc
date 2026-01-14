@@ -166,7 +166,8 @@ size_t thread_count(size_t threads, size_t count) {
 } // namespace
 
 bool append_tsv(std::shared_ptr<Warren> warren, const std::string &filename,
-                std::string *error, std::string separator, size_t threads) {
+                std::string *error, bool header, std::string separator,
+                size_t threads) {
   assert(warren != nullptr);
   std::vector<std::string> lines;
   {
@@ -210,12 +211,18 @@ bool append_tsv(std::shared_ptr<Warren> warren, const std::string &filename,
   auto append_worker = [&](size_t n) {
     std::string terror;
     std::shared_ptr<cottontail::Warren> twarren = clones[n];
-    addr record_feature = twarren->featurizer()->featurize(":");
+    addr data_feature = twarren->featurizer()->featurize(":");
+    addr header_feature = twarren->featurizer()->featurize("::");
     std::vector<addr> tags;
     addr p = maxfinity, q = minfinity;
     size_t start = (lines.size() * n) / threads;
     size_t end = (lines.size() * (n + 1)) / threads;
     for (size_t i = start; i < end; i++) {
+      addr record_feature;
+      if (header && i == 0)
+        record_feature = header_feature;
+      else
+        record_feature = data_feature;
       if (failed.load(std::memory_order_relaxed))
         return;
       addr p0 = maxfinity, q0 = minfinity;
@@ -251,8 +258,9 @@ bool append_tsv(std::shared_ptr<Warren> warren, const std::string &filename,
       p = std::min(p, p0);
       q = std::max(q, q0);
     }
-    if (p <= q &&
-        !twarren->annotator()->annotate(path_feature, p, q, &terror)) {
+    if ((p <= q &&
+         !twarren->annotator()->annotate(path_feature, p, q, &terror)) ||
+        !twarren->ready(&terror)) {
       if (!failed.exchange(true, std::memory_order_relaxed)) {
         std::lock_guard<std::mutex> _(sync_error);
         safe_error(error) = terror;
@@ -270,16 +278,6 @@ bool append_tsv(std::shared_ptr<Warren> warren, const std::string &filename,
       c->end();
     }
     return false;
-  }
-  for (size_t i = 0; i < clones.size(); i++) {
-    if (!clones[i]->ready(error)) {
-      for (size_t j = 0; j < clones.size(); j++) {
-        if (j < i)
-          clones[j]->abort();
-        clones[j]->end();
-      }
-      return false;
-    }
   }
   for (auto &c : clones) {
     c->commit();
