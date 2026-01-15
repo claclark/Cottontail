@@ -17,6 +17,8 @@ int main(int argc, char **argv) {
     usage(program_name);
     return 0;
   }
+  if (argc <= 1)
+    return 0;
   std::string meadow;
   if (argc > 2 &&
       (argv[1] == std::string("-m") || argv[1] == std::string("--meadow"))) {
@@ -24,9 +26,8 @@ int main(int argc, char **argv) {
     argc -= 2;
     argv += 2;
   }
-  if (argc <= 1) {
+  if (argc <= 1)
     return 0;
-  }
   std::shared_ptr<cottontail::Warren> warren;
   if (argv[1] == std::string("-c") || argv[1] == std::string("--create")) {
     if (meadow == "")
@@ -45,9 +46,30 @@ int main(int argc, char **argv) {
     std::cerr << program_name << ": " << error << "\n";
     return 1;
   }
-  if (!cottontail::meadowlark::append_tsv(warren, std::string(argv[1]),
-                                          &error)) {
-    std::cerr << program_name << ": " << error << "\n";
+  while(argc > 2) {
+    if (argv[1] == std::string("--tsv")) {
+      if (!cottontail::meadowlark::append_tsv(warren, std::string(argv[2]),
+                                              &error)) {
+        std::cerr << program_name << ": " << error << "\n";
+        return 1;
+      }
+    } else if (argv[1] == std::string("--jsonl")) {
+      if (!cottontail::meadowlark::append_jsonl(warren, std::string(argv[2]),
+                                              &error)) {
+        std::cerr << program_name << ": " << error << "\n";
+        return 1;
+      }
+    } else {
+      std::cerr << program_name << ": Invalid argument" << argv[1] << "\n";
+      usage(program_name);
+      return 1;
+    }
+   argc -= 2;
+   argv += 2;
+  }
+  if (argc > 1) {
+    std::cerr << program_name << ": Invalid argument" << argv[1] << "\n";
+    usage(program_name);
     return 1;
   }
 #if 0

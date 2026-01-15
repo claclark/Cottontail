@@ -73,6 +73,8 @@ bool append_path(std::shared_ptr<Warren> warren, const std::string &filename,
 bool append_jsonl(std::shared_ptr<Warren> warren, const std::string &filename,
                   std::string *error, size_t threads) {
   assert(warren != nullptr);
+  if (threads == 0)
+    threads = std::thread::hardware_concurrency() + 1;
   std::ifstream f(filename, std::istream::in);
   if (f.fail()) {
     safe_set(error) = "Cannot open: " + filename;
@@ -81,76 +83,89 @@ bool append_jsonl(std::shared_ptr<Warren> warren, const std::string &filename,
   addr path_feature;
   if (!append_path(warren, filename, &path_feature, error))
     return false;
+  std::vector<std::shared_ptr<cottontail::Warren>> clones;
+  std::vector<std::shared_ptr<Scribe>> scribes;
+  for (size_t i = 0; i < threads; i++) {
+    std::shared_ptr<cottontail::Warren> clone = warren->clone(error);
+    if (clone == nullptr) {
+      for (size_t j = 0; j < i; j++) {
+        scribes[j]->abort();
+        clones[j]->end();
+      }
+      return false;
+    }
+    clone->start();
+    std::shared_ptr<Scribe> scribe = Scribe::make(clone, error);
+    if (!scribe->transaction(error)) {
+      clone->end();
+      for (size_t j = 0; j < i; j++) {
+        scribes[j]->abort();
+        clones[j]->end();
+      }
+      return false;
+    }
+    clones.push_back(clone);
+    scribes.push_back(scribe);
+  }
   bool done = false;
   bool failed = false;
   std::mutex sync;
-  auto append_worker = [&]() {
-    std::shared_ptr<cottontail::Warren> twarren;
-    {
-      std::lock_guard<std::mutex> _(sync);
-      if (done)
-        return;
-      twarren = warren->clone(error);
-      if (twarren == nullptr) {
-        done = failed = true;
-        return;
-      }
-    }
+  auto append_worker = [&](size_t n) {
     std::string terror;
-    twarren->start();
-    std::shared_ptr<Scribe> scribe = Scribe::make(twarren, &terror);
-    if (scribe == nullptr) {
-      twarren->end();
+    std::shared_ptr<cottontail::Warren> twarren = clones[n];
+    std::shared_ptr<Scribe> scribe = scribes[n];
+    for (;;) {
+      std::string line;
       {
         std::lock_guard<std::mutex> _(sync);
-        if (!done) {
+        if (done)
+          break;
+        if (!std::getline(f, line)) {
+          done = true;
+          if (!f.eof()) {
+            *error = "Read error on: " + filename;
+            failed = true;
+            return;
+          }
+          break;
+        }
+      }
+      addr p, q;
+      if (!json_scribe(line, scribe, &p, &q, &terror) ||
+          (p <= q &&
+           !scribe->annotator()->annotate(path_feature, p, q, &terror))) {
+        std::lock_guard<std::mutex> _(sync);
+        if (!failed) {
           done = failed = true;
           *error = terror;
         }
         return;
       }
     }
-    for (;;) {
-      std::string line;
-      {
-        std::lock_guard<std::mutex> _(sync);
-        if (done) {
-          twarren->end();
-          return;
-        }
-        if (!std::getline(f, line)) {
-          twarren->end();
-          if (!done)
-            done = true;
-          return;
-        }
+    if (!scribe->ready(&terror)) {
+      std::lock_guard<std::mutex> _(sync);
+      if (!failed) {
+        done = failed = true;
+        *error = terror;
       }
-      addr p, q;
-      if (!scribe->transaction(&terror) ||
-          !json_scribe(line, scribe, &p, &q, &terror) ||
-          !scribe->annotator()->annotate(path_feature, p, q, &terror) ||
-          !scribe->ready(&terror)) {
-        scribe->abort();
-        twarren->end();
-        {
-          std::lock_guard<std::mutex> _(sync);
-          if (!done) {
-            done = failed = true;
-            *error = terror;
-          }
-          return;
-        }
-      }
-      scribe->commit();
     }
   };
-  if (threads == 0)
-    threads = 2 * std::thread::hardware_concurrency();
   std::vector<std::thread> workers;
   for (size_t i = 0; i < threads; i++)
-    workers.emplace_back(std::thread(append_worker));
+    workers.emplace_back(std::thread(append_worker, i));
   for (auto &worker : workers)
     worker.join();
+  if (failed) {
+    for (size_t i = 0; i < threads; i++) {
+      scribes[i]->abort();
+      clones[i]->end();
+    }
+  } else {
+    for (size_t i = 0; i < threads; i++) {
+      scribes[i]->commit();
+      clones[i]->end();
+    }
+  }
   return !failed;
 }
 
