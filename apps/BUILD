@@ -118,6 +118,19 @@ cc_binary(
 )
 
 cc_binary(
+    name = "forage",
+    srcs = [
+      "forage.cc",
+    ],
+    deps = [
+      "//src:cottontail",
+    ],
+    linkopts = [
+      "-pthread",
+    ],
+)
+
+cc_binary(
     name = "json-examples",
     srcs = [
       "json-examples.cc",

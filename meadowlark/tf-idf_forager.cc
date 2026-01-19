@@ -40,7 +40,7 @@ TfIdfForager::make(std::shared_ptr<Warren> warren, const std::string &tag,
       TaggingFeaturizer::make(warren->featurizer(), tag + "tf", error);
   if (forager->tf_featurizer_ == nullptr)
     return nullptr;
-  forager->tf_featurizer_ =
+  forager->total_featurizer_ =
       TaggingFeaturizer::make(warren->featurizer(), tag + "total", error);
   if (forager->tf_featurizer_ == nullptr)
     return nullptr;
@@ -110,7 +110,7 @@ bool TfIdfForager::ready_() {
   if (!warren_->annotator()->annotate(total_featurizer_->featurize("length"),
                                       p_min_, p_min_, total_length_))
     return false;
-  return true;
+  return warren_->ready();
 }
 
 } // namespace meadowlark

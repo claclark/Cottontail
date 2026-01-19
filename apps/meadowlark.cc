@@ -72,35 +72,5 @@ int main(int argc, char **argv) {
     usage(program_name);
     return 1;
   }
-#if 0
-  std::shared_ptr<cottontail::Warren> warren =
-      cottontail::meadowlark::open_meadow(&error);
-  if (warren == nullptr) {
-    std::cerr << program_name << ": " << error << "\n";
-    return 1;
-  }
-  warren->start();
-  std::shared_ptr<cottontail::meadowlark::Forager> forager =
-      cottontail::meadowlark::Forager::make(warren, "tf_idf", "", &error);
-  if (forager == nullptr) {
-    warren->end();
-    std::cerr << program_name << ": " << error << "\n";
-    return 1;
-  }
-  std::shared_ptr<cottontail::Hopper> hopper =
-      warren->hopper_from_gcl(":1:", &error);
-  if (hopper == nullptr) {
-    warren->end();
-    std::cerr << program_name << ": " << error << "\n";
-    return 1;
-  }
-  if (!forager->forage(hopper, &error)) {
-    warren->end();
-    std::cerr << program_name << ": " << error << "\n";
-    return 1;
-  }
-  warren->end();
-  // test_Example_Nothing();
-#endif
   return 0;
 }

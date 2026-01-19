@@ -46,8 +46,8 @@ public:
   inline bool forage(const std::vector<std::pair<addr, addr>> &intervals,
                      size_t start, size_t n, std::string *error = nullptr) {
     std::lock_guard<std::mutex> _(mutex_);
-    for (auto &interval : intervals)
-      if (!forage_(interval.first, interval.second, error))
+    for (size_t i = start; i < start + n; i++)
+      if (!forage_(intervals[i].first, intervals[i].second, error))
         return false;
     return true;
   };

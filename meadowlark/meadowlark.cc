@@ -306,47 +306,54 @@ bool forage(std::shared_ptr<Warren> warren,
             const std::string &name, const std::string &tag,
             const std::map<std::string, std::string> &parameters,
             std::string *error, size_t threads) {
+  assert(warren != nullptr);
   if (intervals.size() == 0)
     return true;
   if (!Forager::check(name, tag, parameters, error))
     return false;
-  assert(warren != nullptr);
   threads = thread_count(threads, intervals.size());
-  bool done = false;
   bool failed = false;
   std::mutex sync;
   auto worker = [&](const std::vector<std::pair<addr, addr>> &intervals,
                     size_t start, size_t n) {
-    std::string terror;
-    std::shared_ptr<cottontail::Warren> twarren;
-    static std::shared_ptr<Forager> forager;
     {
       std::lock_guard<std::mutex> _(sync);
-      if (done)
+      std::cout << "THREAD " << start << " " << n << "\n" << std::flush;
+    }
+    std::string terror;
+    std::shared_ptr<cottontail::Warren> twarren;
+    {
+      std::lock_guard<std::mutex> _(sync);
+      if (failed)
         return;
       twarren = warren->clone(error);
       if (twarren == nullptr) {
-        done = failed = true;
+        failed = true;
         safe_error(error) = terror;
         return;
       }
-      twarren->start();
-      forager = Forager::make(warren, name, tag, parameters, &terror);
-      if (!forager->transaction(&terror)) {
-        twarren->end();
-        done = failed = true;
+    }
+    twarren->start();
+    std::shared_ptr<Forager> forager =
+        Forager::make(twarren, name, tag, parameters, &terror);
+    if (!forager->transaction(&terror)) {
+      std::lock_guard<std::mutex> _(sync);
+      twarren->end();
+      if (!failed) {
+        failed = true;
         safe_error(error) = terror;
-        return;
       }
+      return;
     }
     if (!forager->forage(intervals, start, n, &terror) || !forager->ready()) {
       std::lock_guard<std::mutex> _(sync);
       forager->abort();
       twarren->end();
       if (!failed) {
-        done = failed = true;
+        failed = true;
         safe_error(error) = terror;
       }
+      return;
     }
     forager->commit();
     twarren->end();
