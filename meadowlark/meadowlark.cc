@@ -28,7 +28,12 @@ std::shared_ptr<Warren> create_meadow(const std::string &meadow,
   std::string options =
       "tokenizer:name:utf8 featurizer@json idx:fvalue_compressor:zlib "
       "idx:posting_compressor:post txt:compressor:zlib ";
-  return Bigwig::make(meadow, options, error);
+  std::shared_ptr<Warren> bigwig = Bigwig::make(meadow, options, error);
+  if (bigwig == nullptr || !bigwig->set_default_container(":", error) ||
+      !bigwig->set_parameter("format", "meadowlark", error))
+    return nullptr;
+  else
+    return bigwig;
 }
 
 std::shared_ptr<Warren> create_meadow(std::string *error) {
@@ -312,14 +317,13 @@ bool forage(std::shared_ptr<Warren> warren,
   if (!Forager::check(name, tag, parameters, error))
     return false;
   threads = thread_count(threads, intervals.size());
+  std::map<std::string, std::string> params = parameters;
+  params["start"] = std::to_string(intervals[0].first);
+  params["end"] = std::to_string(intervals[intervals.size() - 1].second);
   bool failed = false;
   std::mutex sync;
   auto worker = [&](const std::vector<std::pair<addr, addr>> &intervals,
                     size_t start, size_t n) {
-    {
-      std::lock_guard<std::mutex> _(sync);
-      std::cout << "THREAD " << start << " " << n << "\n" << std::flush;
-    }
     std::string terror;
     std::shared_ptr<cottontail::Warren> twarren;
     {
@@ -335,7 +339,7 @@ bool forage(std::shared_ptr<Warren> warren,
     }
     twarren->start();
     std::shared_ptr<Forager> forager =
-        Forager::make(twarren, name, tag, parameters, &terror);
+        Forager::make(twarren, name, tag, params, &terror);
     if (!forager->transaction(&terror)) {
       std::lock_guard<std::mutex> _(sync);
       twarren->end();
@@ -345,7 +349,8 @@ bool forage(std::shared_ptr<Warren> warren,
       }
       return;
     }
-    if (!forager->forage(intervals, start, n, &terror) || !forager->ready()) {
+    if ((start == 0 && !forager->label(&terror)) ||
+        !forager->forage(intervals, start, n, &terror) || !forager->ready()) {
       std::lock_guard<std::mutex> _(sync);
       forager->abort();
       twarren->end();
@@ -397,7 +402,9 @@ bool forage(std::shared_ptr<Warren> warren, const std::string &gcl, addr start,
   for (hopper->tau(p, &p, &q); q < end; hopper->tau(p + 1, &p, &q))
     intervals.emplace_back(p, q);
   warren->end();
-  return forage(warren, intervals, name, tag, error, threads);
+  std::map<std::string, std::string> params;
+  params["gcl"] = gcl;
+  return forage(warren, intervals, name, tag, params, error, threads);
 }
 
 bool forage(std::shared_ptr<Warren> warren, const std::string &gcl,

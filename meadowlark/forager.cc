@@ -16,8 +16,7 @@
 namespace cottontail {
 namespace meadowlark {
 
-namespace {
-std::string combine(const std::string &name, const std::string &tag) {
+std::string forager_label(const std::string &name, const std::string &tag) {
   std::string combined_tag;
   if (name != "")
     combined_tag = name + ":";
@@ -27,7 +26,6 @@ std::string combine(const std::string &name, const std::string &tag) {
     combined_tag = "tf-idf:";
   return combined_tag;
 }
-} // namespace
 
 std::shared_ptr<Forager>
 Forager::make(std::shared_ptr<Warren> warren, const std::string &name,
@@ -35,28 +33,46 @@ Forager::make(std::shared_ptr<Warren> warren, const std::string &name,
               const std::map<std::string, std::string> &parameters,
               std::string *error) {
   std::shared_ptr<Forager> forager = nullptr;
-  std::string combined_tag = combine(name, tag);
+  std::string combined_tag = forager_label(name, tag);
   if (name == "null")
     forager = NullForager::make(warren, combined_tag, parameters, error);
   else if (name == "" || name == "tf-idf")
     forager = TfIdfForager::make(warren, combined_tag, parameters, error);
   else
     safe_error(error) = "No Forager named: " + name;
-  if (forager != nullptr)
+  if (forager != nullptr) {
+    forager->name_ = name;
+    forager->tag_ = tag;
+    forager->parameters_ = parameters;
     forager->warren_ = warren;
+  }
   return forager;
 }
 
 bool Forager::check(const std::string &name, const std::string &tag,
                     const std::map<std::string, std::string> &parameters,
                     std::string *error) {
-  std::string combined_tag = combine(name, tag);
+  std::string combined_tag = forager_label(name, tag);
   if (name == "null")
     return NullForager::check(combined_tag, parameters, error);
   else if (name == "" || name == "tf-idf")
     return TfIdfForager::check(combined_tag, parameters, error);
   safe_error(error) = "No Forager named: " + name;
   return false;
+}
+
+bool Forager::label(std::string *error) {
+  addr p, q;
+  std::string label = "@" + forager_label(name_, tag_);
+  if (!warren_->appender()->append(forager2json(name_, tag_, parameters_), &p,
+                                   &q, error) ||
+      !warren_->annotator()->annotate(warren_->featurizer()->featurize(label),
+                                      p, q, error) ||
+      !warren_->annotator()->annotate(warren_->featurizer()->featurize("@"), p,
+                                      q, error))
+    return false;
+  else
+    return true;
 }
 
 namespace {
@@ -385,72 +401,71 @@ std::string forager2json(const std::string &name, const std::string &tag,
 
 namespace {
 
-  bool json2forager0(const std::string &json, std::string *name,
-                     std::string *tag,
-                     std::map<std::string, std::string> *parameters) {
-    if (!name || !tag || !parameters)
-      return false;
+bool json2forager0(const std::string &json, std::string *name, std::string *tag,
+                   std::map<std::string, std::string> *parameters) {
+  if (!name || !tag || !parameters)
+    return false;
 
-    *name = "";
-    *tag = "";
-    parameters->clear();
+  *name = "";
+  *tag = "";
+  parameters->clear();
 
-    size_t i = 0;
-    if (!expect(json, &i, '{'))
-      return false;
+  size_t i = 0;
+  if (!expect(json, &i, '{'))
+    return false;
 
-    bool saw_name = false;
-    bool saw_tag = false;
+  bool saw_name = false;
+  bool saw_tag = false;
 
-    skip_ws(json, &i);
-    if (!consume(json, &i, '}')) {
-      while (true) {
-        std::string key;
-        if (!parse_string(json, &i, &key))
+  skip_ws(json, &i);
+  if (!consume(json, &i, '}')) {
+    while (true) {
+      std::string key;
+      if (!parse_string(json, &i, &key))
+        return false;
+      if (!expect(json, &i, ':'))
+        return false;
+
+      if (key == "name") {
+        if (!parse_string(json, &i, name))
           return false;
-        if (!expect(json, &i, ':'))
+        saw_name = true;
+      } else if (key == "tag") {
+        if (!parse_string(json, &i, tag))
           return false;
-
-        if (key == "name") {
-          if (!parse_string(json, &i, name))
+        saw_tag = true;
+      } else if (key == "parameters") {
+        skip_ws(json, &i);
+        if (i < json.size() && json[i] == '{') {
+          if (!parse_parameters_object(json, &i, parameters))
             return false;
-          saw_name = true;
-        } else if (key == "tag") {
-          if (!parse_string(json, &i, tag))
-            return false;
-          saw_tag = true;
-        } else if (key == "parameters") {
-          skip_ws(json, &i);
-          if (i < json.size() && json[i] == '{') {
-            if (!parse_parameters_object(json, &i, parameters))
-              return false;
-          } else {
-            if (!skip_value(json, &i))
-              return false;
-          }
         } else {
           if (!skip_value(json, &i))
             return false;
         }
-
-        skip_ws(json, &i);
-        if (consume(json, &i, '}'))
-          break;
-        if (!expect(json, &i, ','))
+      } else {
+        if (!skip_value(json, &i))
           return false;
       }
-    }
 
-    skip_ws(json, &i);
-    if (i != json.size())
-      return false;
-    if (!saw_name)
-      return false;
-    if (!saw_tag)
-      *tag = "";
-    return true;
+      skip_ws(json, &i);
+      if (consume(json, &i, '}'))
+        break;
+      if (!expect(json, &i, ','))
+        return false;
+    }
   }
+
+  skip_ws(json, &i);
+  if (i != json.size())
+    return false;
+  if (!saw_name)
+    return false;
+  if (!saw_tag)
+    *tag = "";
+  return true;
 }
+} // namespace
 
 bool json2forager(const std::string &json, std::string *name, std::string *tag,
                   std::map<std::string, std::string> *parameters,

@@ -39,6 +39,7 @@ public:
     std::map<std::string, std::string> parameters;
     return check(name, tag, parameters, error);
   };
+  bool label(std::string *error = nullptr);
   inline bool forage(addr p, addr q, std::string *error = nullptr) {
     std::lock_guard<std::mutex> _(mutex_);
     return forage_(p, q, error);
@@ -74,8 +75,9 @@ public:
 protected:
   Forager(){};
   std::mutex mutex_;
+  std::string name_, tag_;
+  std::map<std::string, std::string> parameters_;
   std::shared_ptr<Warren> warren_;
-
 private:
   virtual bool forage_(addr p, addr q, std::string *error) = 0;
   bool transaction_(std::string *error) { return warren_->transaction(error); };
@@ -84,6 +86,7 @@ private:
   void abort_() { return warren_->abort(); }
 };
 
+std::string forager_label(const std::string &name, const std::string &tag);
 std::string forager2json(const std::string &name, const std::string &tag,
                          const std::map<std::string, std::string> &parameters);
 bool json2forager(const std::string &json, std::string *name, std::string *tag,
