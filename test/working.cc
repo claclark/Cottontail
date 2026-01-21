@@ -34,7 +34,7 @@ TEST(Working, File) {
       size_t j;
       size_t k = reader->read(reinterpret_cast<char *>(&j), LOTS * sizeof(j),
                               sizeof(j));
-      ASSERT_EQ(k, 0);
+      ASSERT_EQ(k, (size_t)0);
     }
     for (size_t i = LOTS; i > 0; --i) {
       size_t j;
@@ -59,7 +59,7 @@ TEST(Working, File) {
       size_t j;
       size_t k = reader->read(reinterpret_cast<char *>(&j), LOTS * sizeof(j),
                               sizeof(j));
-      ASSERT_EQ(k, 0);
+      ASSERT_EQ(k, (size_t)0);
     }
     for (size_t i = LOTS; i > 0; --i) {
       size_t j;

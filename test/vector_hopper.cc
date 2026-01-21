@@ -24,7 +24,7 @@ TEST(VectorHopper, Basic) {
   std::unique_ptr<cottontail::Hopper> hopper =
       cottontail::gcl::VectorHopper::make(&hoppers, false);
   ASSERT_NE(hopper, nullptr);
-  EXPECT_EQ(hoppers.size(), 0);
+  EXPECT_EQ(hoppers.size(), (size_t) 0);
   cottontail::addr p, q;
   cottontail::fval v;
   size_t i;
@@ -35,7 +35,7 @@ TEST(VectorHopper, Basic) {
     EXPECT_EQ((cottontail::fval)p, v);
     i++;
   }
-  EXPECT_EQ(i, 7);
+  EXPECT_EQ(i, (size_t)7);
   i = 0;
   for (hopper->rho(cottontail::minfinity + 1, &p, &q, &v);
        q < cottontail::maxfinity; hopper->rho(q + 1, &p, &q, &v)) {
@@ -43,7 +43,7 @@ TEST(VectorHopper, Basic) {
     EXPECT_EQ((cottontail::fval)p, v);
     i++;
   }
-  EXPECT_EQ(i, 7);
+  EXPECT_EQ(i, (size_t)7);
   i = 0;
   for (hopper->uat(cottontail::maxfinity - 1, &p, &q, &v);
        q > cottontail::minfinity; hopper->uat(q - 1, &p, &q, &v)) {
@@ -51,7 +51,7 @@ TEST(VectorHopper, Basic) {
     EXPECT_EQ((cottontail::fval)p, v);
     i++;
   }
-  EXPECT_EQ(i, 7);
+  EXPECT_EQ(i, (size_t)7);
   i = 0;
   for (hopper->ohr(cottontail::maxfinity - 1, &p, &q, &v);
        p > cottontail::minfinity; hopper->ohr(p - 1, &p, &q, &v)) {
@@ -59,7 +59,7 @@ TEST(VectorHopper, Basic) {
     EXPECT_EQ((cottontail::fval)p, v);
     i++;
   }
-  EXPECT_EQ(i, 7);
+  EXPECT_EQ(i, (size_t)7);
   hopper->tau(cottontail::maxfinity, &p, &q);
   EXPECT_EQ(p, cottontail::maxfinity);
   EXPECT_EQ(q, cottontail::maxfinity);
@@ -133,7 +133,7 @@ TEST(VectorHopper, Special) {
   std::vector<std::unique_ptr<cottontail::Hopper>> hoppers;
   hopper = cottontail::gcl::VectorHopper::make(&hoppers, false);
   ASSERT_NE(hopper, nullptr);
-  EXPECT_EQ(hoppers.size(), 0);
+  EXPECT_EQ(hoppers.size(), (size_t)0);
   hopper->rho(cottontail::minfinity, &p, &q);
   EXPECT_EQ(p, cottontail::minfinity);
   EXPECT_EQ(q, cottontail::minfinity);
@@ -144,7 +144,7 @@ TEST(VectorHopper, Special) {
       std::make_unique<cottontail::SingletonHopper>(100, 200, 1.0));
   hopper = cottontail::gcl::VectorHopper::make(&hoppers, false);
   ASSERT_NE(hopper, nullptr);
-  EXPECT_EQ(hoppers.size(), 0);
+  EXPECT_EQ(hoppers.size(), (size_t)0);
   hopper->tau(cottontail::minfinity, &p, &q);
   EXPECT_EQ(p, cottontail::minfinity);
   EXPECT_EQ(q, cottontail::minfinity);

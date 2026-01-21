@@ -220,7 +220,7 @@ void test_transaction(std::string compressor_name, std::streamsize chunk_size) {
         nameof_contents, nameof_chunk_map, chunk_size, compressor, &error);
     EXPECT_TRUE(io->transaction());
     io->append(test1, sizeof(test1) - 1);
-    EXPECT_EQ(sizeof(test1) - 1, io->size());
+    EXPECT_EQ((cottontail::addr)(sizeof(test1) - 1), io->size());
     std::unique_ptr<char[]> y = io->read(sizeof(test1) - 5, 3, &n);
     EXPECT_EQ(n, 3);
     EXPECT_STREQ(y.get(), "you");

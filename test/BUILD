@@ -1,3 +1,5 @@
+load("@rules_cc//cc:defs.bzl", "cc_test")
+
 cc_test(
     name = "tests",
     srcs = glob(["**/*.cc"]) + glob(["**/*.h"]),
@@ -5,11 +7,9 @@ cc_test(
         "//src:cottontail",
         "@googletest//:gtest_main",
     ],
-    copts = [
-        "'-std=c++14'",
-    ],
     linkopts = [
-        "-lz -pthread"
+        "-lz",
+        "-pthread",
     ],
     data = [
         "books.json",

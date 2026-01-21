@@ -84,6 +84,12 @@ private:
   void abort_() { return warren_->abort(); }
 };
 
+std::string forager2json(const std::string &name, const std::string &tag,
+                         const std::map<std::string, std::string> &parameters);
+bool json2forager(const std::string &json, std::string *name, std::string *tag,
+                  std::map<std::string, std::string> *parameters,
+                  std::string *error = nullptr);
+
 } // namespace meadowlark
 } // namespace cottontail
 

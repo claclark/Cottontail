@@ -35,10 +35,10 @@ void tokenize_test(std::shared_ptr<cottontail::Tokenizer> tokenizer,
     if (i > 0) {
       EXPECT_GT(tokens[i].offset, tokens[i - 1].offset);
     }
-    EXPECT_NE(tokens[i].length, 0);
+    EXPECT_NE(tokens[i].length, (size_t)0);
     std::vector<std::string> single =
         tokenizer->split(target.substr(tokens[i].offset, tokens[i].length));
-    EXPECT_EQ(single.size(), 1);
+    EXPECT_EQ(single.size(), (size_t)1);
     EXPECT_EQ(tokens[i].feature, featurizer->featurize(single[0]));
   }
 }
@@ -103,23 +103,23 @@ TEST(Utf8Tokenizer, Split) {
   ASSERT_NE(tokenizer, nullptr);
   std::vector<std::string> tokens;
   tokens = tokenizer->split("hello world");
-  EXPECT_EQ(tokens.size(), 2);
+  EXPECT_EQ(tokens.size(), (size_t)2);
   EXPECT_EQ(tokens[0], "hello");
   EXPECT_EQ(tokens[1], "world");
   tokens = tokenizer->split("HeLlO     wOrLd");
-  EXPECT_EQ(tokens.size(), 2);
+  EXPECT_EQ(tokens.size(), (size_t)2);
   EXPECT_EQ(tokens[0], "hello");
   EXPECT_EQ(tokens[1], "world");
   tokens = tokenizer->split("");
-  EXPECT_EQ(tokens.size(), 0);
+  EXPECT_EQ(tokens.size(), (size_t)0);
   tokens = tokenizer->split("。. ...");
-  EXPECT_EQ(tokens.size(), 0);
+  EXPECT_EQ(tokens.size(), (size_t)0);
   std::string s;
   size_t n = sizeof(libai) / sizeof(char *);
   for (size_t i = 0; i < n; i++)
     s += libai[i] + std::string("\n");
   tokens = tokenizer->split(s);
-  EXPECT_EQ(tokens.size(), 64);
+  EXPECT_EQ(tokens.size(), (size_t)64);
   EXPECT_EQ(tokens[0], "自");
   EXPECT_EQ(tokens[2], "李");
   EXPECT_EQ(tokens[6], "li");
@@ -134,7 +134,7 @@ TEST(Utf8Tokenizer, Split) {
   tokens = tokenizer->split(
       "Μήνυμα της Προέδρου της Δημοκρατίας Κατερίνας Σακελλαροπούλου προς τον "
       "απόδημο Ελληνισμό με την ευκαιρία της εθνικής εορτής της 25ης Μαρτίου.");
-  EXPECT_EQ(tokens.size(), 20);
+  EXPECT_EQ(tokens.size(), (size_t)20);
   EXPECT_EQ(tokens[0], "μήνυμα");
   EXPECT_EQ(tokens[6], "σακελλαροπούλου");
   EXPECT_EQ(tokens[18], "25ησ");
@@ -144,7 +144,7 @@ TEST(Utf8Tokenizer, Split) {
                        "Heart 💓 Beating Heart 🖤 Black Heart 💟 Heart "
                        "Decoration 💔 Broken Heart 💛 Yellow Heart");
 
-  EXPECT_EQ(tokens.size(), 29);
+  EXPECT_EQ(tokens.size(), (size_t)29);
   EXPECT_EQ(tokens[0], "💙");
   EXPECT_EQ(tokens[5], "heart");
   EXPECT_EQ(tokens[10], "心");
@@ -152,14 +152,14 @@ TEST(Utf8Tokenizer, Split) {
   EXPECT_EQ(tokens[28], "heart");
   tokens = tokenizer->split(
       "조태열 장관, 제6차 한-호주 외교･국방(2+2) 장관회의 개최");
-  EXPECT_EQ(tokens.size(), 11);
+  EXPECT_EQ(tokens.size(), (size_t)11);
   EXPECT_EQ(tokens[2], "제6차");
   EXPECT_EQ(tokens[10], "개최");
   tokens = tokenizer->split(
       "Zu unseren Werten stehen, Risiken vorbeugen, aber auch Gemeinsamkeiten "
       "erkennen und Wege der Zusammenarbeit finden – so sehe ich meine "
       "Aufgabe.  – Botschafterin Dr. Patricia Flor");
-  EXPECT_EQ(tokens.size(), 24);
+  EXPECT_EQ(tokens.size(), (size_t)24);
   EXPECT_EQ(tokens[0], "zu");
   EXPECT_EQ(tokens[8], "gemeinsamkeiten");
   EXPECT_EQ(tokens[15], "so");
@@ -167,7 +167,7 @@ TEST(Utf8Tokenizer, Split) {
   EXPECT_EQ(tokens[23], "flor");
   tokens = tokenizer->split("5月7日、金杉大使は、北京市在住の中村京子さん（93歳"
                             "）を公邸に招き、面会しました。");
-  EXPECT_EQ(tokens.size(), 31);
+  EXPECT_EQ(tokens.size(), (size_t)31);
   EXPECT_EQ(tokens[0], "5");
   EXPECT_EQ(tokens[1], "月");
   EXPECT_EQ(tokens[19], "さん");
@@ -176,7 +176,7 @@ TEST(Utf8Tokenizer, Split) {
   tokens = tokenizer->split(
       "استقبل معالي نائب وزير الخارجية المهندس وليد بن عبدالكريم الخريجي، "
       "اليوم، دولة رئيس وزراء فلسطين وزير الخارجية الدكتور ...");
-  EXPECT_EQ(tokens.size(), 18);
+  EXPECT_EQ(tokens.size(), (size_t)18);
   EXPECT_EQ(tokens[0], "استقبل");
   EXPECT_EQ(tokens[17], "الدكتور");
 }
@@ -273,15 +273,15 @@ TEST(Utf8Tokenizer, Boundary) {
   ASSERT_NE(tokenizer, nullptr);
   std::string text = "0.5000";
   std::vector<cottontail::Token> tokens = tokenizer->tokenize(featurizer, text);
-  EXPECT_EQ(tokens.size(), 2);
+  EXPECT_EQ(tokens.size(), (size_t)2);
   EXPECT_EQ(tokens[0].address, 0);
-  EXPECT_EQ(tokens[0].offset, 0);
-  EXPECT_EQ(tokens[0].length, 1);
+  EXPECT_EQ(tokens[0].offset, (size_t)0);
+  EXPECT_EQ(tokens[0].length, (size_t)1);
   EXPECT_EQ(tokens[1].address, 1);
-  EXPECT_EQ(tokens[1].offset, 2);
-  EXPECT_EQ(tokens[1].length, 4);
+  EXPECT_EQ(tokens[1].offset, (size_t)2);
+  EXPECT_EQ(tokens[1].length, (size_t)4);
   std::vector<std::string> splits = tokenizer->split(text);
-  EXPECT_EQ(splits.size(), 2);
+  EXPECT_EQ(splits.size(), (size_t)2);
   EXPECT_EQ(splits[0], "0");
   EXPECT_EQ(splits[1], "5000");
 }

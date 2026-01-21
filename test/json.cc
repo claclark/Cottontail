@@ -18,9 +18,9 @@ TEST(JSON, Tokens) {
       cottontail::Tokenizer::make("utf8", "");
   ASSERT_NE(tokenizer, nullptr);
   std::vector<std::string> t = tokenizer->split(s);
-  EXPECT_EQ(t.size(), 10);
+  EXPECT_EQ(t.size(), (size_t) 10);
   for (size_t i = 0; i < t.size(); i++)
-    EXPECT_EQ(t[i].length(), 3);
+    EXPECT_EQ(t[i].length(), (size_t) 3);
   const char *c = s.c_str();
   for (size_t i = 0; i < 10; i++)
     EXPECT_TRUE(cottontail::json_internal_token(c + 3 * i, 3));
@@ -175,10 +175,10 @@ void check_json(std::shared_ptr<cottontail::Warren> warren) {
     for (hopper->tau(cottontail::minfinity + 1, &p, &q);
          p < cottontail::maxfinity; hopper->tau(p + 1, &p, &q)) {
       t = cottontail::json_translate(warren->txt()->translate(p, q));
-      EXPECT_EQ(t.length(), 6);
+      EXPECT_EQ(t.length(), (size_t) 6);
       i++;
     }
-    EXPECT_EQ(i, 13);
+    EXPECT_EQ(i, (size_t)13);
     EXPECT_EQ(t, "\"0000\"");
   }
   {
@@ -213,10 +213,10 @@ void check_json(std::shared_ptr<cottontail::Warren> warren) {
     for (hopper->tau(cottontail::minfinity + 1, &p, &q);
          p < cottontail::maxfinity; hopper->tau(p + 1, &p, &q)) {
       t = cottontail::json_translate(warren->txt()->translate(p, q));
-      EXPECT_GT(t.length(), 5);
+      EXPECT_GT(t.length(), (size_t) 5);
       i++;
     }
-    EXPECT_EQ(i, 11);
+    EXPECT_EQ(i, (size_t)11);
   }
   {
     std::shared_ptr<cottontail::Hopper> hopper =
@@ -238,7 +238,7 @@ void check_json(std::shared_ptr<cottontail::Warren> warren) {
       EXPECT_EQ(t, "SGML");
       i++;
     }
-    EXPECT_EQ(i, 3);
+    EXPECT_EQ(i, (size_t)3);
   }
   warren->end();
 }

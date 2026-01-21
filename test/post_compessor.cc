@@ -20,7 +20,7 @@ TEST(PostCompressor, Basic) {
   char out[1000];
   size_t n = compressor->crush(reinterpret_cast<char *>(list), sizeof(list),
                                out, 1000);
-  EXPECT_EQ(n, 16);
+  EXPECT_EQ(n, (size_t) 16);
   cottontail::addr tsil[1000];
   size_t m = compressor->tang(out, n, reinterpret_cast<char *>(tsil), 1000);
   ASSERT_EQ(m, sizeof(list));

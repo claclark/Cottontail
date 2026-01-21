@@ -82,7 +82,7 @@ TEST(Ranking, Algorithms) {
   parameters["mu"] = 16.0;
   std::vector<cottontail::RankingResult> results =
       cottontail::lmd_ranking(warren, query, parameters);
-  EXPECT_EQ(results.size(), 3);
+  EXPECT_EQ(results.size(), (size_t) 3);
   gcl = "(... <DOCNO> </DOCNO>)";
   std::unique_ptr<cottontail::Hopper> docno =
       warren->hopper_from_gcl(gcl, &error);
@@ -93,32 +93,32 @@ TEST(Ranking, Algorithms) {
   std::string query2 = "cat in the hat";
   std::vector<cottontail::RankingResult> results2 =
       cottontail::bm25_ranking(warren, query2);
-  EXPECT_EQ(results2.size(), 1);
+  EXPECT_EQ(results2.size(), (size_t) 1);
   docno->tau(results2[0].p(), &p, &q);
   topdoc = warren->txt()->translate(p, q);
   EXPECT_EQ(topdoc, "<DOCNO> doc-002 </DOCNO>\n");
   std::vector<cottontail::RankingResult> results3 =
       cottontail::icover_ranking(warren, query, container);
-  EXPECT_EQ(results3.size(), 4);
+  EXPECT_EQ(results3.size(), (size_t) 4);
   docno->tau(results3[0].container_p(), &p, &q);
   topdoc = warren->txt()->translate(p, q);
   EXPECT_EQ(topdoc, "<DOCNO> doc-001 </DOCNO>\n");
   std::vector<std::string> terms = rsj_prf(warren, results3);
-  EXPECT_NE(terms.size(), 0);
+  EXPECT_NE(terms.size(), (size_t) 0);
   terms = qa_prf(warren, results3);
-  EXPECT_NE(terms.size(), 0);
+  EXPECT_NE(terms.size(), (size_t) 0);
   terms = kld_prf(warren, results3);
-  EXPECT_NE(terms.size(), 0);
+  EXPECT_NE(terms.size(), (size_t) 0);
   std::vector<cottontail::RankingResult> results4 =
       cottontail::tiered_ranking(warren, query, container);
-  EXPECT_EQ(results4.size(), 3);
+  EXPECT_EQ(results4.size(), (size_t) 3);
   docno->tau(results4[0].p(), &p, &q);
   topdoc = warren->txt()->translate(p, q);
   EXPECT_EQ(topdoc, "<DOCNO> doc-001 </DOCNO>\n");
   std::string gcl2 = "(^ hello world)";
   std::vector<cottontail::RankingResult> results5 =
       cottontail::ssr_ranking(warren, gcl2, container);
-  EXPECT_EQ(results5.size(), 1);
+  EXPECT_EQ(results5.size(), (size_t) 1);
   docno->tau(results5[0].p(), &p, &q);
   topdoc = warren->txt()->translate(p, q);
   EXPECT_EQ(topdoc, "<DOCNO> doc-001 </DOCNO>\n");
@@ -155,7 +155,7 @@ TEST(Ranking, DF) {
   std::string query = "cat in the hat";
   std::vector<cottontail::RankingResult> results =
       cottontail::bm25_ranking(warren, query);
-  EXPECT_EQ(results.size(), 1);
+  EXPECT_EQ(results.size(), (size_t) 1);
   std::string gcl = "(... <DOCNO> </DOCNO>)";
   std::unique_ptr<cottontail::Hopper> docno =
       warren->hopper_from_gcl(gcl, &error);

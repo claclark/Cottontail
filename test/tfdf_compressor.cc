@@ -43,16 +43,16 @@ TEST(TfdfCompressor, Basic) {
   a = original;
   length = (a - original) * sizeof(cottontail::addr);
   n = compressor->crush((char *)original, length, crushed, 1000);
-  ASSERT_EQ(n, 0);
+  ASSERT_EQ(n, (size_t)0);
   m = compressor->tang(crushed, n, (char *)tanged,
                        sizeof(cottontail::addr) * 1000);
-  ASSERT_EQ(m, 0);
+  ASSERT_EQ(m, (size_t)0);
   a = original;
   *a++ = 1;
   *a++ = 1;
   length = (a - original) * sizeof(cottontail::addr);
   n = compressor->crush((char *)original, length, crushed, 1000);
-  ASSERT_EQ(n, 1);
+  ASSERT_EQ(n, (size_t)1);
   m = compressor->tang(crushed, n, (char *)tanged,
                        sizeof(cottontail::addr) * 1000);
   ASSERT_EQ(m, 2 * sizeof(cottontail::addr));
@@ -131,5 +131,5 @@ TEST(TfdfCompressor, Component) {
   *a++ = 2929292929299;
   length = (a - original) * sizeof(cottontail::addr);
   n = compressor->crush((char *)original, length, crushed, 1000);
-  ASSERT_EQ(n,0);
+  ASSERT_EQ(n, (size_t)0);
 }
