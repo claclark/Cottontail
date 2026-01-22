@@ -1,5 +1,5 @@
-#ifndef COTTONTAIL_MEADOWLARK_LARK_STATS_H_
-#define COTTONTAIL_MEADOWLARK_LARK_STATS_H_
+#ifndef COTTONTAIL_MEADOWLARK_TF_IDF_STATS_H_
+#define COTTONTAIL_MEADOWLARK_TF_IDF_STATS_H_
 
 #include <memory>
 #include <string>
@@ -10,22 +10,23 @@
 #include "src/warren.h"
 
 namespace cottontail {
+namespace meadowlark {
 
-class LarkStats final : public Stats {
+class TfIdfStats final : public Stats {
 public:
   static std::shared_ptr<Stats> make(const std::string &recipe,
                                      std::shared_ptr<Warren> warren,
                                      std::string *error = nullptr);
   static bool check(const std::string &recipe, std::string *error = nullptr);
 
-  virtual ~LarkStats(){};
-  LarkStats(const LarkStats &) = delete;
-  LarkStats &operator=(const LarkStats &) = delete;
-  LarkStats(LarkStats &&) = delete;
-  LarkStats &operator=(LarkStats &&) = delete;
+  virtual ~TfIdfStats(){};
+  TfIdfStats(const TfIdfStats &) = delete;
+  TfIdfStats &operator=(const TfIdfStats &) = delete;
+  TfIdfStats(TfIdfStats &&) = delete;
+  TfIdfStats &operator=(TfIdfStats &&) = delete;
 
 protected:
-  LarkStats(std::shared_ptr<Warren> warren) : Stats(warren){};
+  TfIdfStats(std::shared_ptr<Warren> warren) : Stats(warren){};
 
 private:
   std::string recipe_() final;
@@ -34,10 +35,15 @@ private:
   fval idf_(const std::string &term) final;
   fval rsj_(const std::string &term) final;
   std::unique_ptr<Hopper> tf_hopper_(const std::string &term) final;
+  std::unique_ptr<Hopper> container_hopper_() final;
   fval items_;
+  std::string tag_;
+  std::string content_query_;
+  std::string container_query_;
   fval average_length_;
   std::shared_ptr<Featurizer> tf_featurizer_;
 };
 
+} // namespace meadowlake
 } // namespace cottontail
-#endif // COTTONTAIL_MEADOWLARK_LARK_STATS_H_
+#endif // COTTONTAIL_MEADOWLARK_TF_IDF_STATS_H_
