@@ -36,12 +36,15 @@ private:
   fval rsj_(const std::string &term) final;
   std::unique_ptr<Hopper> tf_hopper_(const std::string &term) final;
   std::unique_ptr<Hopper> container_hopper_() final;
-  fval items_;
   std::string tag_;
+  std::string label_;
   std::string content_query_;
   std::string container_query_;
-  fval average_length_;
+  std::shared_ptr<Stemmer> stemmer_;
+  std::shared_ptr<Tokenizer> tokenizer_;
   std::shared_ptr<Featurizer> tf_featurizer_;
+  fval items_;
+  fval average_length_;
 };
 
 } // namespace meadowlake
