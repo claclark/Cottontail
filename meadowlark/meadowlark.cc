@@ -21,6 +21,14 @@
 namespace cottontail {
 namespace meadowlark {
 
+bool is_meadow(std::shared_ptr<Warren> warren, std::string *error) {
+  std::string value;
+  if (warren->get_parameter("format", &value) && value == "meadowlark")
+    return true;
+  safe_set(error) = "Not a meadow";
+  return false;
+}
+
 const std::string DEFAULT_MEADOW = "a.meadow";
 
 std::shared_ptr<Warren> create_meadow(const std::string &meadow,
@@ -42,7 +50,15 @@ std::shared_ptr<Warren> create_meadow(std::string *error) {
 
 std::shared_ptr<Warren> open_meadow(const std::string &meadow,
                                     std::string *error) {
-  return Warren::make(meadow, error);
+  std::shared_ptr<Warren> warren = Warren::make(meadow, error);
+  warren->start();
+  if (is_meadow(warren, error)) {
+    warren->end();
+    return warren;
+  } else {
+    warren->end();
+    return nullptr;
+  }
 }
 
 std::shared_ptr<Warren> open_meadow(std::string *error) {

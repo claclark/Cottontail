@@ -9,6 +9,7 @@
 #include "src/core.h"
 #include "src/hopper.h"
 #include "src/tagging_featurizer.h"
+#include "src/tf_hopper.h"
 #include "src/warren.h"
 
 namespace cottontail {
@@ -139,15 +140,47 @@ bool TfIdfStats::have_(const std::string &name) {
 
 fval TfIdfStats::avgl_() { return average_length_; }
 
-fval TfIdfStats::idf_(const std::string &term) { return 0.0; }
+namespace {
+inline addr load_df(std::shared_ptr<Warren> warren,
+                    std::shared_ptr<Featurizer> featurizer,
+                    const std::string &term) {
+  return warren->idx()->count(featurizer->featurize(term));
+}
+} // namespace
 
-fval TfIdfStats::rsj_(const std::string &term) { return 0.0; }
+fval TfIdfStats::idf_(const std::string &term) {
+  fval df = (fval)load_df(warren_, tf_featurizer_, term);
+  if (df == 0.0)
+    return 0.0;
+  fval idf = std::log(items_ / df);
+  if (idf < 0.0)
+    return 0.0;
+  return idf;
+}
+
+fval TfIdfStats::rsj_(const std::string &term) {
+  fval df = (fval)load_df(warren_, tf_featurizer_, term);
+  if (df == 0.0)
+    return 0.0;
+  fval rsj = std::log((items_ - df + 0.5) / (df + 0.5));
+  if (rsj < 0.0)
+    return 0.0;
+  return rsj;
+}
 
 std::unique_ptr<Hopper> TfIdfStats::tf_hopper_(const std::string &term) {
-  return nullptr;
-};
+  std::unique_ptr<Hopper> tf_hopper =
+      warren_->idx()->hopper(tf_featurizer_->featurize(term));
+  assert(tf_hopper != nullptr);
+  std::unique_ptr<Hopper> chopper = content_hopper(warren_);
+  assert(chopper != nullptr);
+  return std::make_unique<TfHopper>(std::move(tf_hopper), std::move(chopper));
+}
 
-std::unique_ptr<Hopper> TfIdfStats::container_hopper_() { return nullptr; }
-
+std::unique_ptr<Hopper> TfIdfStats::container_hopper_() {
+  std::unique_ptr<Hopper> hopper = warren_->hopper_from_gcl(container_query_);
+  assert(hopper != nullptr);
+  return hopper;
+}
 } // namespace meadowlark
 } // namespace cottontail

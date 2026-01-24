@@ -42,9 +42,9 @@ private:
   std::string container_query_;
   std::shared_ptr<Stemmer> stemmer_;
   std::shared_ptr<Tokenizer> tokenizer_;
-  std::shared_ptr<Featurizer> tf_featurizer_;
   fval items_;
   fval average_length_;
+  std::shared_ptr<Featurizer> tf_featurizer_;
 };
 
 } // namespace meadowlake

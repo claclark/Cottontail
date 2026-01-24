@@ -9,6 +9,7 @@
 #include "src/hopper.h"
 #include "src/idf_stats.h"
 #include "src/warren.h"
+#include "meadowlark/tf-idf_stats.h"
 
 namespace cottontail {
 std::shared_ptr<Stats> Stats::make(std::shared_ptr<Warren> warren,
