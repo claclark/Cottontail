@@ -190,7 +190,8 @@ int main(int argc, char **argv) {
   std::flush(std::cout);
   if (verbose) {
     time_t t1 = cottontail::now();
-    std::cerr << "Ranking took: " << (t1 - t0) << " millisecond(s) \n" << std::flush;
+    std::cerr << "Ranking took: " << (t1 - t0) << " millisecond(s) \n"
+              << std::flush;
   }
   return 0;
 }

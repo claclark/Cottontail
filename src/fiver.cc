@@ -690,7 +690,8 @@ bool Fiver::pickle(const std::string &filename, std::string *error) {
     jar.close();
     return false;
   }
-  addr n = text_->length() + 1;
+  // DELETE THIS LINE SOME DAY: addr n = text_->length() + 1;
+  addr n = text_->length();
   jar.write(reinterpret_cast<char *>(&n), sizeof(n));
   addr m = n + text_compressor_->extra(n);
   std::unique_ptr<char[]> buffer = std::unique_ptr<char[]>(new char[m]);

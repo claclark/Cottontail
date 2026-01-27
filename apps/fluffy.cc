@@ -42,11 +42,6 @@ int main(int argc, char **argv) {
     return 1;
   }
   std::string error;
-#if 0
-  std::string simple = "simple";
-  std::shared_ptr<cottontail::Warren> warren =
-      cottontail::Warren::make(simple, burrow, &error);
-#endif
   std::shared_ptr<cottontail::Warren> warren =
       cottontail::Warren::make(burrow, &error);
   if (warren == nullptr) {

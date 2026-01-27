@@ -123,6 +123,11 @@ static void append_escaped_json_string(std::string *out,
 
 // ---------- JSON reader helpers (subset) ----------
 
+static void skip_nulls(const std::string &s, size_t *i) {
+  while (*i < s.size() && static_cast<unsigned char>(s[*i]) == '\0')
+    ++(*i);
+}
+
 static void skip_ws(const std::string &s, size_t *i) {
   while (*i < s.size() && std::isspace(static_cast<unsigned char>(s[*i])))
     ++(*i);
@@ -457,6 +462,7 @@ bool json2forager0(const std::string &json, std::string *name, std::string *tag,
   }
 
   skip_ws(json, &i);
+  skip_nulls(json, &i);
   if (i != json.size())
     return false;
   if (!saw_name)

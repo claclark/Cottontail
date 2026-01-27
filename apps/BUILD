@@ -525,6 +525,7 @@ cc_binary(
     ],
     deps = [
       "//src:cottontail",
+      "collection",
     ],
     copts = [
       "'-std=c++14'",
