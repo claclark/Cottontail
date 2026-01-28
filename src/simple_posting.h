@@ -12,7 +12,7 @@
 
 namespace cottontail {
 
-class SimplePosting final {
+class SimplePosting final : public std::enable_shared_from_this<SimplePosting> {
 public:
   void append(std::shared_ptr<SimplePosting> more);
   void write(std::fstream *f);

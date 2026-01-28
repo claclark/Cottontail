@@ -5,8 +5,9 @@
 #include <memory>
 
 #include "src/core.h"
-#include "src/hopper.h"
 #include "src/hints.h"
+#include "src/hopper.h"
+#include "src/simple_posting.h"
 
 namespace cottontail {
 
@@ -35,7 +36,7 @@ public:
               std::shared_ptr<addr> qostings,
               std::shared_ptr<fval> fostings = nullptr)
       : n_(n), p_storage_(postings), q_storage_(qostings), f_storage_(fostings),
-        cache_line_(nullptr), ready_(true) {
+        cache_line_(nullptr), posting_storage_(nullptr), ready_(true) {
     assert(postings != nullptr && qostings != nullptr && n_ >= 2);
     postings_ = p_storage_.get();
     qostings_ = q_storage_.get();
@@ -51,12 +52,34 @@ public:
   };
   ArrayHopper(std::shared_ptr<CacheRecord> cache_line)
       : n_(cache_line->n), p_storage_(nullptr), q_storage_(nullptr),
-        f_storage_(nullptr), cache_line_(cache_line), ready_(false) {
+        f_storage_(nullptr), cache_line_(cache_line), posting_storage_(nullptr),
+        ready_(false) {
     assert(n_ >= 2);
   };
   static std::unique_ptr<Hopper> make(std::shared_ptr<CacheRecord> cache_line) {
     return std::make_unique<ArrayHopper>(cache_line);
   };
+  ArrayHopper(std::shared_ptr<SimplePosting> posting_storage, addr n,
+              addr *postings, addr *qostings, double *fostings)
+      : n_(n), p_storage_(nullptr), q_storage_(nullptr), f_storage_(nullptr),
+        cache_line_(nullptr), posting_storage_(posting_storage), ready_(true) {
+    assert(postings != nullptr && n_ >= 2);
+    postings_ = postings;
+    if (qostings == nullptr)
+      qostings_ = postings;
+    else
+      qostings_ = qostings;
+    if (fostings == nullptr)
+      fostings_ = nullptr;
+    else
+      fostings_ = fostings;
+  }
+  static std::unique_ptr<Hopper>
+  make(std::shared_ptr<SimplePosting> posting_storage, addr n, addr *postings,
+       addr *qostings, double *fostings) {
+    return std::make_unique<ArrayHopper>(posting_storage, n, postings, qostings,
+                                         fostings);
+  }
 
   virtual ~ArrayHopper(){};
   ArrayHopper(const ArrayHopper &) = delete;
@@ -91,6 +114,7 @@ private:
   std::shared_ptr<addr> q_storage_;
   std::shared_ptr<fval> f_storage_;
   std::shared_ptr<CacheRecord> cache_line_;
+  std::shared_ptr<SimplePosting> posting_storage_;
   addr current_ = 0;
   const addr *postings_;
   const addr *qostings_;

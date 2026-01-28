@@ -463,6 +463,21 @@ std::unique_ptr<Hopper> SimplePosting::hopper() {
       }
     }
   } else {
+    std::shared_ptr<SimplePosting> myself = shared_from_this();
+    if (qostings_.size() == 0)
+      if (fostings_.size() == 0)
+        return ArrayHopper::make(myself, n, postings_.data(), postings_.data(),
+                                 nullptr);
+      else
+        return ArrayHopper::make(myself, n, postings_.data(), postings_.data(),
+                                 fostings_.data());
+    else if (fostings_.size() == 0)
+      return ArrayHopper::make(myself, n, postings_.data(), qostings_.data(),
+                               nullptr);
+    else
+      return ArrayHopper::make(myself, n, postings_.data(), qostings_.data(),
+                               fostings_.data());
+#if 0
     std::shared_ptr<addr> postings;
     std::shared_ptr<addr> qostings;
     std::shared_ptr<fval> fostings;
@@ -476,6 +491,7 @@ std::unique_ptr<Hopper> SimplePosting::hopper() {
     else
       fostings = v2sa<fval>(fostings_);
     return ArrayHopper::make(n, postings, qostings, fostings);
+#endif
   }
 }
 

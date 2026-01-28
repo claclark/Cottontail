@@ -3,17 +3,21 @@
 #include <memory>
 #include <string>
 
+#include "meadowlark/meadowlark.h"
+#include "meadowlark/tf-idf_stats.h"
 #include "src/core.h"
 #include "src/df_stats.h"
 #include "src/field_stats.h"
 #include "src/hopper.h"
 #include "src/idf_stats.h"
 #include "src/warren.h"
-#include "meadowlark/tf-idf_stats.h"
 
 namespace cottontail {
 std::shared_ptr<Stats> Stats::make(std::shared_ptr<Warren> warren,
                                    std::string *error) {
+  if (meadowlark::is_meadow(warren)) {
+    return meadowlark::TfIdfStats::make("", warren, error);
+  }
   std::string container_key = "container";
   std::string container_value;
   if (!warren->get_parameter(container_key, &container_value, error))
@@ -34,6 +38,14 @@ std::shared_ptr<Stats> Stats::make(const std::string &name,
                                    const std::string &recipe,
                                    std::shared_ptr<Warren> warren,
                                    std::string *error) {
+  if (meadowlark::is_meadow(warren)) {
+    if (name == "tf-idf") {
+      return meadowlark::TfIdfStats::make(recipe, warren, error);
+    } else {
+      safe_error(error) = "No meadowlark stats called: " + name;
+      return nullptr;
+    }
+  }
   std::shared_ptr<Stats> stats;
   if (name == "") {
     stats = std::shared_ptr<Stats>(new Stats(warren));
@@ -63,6 +75,8 @@ bool Stats::check(const std::string &name, const std::string &recipe,
                   std::string *error) {
   if (name == "") {
     return true;
+  } else if (name == "tf-idf") {
+    return meadowlark::TfIdfStats::check(recipe, error);
   } else if (name == "idf") {
     return IdfStats::check(recipe, error);
   } else if (name == "df" || name == "tf") {
