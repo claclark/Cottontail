@@ -157,7 +157,8 @@ int main(int argc, char **argv) {
         output_lock.lock();
         if (verbose)
           std::cerr << program_name << ": no results for topic \"" << topic
-                    << "\" (creating a fake one)\n";
+                    << "\" (creating a fake one)\n"
+                    << std::flush;
         std::cout << topic << " Q0 FAKE 1 1 cottontail\n";
         output_lock.unlock();
       } else {
@@ -171,6 +172,10 @@ int main(int argc, char **argv) {
             std::cout << topic << " Q0 " << docno << " " << i + 1 << " "
                       << ranking[i].score() << " cottontail\n";
             output_lock.unlock();
+          } else if (verbose) {
+            std::cerr << program_name << ": missing docno in container: "
+                      << " (" << p << ", " << q << ")\n"
+                      << std::flush;
           }
         }
       }
