@@ -16,6 +16,16 @@ void usage(std::string program_name) {
       << " [--verbose] [--threads n] [--burrow burrow] queries pipeline...\n";
 }
 
+bool try_docnos(std::shared_ptr<cottontail::Warren> warren,
+                std::string docnos) {
+  std::unique_ptr<cottontail::Hopper> hopper = warren->hopper_from_gcl(docnos);
+  if (hopper == nullptr)
+    return false;
+  cottontail::addr p, q;
+  hopper->tau(cottontail::minfinity + 1, &p, &q);
+  return p != cottontail::maxfinity;
+}
+
 constexpr int THREADS = 50;
 
 int main(int argc, char **argv) {
@@ -74,14 +84,16 @@ int main(int argc, char **argv) {
     return 1;
   }
   warren->start();
+  bool docnos_found = false;
   std::string docnos;
-  std::string id_key = "id";
-  if (!warren->get_parameter(id_key, &docnos))
-    docnos = "(... <DOCNO> </DOCNO>)";
-  std::unique_ptr<cottontail::Hopper> hopper =
-      warren->hopper_from_gcl(docnos, &error);
-  if (hopper == nullptr) {
-    std::cout << program_name << ": " << error << " can't find identifiers\n";
+  if (warren->get_parameter("id", &docnos))
+    docnos_found = try_docnos(warren, docnos);
+  if (!docnos_found)
+    docnos_found = try_docnos(warren, docnos = "(... <DOCNO> </DOCNO>)");
+  if (!docnos_found)
+    docnos_found = try_docnos(warren, docnos = ":0:");
+  if (!docnos_found) {
+    std::cerr << program_name << ": " << error << " can't find docnos\n";
     return 1;
   }
   std::shared_ptr<cottontail::Ranker> rank =
@@ -134,7 +146,7 @@ int main(int argc, char **argv) {
         larren->hopper_from_gcl(docnos, &error);
     if (hopper == nullptr) {
       output_lock.lock();
-      std::cout << program_name << ": " << error << " can't find identifiers\n"
+      std::cerr << program_name << ": " << error << " can't find identifiers\n"
                 << std::flush;
       output_lock.unlock();
       larren->end();

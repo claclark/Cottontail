@@ -38,6 +38,7 @@ private:
   std::unique_ptr<Hopper> container_hopper_() final;
   std::string tag_;
   std::string label_;
+  std::string id_query_;
   std::string content_query_;
   std::string container_query_;
   std::shared_ptr<Stemmer> stemmer_;

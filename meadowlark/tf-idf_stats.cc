@@ -51,6 +51,10 @@ std::shared_ptr<Stats> TfIdfStats::make(const std::string &recipe,
       std::shared_ptr<TfIdfStats>(new TfIdfStats(warren));
   stats->tag_ = recipe;
   stats->label_ = label + ":";
+  if (parameters.find("id") == parameters.end())
+    stats->id_query_ = ":0:";
+  else
+    stats->id_query_ = parameters["id"];
   stats->content_query_ = parameters["gcl"];
   if ((hopper = warren->hopper_from_gcl(stats->content_query_, error)) ==
       nullptr)
@@ -62,10 +66,14 @@ std::shared_ptr<Stats> TfIdfStats::make(const std::string &recipe,
   if ((hopper = warren->hopper_from_gcl(stats->container_query_, error)) ==
       nullptr)
     return nullptr;
+  std::string stemmer_name;
   if (parameters.find("stemmer") == parameters.end())
-    stats->stemmer_ = Stemmer::make("porter", "", error);
+    stemmer_name = "porter";
   else
-    stats->stemmer_ = Stemmer::make(parameters["stemmer"], "", error);
+    stemmer_name = parameters["stemmer"];
+  if (!warren->set_parameter("stemmer", stemmer_name, error))
+    return nullptr;
+  stats->stemmer_ = Stemmer::make(stemmer_name, "", error);
   if (stats->stemmer_ == nullptr)
     return nullptr;
   if (parameters.find("tokenizer") == parameters.end())
