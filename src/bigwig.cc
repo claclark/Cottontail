@@ -116,10 +116,10 @@ private:
   std::unique_ptr<Hopper> hopper_(addr feature) final {
     if (erasing_ && feature != null_feature) {
       return std::make_unique<cottontail::gcl::NotContainedIn>(
-          std::move(Fiver::merge(warrens_, feature)),
-          std::move(Fiver::merge(warrens_, null_feature)));
+          std::move(Fiver::merge(warrens_, feature, nullptr, &cache_)),
+          std::move(Fiver::merge(warrens_, null_feature, nullptr, &cache_)));
     } else {
-      return Fiver::merge(warrens_, feature);
+      return Fiver::merge(warrens_, feature, nullptr, &cache_);
     }
   };
   addr count_(addr feature) final {
@@ -136,6 +136,7 @@ private:
         n += warren->idx()->vocab();
     return n;
   }
+  SafeMap<addr, std::shared_ptr<SimplePosting>> cache_;
   std::vector<std::shared_ptr<Fiver>> warrens_;
   bool erasing_;
 };

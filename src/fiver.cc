@@ -21,6 +21,7 @@
 #include "src/null_idx.h"
 #include "src/null_txt.h"
 #include "src/recipe.h"
+#include "src/safe_map.h"
 #include "src/simple.h"
 #include "src/simple_posting.h"
 #include "src/stemmer.h"
@@ -494,7 +495,9 @@ Fiver::merge(const std::vector<std::shared_ptr<Fiver>> &fivers,
 
 std::unique_ptr<Hopper>
 Fiver::merge(const std::vector<std::shared_ptr<Fiver>> &fivers, addr feature,
-             std::string *error, std::shared_ptr<Compressor> posting_compressor,
+             std::string *error,
+             SafeMap<addr, std::shared_ptr<SimplePosting>> *cache,
+             std::shared_ptr<Compressor> posting_compressor,
              std::shared_ptr<Compressor> fvalue_compressor) {
   if (fivers.size() == 0)
     return std::make_unique<EmptyHopper>();
@@ -507,6 +510,9 @@ Fiver::merge(const std::vector<std::shared_ptr<Fiver>> &fivers, addr feature,
         hoppers.emplace_back(fivers[i]->idx()->hopper(feature));
     return gcl::VectorHopper::make(&hoppers, false, error);
   }
+  std::shared_ptr<SimplePosting> posting;
+  if (cache != nullptr && cache->try_get(feature, &posting))
+    return posting->hopper();
   std::vector<std::shared_ptr<SimplePosting>> postings;
   for (size_t i = 0; i < fivers.size(); i++) {
     auto where = fivers[i]->index_->find(feature);
@@ -523,7 +529,10 @@ Fiver::merge(const std::vector<std::shared_ptr<Fiver>> &fivers, addr feature,
     the_fvalue_compressor = fivers[0]->fvalue_compressor_;
   std::shared_ptr<SimplePostingFactory> posting_factory =
       SimplePostingFactory::make(the_posting_compressor, the_fvalue_compressor);
-  return posting_factory->posting_from_merge(postings)->hopper();
+  posting = posting_factory->posting_from_merge(postings);
+  if (cache != nullptr)
+    cache->set(feature, posting);
+  return posting->hopper();
 }
 
 addr Fiver::relocate(addr where) {

@@ -9,6 +9,7 @@
 #include "src/core.h"
 #include "src/featurizer.h"
 #include "src/idx.h"
+#include "src/safe_map.h"
 #include "src/simple_posting.h"
 #include "src/tokenizer.h"
 #include "src/txt.h"
@@ -34,6 +35,7 @@ public:
   static std::unique_ptr<Hopper>
   merge(const std::vector<std::shared_ptr<Fiver>> &fivers, addr feature,
         std::string *error = nullptr,
+        SafeMap<addr, std::shared_ptr<SimplePosting>> *cache = nullptr,
         std::shared_ptr<Compressor> posting_compressor = nullptr,
         std::shared_ptr<Compressor> fvalue_compressor = nullptr);
   bool pickle(const std::string &filename, std::string *error = nullptr);
