@@ -483,6 +483,9 @@ Fiver::merge(const std::vector<std::shared_ptr<Fiver>> &fivers,
   fiver->built_ = true;
   fiver->where_ = 0;
   fiver->name_ = "fiver";
+  fiver->storage_estimate_ = 0;
+  for (auto &f : fivers)
+    fiver->storage_estimate_ += f->storage_estimate_;
   fiver->sequence_start_ = fivers[0]->sequence_start_;
   fiver->sequence_end_ = fivers[fivers.size() - 1]->sequence_end_;
   fiver->text_ = text;
@@ -614,6 +617,8 @@ bool Fiver::ready_() {
 
 void Fiver::commit_() {
   if (!built_) {
+    storage_estimate_ =
+        text_->size() + sizeof(Annotation) * annotations_->size();
     appender_->commit();
     annotator_->commit();
     annotations_->clear();
@@ -817,13 +822,17 @@ Fiver::unpickle(const std::string &filename, std::shared_ptr<Working> working,
   std::make_shared<std::map<addr, std::shared_ptr<SimplePosting>>>();
   fiver->index_ =
       std::make_shared<std::map<addr, std::shared_ptr<SimplePosting>>>();
+  addr total_annotations = 0;
   for (;;) {
     std::shared_ptr<SimplePosting> posting = factory->posting_from_file(&jar);
     if (posting == nullptr)
       break;
+    total_annotations += sizeof(Annotation) * posting->size();
     (*fiver->index_)[posting->feature()] = posting;
   }
   jar.close();
+  fiver->storage_estimate_ =
+      fiver->text_->size() + sizeof(Annotation) * total_annotations;
   fiver->idx_ = FiverIdx::make(fiver->index_, error);
   if (fiver->idx_ == nullptr)
     return nullptr;

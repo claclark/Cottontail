@@ -51,6 +51,9 @@ public:
   addr relocate(addr where);
   void set_sequence(addr number);
   void get_sequence(addr *start, addr *end);
+  addr get_storage_estimate() {
+    return storage_estimate_;
+  }
 
   virtual ~Fiver(){};
   Fiver(const Fiver &) = delete;
@@ -83,6 +86,7 @@ private:
   void abort_() final;
   bool built_;
   addr where_;
+  addr storage_estimate_;
   addr sequence_start_, sequence_end_;
   std::shared_ptr<Compressor> posting_compressor_;
   std::shared_ptr<Compressor> fvalue_compressor_;
