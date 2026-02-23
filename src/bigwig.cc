@@ -629,6 +629,164 @@ bool Bigwig::ready_() {
 }
 
 namespace {
+#if 1
+bool find_sequence(const std::vector<bool> a, size_t *start, size_t *end) {
+  size_t best_len = 0;
+  size_t best_start = 0;
+  size_t cur_start = 0;
+  size_t cur_len = 0;
+  for (size_t i = 0; i < a.size(); ++i) {
+    if (a[i]) {
+      if (cur_len == 0)
+        cur_start = i;
+      ++cur_len;
+    } else {
+      if (cur_len >= 3 && cur_len > best_len) { // ← only change
+        best_len = cur_len;
+        best_start = cur_start;
+      }
+      cur_len = 0;
+    }
+  }
+  if (cur_len >= 3 && cur_len > best_len) {
+    best_len = cur_len;
+    best_start = cur_start;
+  }
+  if (best_len >= 3 && start && end) {
+    *start = best_start;
+    *end = best_start + best_len - 1;
+    return true;
+  }
+  return false;
+}
+
+bool find_smallest_pair(const std::vector<addr> a, size_t *start, size_t *end) {
+  if (a.size() < 2)
+    return false;
+  bool found = false;
+  size_t best_i = 0;
+  addr best_sum = 0;
+  for (size_t i = 0; i + 1 < a.size(); ++i) {
+    const addr x = a[i];
+    const addr y = a[i + 1];
+    if (x >= 0 && y >= 0) {
+      const addr s = x + y;
+      if (!found || s < best_sum) {
+        found = true;
+        best_sum = s;
+        best_i = i;
+      }
+    }
+  }
+  if (found && start && end) {
+    *start = best_i;
+    *end = best_i + 1;
+  }
+  return found;
+}
+
+void merge_worker(std::shared_ptr<Fluffle> fluffle) {
+  for (;;) {
+    std::vector<std::shared_ptr<Fiver>> fivers;
+    std::shared_ptr<Warren> start_warren;
+    std::shared_ptr<Warren> end_warren;
+    {
+      std::lock_guard<std::mutex> _(fluffle->lock);
+      bool cleanup = false;
+      for (auto &warren : fluffle->warrens)
+        if (warren->name() == "remove") {
+          cleanup = true;
+          break;
+        }
+      if (cleanup) {
+        std::vector<std::shared_ptr<Warren>> warrens;
+        for (auto &warren : fluffle->warrens)
+          if (warren->name() != "remove")
+            warrens.push_back(warren);
+        fluffle->warrens = warrens;
+      }
+      if (fluffle->warrens.size() < 2)
+        break;
+      std::vector<bool> small;
+      std::vector<addr> storage;
+      for (size_t i = 0; i < fluffle->warrens.size(); i++) {
+        if (fluffle->warrens[i] != nullptr &&
+            fluffle->warrens[i]->name() == "fiver" &&
+            fluffle->merging.find(fluffle->warrens[i]) ==
+                fluffle->merging.end()) {
+          std::shared_ptr<Fiver> fiver =
+              std::static_pointer_cast<Fiver>(fluffle->warrens[i]);
+          addr n = fiver->get_storage_estimate();
+          small.push_back(n < 4 * 1024 * 1024); // arbitrary
+          storage.push_back(n);
+        } else {
+          small.push_back(false);
+          storage.push_back(-1);
+        }
+      }
+      size_t start, end;
+      if (!find_sequence(small, &start, &end) &&
+          !find_smallest_pair(storage, &start, &end))
+        break;
+      for (size_t i = start; i <= end; i++) {
+        fivers.push_back(std::static_pointer_cast<Fiver>(fluffle->warrens[i]));
+        fluffle->merging.insert(fluffle->warrens[i]);
+      }
+#if 0
+      {
+        std::cerr << "Merging:\n";
+        for (auto &fiver : fivers) {
+          addr sequence_start, sequence_end;
+          fiver->get_sequence(&sequence_start, &sequence_end);
+          std::cerr << " fiver." << sequence_start << "." << sequence_end
+                    << " (" << fiver->get_storage_estimate() << ")\n";
+        }
+      }
+#endif
+      if (fluffle->workers < fluffle->max_workers) {
+        fluffle->workers++;
+        std::thread t(merge_worker, fluffle);
+        t.detach();
+      }
+      start_warren = fluffle->warrens[start];
+      end_warren = fluffle->warrens[end];
+    }
+    std::shared_ptr<Fiver> merged = Fiver::merge(fivers);
+    merged->pickle();
+    for (auto &fiver : fivers)
+      fiver->discard();
+    {
+      std::lock_guard<std::mutex> _(fluffle->lock);
+      std::vector<std::shared_ptr<Warren>> warrens;
+      size_t i;
+      for (i = 0;
+           i < fluffle->warrens.size() && fluffle->warrens[i] != start_warren;
+           i++)
+        warrens.push_back(fluffle->warrens[i]);
+      assert(i < fluffle->warrens.size());
+      if (merged != nullptr) {
+        merged->start();
+        warrens.push_back(merged);
+      }
+      for (; i < fluffle->warrens.size() && fluffle->warrens[i] != end_warren;
+           i++)
+        fluffle->merging.erase(fluffle->warrens[i]);
+      ;
+      assert(i < fluffle->warrens.size());
+      fluffle->merging.erase(fluffle->warrens[i]);
+      for (i++; i < fluffle->warrens.size(); i++)
+        warrens.push_back(fluffle->warrens[i]);
+      fluffle->warrens = warrens;
+    }
+  }
+  {
+    std::lock_guard<std::mutex> _(fluffle->lock);
+    assert(fluffle->workers > 0);
+    --fluffle->workers;
+  }
+}
+
+#else
 void merge_worker(std::shared_ptr<Fluffle> fluffle) {
   for (;;) {
     fluffle->lock.lock();
@@ -770,6 +928,7 @@ void merge_worker(std::shared_ptr<Fluffle> fluffle) {
     fluffle->lock.unlock();
   }
 }
+#endif
 } // namespace
 
 void Bigwig::try_merge() {
