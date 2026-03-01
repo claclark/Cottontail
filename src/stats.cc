@@ -10,25 +10,33 @@
 #include "src/field_stats.h"
 #include "src/hopper.h"
 #include "src/idf_stats.h"
+#include "src/stemmer.h"
+#include "src/tokenizer.h"
 #include "src/warren.h"
 
 namespace cottontail {
 std::shared_ptr<Stats> Stats::make(std::shared_ptr<Warren> warren,
                                    std::string *error) {
   if (meadowlark::is_meadow(warren)) {
-    return meadowlark::TfIdfStats::make("", warren, error);
+    return Stats::make("tf-idf", "", warren, error);
   }
-  std::string container_key = "container";
-  std::string container_value;
-  if (!warren->get_parameter(container_key, &container_value, error))
-    return nullptr;
   std::string stats_key = "statistics";
   std::string stats_name;
   std::string stats_recipe = "";
   if (!warren->get_parameter(stats_key, &stats_name, error))
     return nullptr;
-  if (stats_name == "" && container_key != "")
-    stats_name = "idf";
+  if (stats_name == "") {
+    std::string container_key = "container";
+    std::string container_value;
+    if (!warren->get_parameter(container_key, &container_value, error))
+      return nullptr;
+    if (container_value != "") {
+      stats_name = "idf";
+    } else {
+       safe_error(error) = "No ranking statistic in warren";
+       return nullptr;
+    }
+  }
   std::shared_ptr<Stats> stats =
       Stats::make(stats_name, stats_recipe, warren, error);
   return stats;
@@ -38,36 +46,35 @@ std::shared_ptr<Stats> Stats::make(const std::string &name,
                                    const std::string &recipe,
                                    std::shared_ptr<Warren> warren,
                                    std::string *error) {
+  std::shared_ptr<Stats> stats;
   if (meadowlark::is_meadow(warren)) {
     if (name == "tf-idf") {
-      return meadowlark::TfIdfStats::make(recipe, warren, error);
+      stats = meadowlark::TfIdfStats::make(recipe, warren, error);
     } else {
       safe_error(error) = "No meadowlark stats called: " + name;
       return nullptr;
     }
-  }
-  std::shared_ptr<Stats> stats;
-  if (name == "") {
+  } else if (name == "") {
     stats = std::shared_ptr<Stats>(new Stats(warren));
   } else if (name == "idf") {
     stats = IdfStats::make(recipe, warren, error);
-    if (stats == nullptr)
-      return nullptr;
-    stats->name_ = name;
   } else if (name == "df" || name == "tf") {
     stats = DfStats::make(recipe, warren, error);
-    if (stats == nullptr)
-      return nullptr;
-    stats->name_ = name;
   } else if (name == "field") {
     stats = FieldStats::make(recipe, warren, error);
-    if (stats == nullptr)
-      return nullptr;
-    stats->name_ = name;
   } else {
     safe_error(error) = "No Stats named: " + name;
-    stats = nullptr;
+    return nullptr;
   }
+  if (stats == nullptr)
+    return nullptr;
+  if ((stats->stemmer_ == nullptr) &&
+      ((stats->stemmer_ = warren->stemmer()) == nullptr) &&
+      ((stats->stemmer_ = Stemmer::make("", "", error)) == nullptr))
+    return nullptr;
+  if (stats->tokenizer_ == nullptr)
+    assert((stats->tokenizer_ = warren->tokenizer()) != nullptr);
+  stats->name_ = name;
   return stats;
 }
 

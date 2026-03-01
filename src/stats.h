@@ -6,6 +6,8 @@
 
 #include "src/core.h"
 #include "src/hopper.h"
+#include "src/stemmer.h"
+#include "src/tokenizer.h"
 #include "src/warren.h"
 
 namespace cottontail {
@@ -32,6 +34,15 @@ public:
   inline std::unique_ptr<Hopper> container_hopper() {
     return container_hopper_();
   };
+  inline std::shared_ptr<Warren> warren() {
+    return warren_;
+  }
+  inline std::shared_ptr<Stemmer> stemmer() {
+    return stemmer_;
+  };
+  inline std::shared_ptr<Tokenizer> tokenizer() {
+    return tokenizer_;
+  };
 
   virtual ~Stats(){};
   Stats(const Stats &) = delete;
@@ -43,6 +54,8 @@ protected:
   Stats() = delete;
   Stats(std::shared_ptr<Warren> warren) : warren_(warren){};
   std::shared_ptr<Warren> warren_;
+  std::shared_ptr<Stemmer> stemmer_;
+  std::shared_ptr<Tokenizer> tokenizer_;
 
 private:
   virtual std::string recipe_() { return ""; }

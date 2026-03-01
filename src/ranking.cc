@@ -90,28 +90,49 @@ namespace {
 // templates for convenience ranker prototypes
 
 template <std::vector<RankingResult> ALGORITHM(
-    std::shared_ptr<Warren> warren, const std::map<std::string, fval> &query,
+    std::shared_ptr<Stats> stats, const std::map<std::string, fval> &query,
+    const std::map<std::string, fval> &parameters)>
+std::vector<RankingResult>
+ranking(std::shared_ptr<Stats> stats, const std::string &query,
+        const std::map<std::string, fval> &parameters) {
+  std::vector<std::string> terms = stats->tokenizer()->split(query);
+  std::map<std::string, fval> weighted_query;
+  for (auto &term : terms)
+    weighted_query[term] += 1.0;
+  return ALGORITHM(stats, weighted_query, parameters);
+}
+
+template <std::vector<RankingResult> ALGORITHM(
+    std::shared_ptr<Stats> stats, const std::map<std::string, fval> &query,
+    const std::map<std::string, fval> &parameters)>
+std::vector<RankingResult>
+ranking(std::shared_ptr<Warren> warren,
+        const std::map<std::string, fval> &query,
+        const std::map<std::string, fval> &parameters) {
+  std::shared_ptr<Stats> stats = Stats::make(warren);
+  if (!stats)
+    return {};
+  return ALGORITHM(stats, query, parameters);
+}
+
+template <std::vector<RankingResult> ALGORITHM(
+    std::shared_ptr<Stats> stats, const std::map<std::string, fval> &query,
     const std::map<std::string, fval> &parameters)>
 std::vector<RankingResult>
 ranking(std::shared_ptr<Warren> warren, const std::string &query,
         const std::map<std::string, fval> &parameters) {
-  std::vector<std::string> terms = warren->tokenizer()->split(query);
-  std::map<std::string, fval> weighted_query;
-  for (auto &term : terms)
-    if (weighted_query.find(term) == weighted_query.end())
-      weighted_query[term] = 1.0;
-    else
-      weighted_query[term] += 1.0;
-  return ALGORITHM(warren, weighted_query, parameters);
+  std::shared_ptr<Stats> stats = Stats::make(warren);
+  if (!stats)
+    return {};
+  return ranking<ALGORITHM>(stats, query, parameters);
 }
 
 template <std::vector<RankingResult> ALGORITHM(
-    std::shared_ptr<Warren> warren, const std::string &query,
+    std::shared_ptr<Stats> stats, const std::map<std::string, fval> &query,
     const std::map<std::string, fval> &parameters)>
 std::vector<RankingResult> ranking(std::shared_ptr<Warren> warren,
                                    const std::string &query) {
-  const std::map<std::string, fval> parameters;
-  return ALGORITHM(warren, query, parameters);
+  return ranking<ALGORITHM>(warren, query, {});
 }
 } // namespace
 
@@ -1164,12 +1185,20 @@ std::vector<std::string> rsj_prf(std::shared_ptr<Warren> warren,
 std::vector<RankingResult>
 lmd_ranking(std::shared_ptr<Warren> warren, const std::string &query,
             const std::map<std::string, fval> &parameters) {
-  return ranking<lmd_ranking>(warren, query, parameters);
+  // TODO: rewrite lmd_ranking to use stats and switch back to templates
+  // return ranking<lmd_ranking>(warren, query, parameters);
+  std::vector<std::string> terms = warren->tokenizer()->split(query);
+  std::map<std::string, fval> weighted_query;
+  for (auto &term : terms)
+    weighted_query[term] += 1.0;
+  return lmd_ranking(warren, weighted_query, parameters);
 }
 
 std::vector<RankingResult> lmd_ranking(std::shared_ptr<Warren> warren,
                                        const std::string &query) {
-  return ranking<lmd_ranking>(warren, query);
+  // TODO: rewrite lmd_ranking to use stats and switch back to templates
+  // return ranking<lmd_ranking>(warren, query);
+  return lmd_ranking(warren, query, {});
 }
 
 std::vector<RankingResult>
@@ -1241,7 +1270,7 @@ lmd_ranking(std::shared_ptr<Warren> warren,
   return top;
 }
 
-// Standard BM25. Index must contain tf_idf annotations (see above)
+// Standard BM25.
 
 namespace {
 
@@ -1265,10 +1294,20 @@ std::vector<RankingResult>
 bm25_ranking(std::shared_ptr<Warren> warren,
              const std::map<std::string, fval> &query,
              const std::map<std::string, fval> &parameters) {
+  return ranking<bm25_ranking>(warren, query, parameters);
+}
+
+std::vector<RankingResult>
+bm25_ranking(std::shared_ptr<Stats> stats, const std::string &query,
+             const std::map<std::string, fval> &parameters) {
+  return ranking<bm25_ranking>(stats, query, parameters);
+}
+
+std::vector<RankingResult>
+bm25_ranking(std::shared_ptr<Stats> stats,
+             const std::map<std::string, fval> &query,
+             const std::map<std::string, fval> &parameters) {
   std::vector<RankingResult> top;
-  std::shared_ptr<Stats> stats = Stats::make(warren);
-  if (stats == nullptr)
-    return top;
   if (!(stats->have("avgl") && stats->have("rsj") && stats->have("tf")))
     return top;
   size_t depth =

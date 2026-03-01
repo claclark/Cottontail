@@ -418,7 +418,7 @@ bool forage(std::shared_ptr<Warren> warren, const std::string &gcl, addr start,
   for (hopper->tau(p, &p, &q); q < end; hopper->tau(p + 1, &p, &q))
     intervals.emplace_back(p, q);
   warren->end();
-  std::map<std::string, std::string> params;
+  std::map<std::string, std::string> params = parameters;
   params["gcl"] = gcl;
   return forage(warren, intervals, name, tag, params, error, threads);
 }

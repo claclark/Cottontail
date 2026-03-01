@@ -180,7 +180,7 @@ std::unique_ptr<Hopper> TfIdfStats::tf_hopper_(const std::string &term) {
   std::unique_ptr<Hopper> tf_hopper =
       warren_->idx()->hopper(tf_featurizer_->featurize(term));
   assert(tf_hopper != nullptr);
-  std::unique_ptr<Hopper> chopper = content_hopper(warren_);
+  std::unique_ptr<Hopper> chopper = warren_->hopper_from_gcl(content_query_);
   assert(chopper != nullptr);
   return std::make_unique<TfHopper>(std::move(tf_hopper), std::move(chopper));
 }

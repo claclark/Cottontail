@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "src/core.h"
+#include "src/stats.h"
 #include "src/warren.h"
 
 namespace cottontail {
@@ -223,6 +224,15 @@ std::vector<RankingResult> lmd_ranking(std::shared_ptr<Warren> warren,
 
 // Standard BM25.
 // Index must contain appropriate annotations.
+std::vector<RankingResult>
+bm25_ranking(std::shared_ptr<Stats> stats,
+             const std::map<std::string, fval> &query,
+             const std::map<std::string, fval> &parameters);
+
+std::vector<RankingResult>
+bm25_ranking(std::shared_ptr<Stats> stats, const std::string &query,
+             const std::map<std::string, fval> &parameters);
+
 std::vector<RankingResult>
 bm25_ranking(std::shared_ptr<Warren> warren,
              const std::map<std::string, fval> &query,

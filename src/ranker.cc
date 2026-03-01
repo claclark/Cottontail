@@ -19,6 +19,7 @@
 #include "src/parameters.h"
 #include "src/parse.h"
 #include "src/ranking.h"
+#include "src/stats.h"
 #include "src/stopwords.h"
 
 namespace cottontail {
@@ -26,7 +27,7 @@ namespace cottontail {
 namespace {
 class RankingContext {
 public:
-  RankingContext(std::shared_ptr<Warren> warren) : warren_(warren){};
+  RankingContext(std::shared_ptr<Stats> stats) : stats_(stats){};
   RankingContext() = delete;
   RankingContext(const RankingContext &) = delete;
   RankingContext &operator=(const RankingContext &) = delete;
@@ -38,13 +39,6 @@ public:
     weighted_query_.clear();
     parameters_.clear();
     ranking_.clear();
-    std::string default_container_gcl = warren_->default_container();
-    if (default_container_gcl.size() > 0) {
-      std::string error;
-      container_ = warren_->hopper_from_gcl(default_container_gcl, &error);
-    } else {
-      container_ = nullptr;
-    }
   };
 
   std::map<std::string, fval> parameters() { return parameters_; };
@@ -53,7 +47,7 @@ public:
 private:
   void cook() {
     if (weighted_query_.size() == 0 && raw_query_ != "") {
-      std::vector<std::string> terms = warren_->tokenizer()->split(raw_query_);
+      std::vector<std::string> terms = stats_->tokenizer()->split(raw_query_);
       for (auto &term : terms)
         if (weighted_query_.find(term) == weighted_query_.end())
           weighted_query_[term] = 1.0;
@@ -71,12 +65,11 @@ private:
   friend class StemTransformer;
   friend class StopTransformer;
 
-  std::shared_ptr<Warren> warren_;
+  std::shared_ptr<Stats> stats_;
   std::string raw_query_;
   std::map<std::string, fval> weighted_query_;
   std::map<std::string, fval> parameters_;
   std::vector<RankingResult> ranking_;
-  std::unique_ptr<Hopper> container_;
 };
 
 class RankingContextTransformer {
@@ -105,9 +98,9 @@ private:
   void transform_(class RankingContext *context) {
     if (context->weighted_query_.size() > 0)
       context->ranking_ = bm25_ranking(
-          context->warren_, context->weighted_query_, context->parameters_);
+          context->stats_, context->weighted_query_, context->parameters_);
     else
-      context->ranking_ = bm25_ranking(context->warren_, context->raw_query_,
+      context->ranking_ = bm25_ranking(context->stats_, context->raw_query_,
                                        context->parameters_);
   }
 };
@@ -119,11 +112,12 @@ public:
 private:
   void transform_(class RankingContext *context) {
     if (context->weighted_query_.size() > 0)
-      context->ranking_ = lmd_ranking(
-          context->warren_, context->weighted_query_, context->parameters_);
+      context->ranking_ =
+          lmd_ranking(context->stats_->warren(), context->weighted_query_,
+                      context->parameters_);
     else
-      context->ranking_ = lmd_ranking(context->warren_, context->raw_query_,
-                                      context->parameters_);
+      context->ranking_ = lmd_ranking(
+          context->stats_->warren(), context->raw_query_, context->parameters_);
   }
 };
 
@@ -132,11 +126,11 @@ public:
   virtual ~ExpansionTransformer(){};
 
 protected:
-  void expand(std::shared_ptr<Warren> warren,
+  void expand(std::shared_ptr<Stats> stats,
               const std::vector<RankingResult> &ranking,
               const std::map<std::string, fval> &parameters,
               std::map<std::string, fval> *weighted_query) {
-    expand_(warren, ranking, parameters, weighted_query);
+    expand_(stats, ranking, parameters, weighted_query);
   };
 
 private:
@@ -144,10 +138,10 @@ private:
     if (context->ranking_.size() == 0)
       return;
     context->cook();
-    expand(context->warren_, context->ranking_, context->parameters_,
+    expand(context->stats_, context->ranking_, context->parameters_,
            &context->weighted_query_);
   };
-  virtual void expand_(std::shared_ptr<Warren> warren,
+  virtual void expand_(std::shared_ptr<Stats> stats,
                        const std::vector<RankingResult> &ranking,
                        const std::map<std::string, fval> &parameters,
                        std::map<std::string, fval> *weighted_query) = 0;
@@ -158,11 +152,11 @@ public:
   virtual ~RSJTransformer(){};
 
 private:
-  void expand_(std::shared_ptr<Warren> warren,
+  void expand_(std::shared_ptr<Stats> stats,
                const std::vector<RankingResult> &ranking,
                const std::map<std::string, fval> &parameters,
                std::map<std::string, fval> *weighted_query) {
-    rsj_prf(warren, ranking, parameters, weighted_query);
+    rsj_prf(stats->warren(), ranking, parameters, weighted_query);
   };
 };
 
@@ -171,11 +165,11 @@ public:
   virtual ~KLDTransformer(){};
 
 private:
-  void expand_(std::shared_ptr<Warren> warren,
+  void expand_(std::shared_ptr<Stats> stats,
                const std::vector<RankingResult> &ranking,
                const std::map<std::string, fval> &parameters,
                std::map<std::string, fval> *weighted_query) {
-    kld_prf(warren, ranking, parameters, weighted_query);
+    kld_prf(stats->warren(), ranking, parameters, weighted_query);
   };
 };
 
@@ -210,7 +204,7 @@ private:
     context->cook();
     std::map<std::string, fval> stemmed_query;
     for (auto &term : context->weighted_query_) {
-      std::string stemmed_term = context->warren_->stemmer()->stem(term.first);
+      std::string stemmed_term = context->stats_->stemmer()->stem(term.first);
       if (stemmed_query.find(stemmed_term) == stemmed_query.end())
         stemmed_query[stemmed_term] = term.second;
       else
@@ -306,7 +300,7 @@ RankingContextTransformer::from_name(std::string transformation) {
 
 class RankingPipeline : public Ranker {
 public:
-  RankingPipeline(std::shared_ptr<Warren> warren) : warren_(warren){};
+  RankingPipeline(std::shared_ptr<Stats> stats) : stats_(stats){};
   virtual ~RankingPipeline(){};
   RankingPipeline(const RankingPipeline &) = delete;
   RankingPipeline &operator=(const RankingPipeline &) = delete;
@@ -318,12 +312,12 @@ public:
   };
 
 private:
-  std::shared_ptr<Warren> warren_;
+  std::shared_ptr<Stats> stats_;
   std::vector<std::shared_ptr<RankingContextTransformer>> transformers_;
   virtual std::vector<RankingResult>
   rank_(const std::string &query,
         std::map<std::string, fval> *parameters) final {
-    RankingContext context(warren_);
+    RankingContext context(stats_);
     context.clear(query);
     for (auto &transformer : transformers_)
       transformer->transform(&context);
@@ -336,10 +330,10 @@ private:
 } // namespace
 
 std::shared_ptr<Ranker> Ranker::from_pipeline(const std::string &pipeline,
-                                              std::shared_ptr<Warren> warren,
+                                              std::shared_ptr<Stats> stats,
                                               std::string *error) {
   std::shared_ptr<RankingPipeline> rpp =
-      std::make_shared<RankingPipeline>(warren);
+      std::make_shared<RankingPipeline>(stats);
   std::regex ws_re("\\s+");
   std::vector<std::string> stages{
       std::sregex_token_iterator(pipeline.begin(), pipeline.end(), ws_re, -1),
@@ -357,4 +351,12 @@ std::shared_ptr<Ranker> Ranker::from_pipeline(const std::string &pipeline,
   return rpp;
 }
 
+std::shared_ptr<Ranker> Ranker::from_pipeline(const std::string &pipeline,
+                                              std::shared_ptr<Warren> warren,
+                                              std::string *error) {
+  std::shared_ptr<Stats> stats = Stats::make(warren, error);
+  if (stats == nullptr)
+    return nullptr;
+  return Ranker::from_pipeline(pipeline, stats, error);
+}
 } // namespace cottontail

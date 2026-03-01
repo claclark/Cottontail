@@ -7,6 +7,7 @@
 
 #include "src/core.h"
 #include "src/ranking.h"
+#include "src/stats.h"
 #include "src/warren.h"
 
 namespace cottontail {
@@ -25,6 +26,9 @@ public:
   Ranker(Ranker &&) = delete;
   Ranker &operator=(Ranker &&) = delete;
 
+  static std::shared_ptr<Ranker> from_pipeline(const std::string &pipeline,
+                                               std::shared_ptr<Stats> stats,
+                                               std::string *error = nullptr);
   static std::shared_ptr<Ranker> from_pipeline(const std::string &pipeline,
                                                std::shared_ptr<Warren> warren,
                                                std::string *error = nullptr);
