@@ -8,9 +8,11 @@
 #include <iostream>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <regex>
 #include <set>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "src/core.h"
@@ -359,4 +361,110 @@ std::shared_ptr<Ranker> Ranker::from_pipeline(const std::string &pipeline,
     return nullptr;
   return Ranker::from_pipeline(pipeline, stats, error);
 }
+
+bool trec(std::shared_ptr<Stats> stats, const std::string &pipeline,
+          std::map<std::string, std::string> queries,
+          std::map<std::string, std::vector<std::string>> *results,
+          std::string *error, size_t threads) {
+  if (queries.size() == 0)
+    return true;
+  assert(results != nullptr);
+  {
+    std::shared_ptr<cottontail::Ranker> rank =
+        cottontail::Ranker::from_pipeline(pipeline, stats, error);
+    if (rank == nullptr)
+      return false;
+    addr p, q;
+    std::unique_ptr<cottontail::Hopper> id_hopper = stats->id_hopper();
+    if (id_hopper == nullptr) {
+      safe_error(error) = "Can't find identifiers";
+      return false;
+    }
+    id_hopper->tau(minfinity + 1, &p, &q);
+    if (p == maxfinity) {
+      safe_error(error) = "Can't find identifiers";
+      return false;
+    }
+  }
+  std::vector<std::string> topics;
+  for (auto &q : queries)
+    topics.push_back(q.first);
+  if (threads == 0)
+    threads = std::thread::hardware_concurrency() + 1;
+  threads = std::min(threads, topics.size());
+  std::mutex sync;
+  bool stop = false;
+  auto solver = [&](size_t i) {
+    std::string local_error;
+    std::shared_ptr<Stats> local_stats;
+    {
+      std::lock_guard<std::mutex> _(sync);
+      if (stop)
+        return;
+      local_stats = stats->clone(&local_error);
+      if (local_stats == nullptr) {
+        safe_set(error) = local_error;
+        stop = true;
+        return;
+      }
+    }
+    std::shared_ptr<cottontail::Ranker> rank =
+        cottontail::Ranker::from_pipeline(pipeline, stats, &local_error);
+    if (rank == nullptr) {
+      std::lock_guard<std::mutex> _(sync);
+      if (stop)
+        return;
+      safe_set(error) = local_error;
+      stop = true;
+      return;
+    }
+    std::unique_ptr<cottontail::Hopper> id_hopper = local_stats->id_hopper();
+    if (id_hopper == nullptr) {
+      std::lock_guard<std::mutex> _(sync);
+      if (stop)
+        return;
+      safe_set(error) = "Can't find identifiers";
+      stop = true;
+      return;
+    }
+    for (size_t j = i; j < topics.size(); j += threads) {
+      std::string topic, query;
+      {
+        std::lock_guard<std::mutex> _(sync);
+        if (stop)
+          return;
+        topic = topics[j];
+        query = queries[topic];
+      }
+      std::vector<cottontail::RankingResult> ranking = (*rank)(query);
+      if (ranking.size() == 0) {
+        std::lock_guard<std::mutex> _(sync);
+        if (stop)
+          return;
+        (*results)[topic].clear();
+      } else {
+        for (size_t r = 0; r < ranking.size(); r++) {
+          addr p, q;
+          id_hopper->tau(ranking[r].container_q(), &p, &q);
+          if (q <= ranking[i].container_q()) {
+            std::string docno = local_stats->warren()->txt()->translate(p, q);
+            {
+              std::lock_guard<std::mutex> _(sync);
+              if (stop)
+                return;
+              (*results)[topic].push_back(docno);
+            }
+          }
+        }
+      }
+    }
+  };
+  std::vector<std::thread> workers;
+  for (size_t i = 0; i < threads; i++)
+    workers.emplace_back(std::thread(solver, i));
+  for (auto &worker : workers)
+    worker.join();
+  return true;
+}
+
 } // namespace cottontail

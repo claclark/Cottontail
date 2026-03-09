@@ -21,8 +21,12 @@ public:
                                      std::string *error = nullptr);
   static bool check(const std::string &name, const std::string &recipe,
                     std::string *error = nullptr);
-  inline std::string recipe() { return recipe_(); }
+
+  inline std::shared_ptr<Stats> clone(std::string *error = nullptr) {
+    return clone_(error);
+  };
   inline std::string name() { return name_; }
+  inline std::string recipe() { return recipe_(); }
 
   inline bool have(const std::string &name) { return have_(name); };
   inline fval idf(const std::string &term) { return idf_(term); };
@@ -34,15 +38,12 @@ public:
   inline std::unique_ptr<Hopper> container_hopper() {
     return container_hopper_();
   };
-  inline std::shared_ptr<Warren> warren() {
-    return warren_;
+  inline std::unique_ptr<Hopper> id_hopper() {
+    return id_hopper_();
   }
-  inline std::shared_ptr<Stemmer> stemmer() {
-    return stemmer_;
-  };
-  inline std::shared_ptr<Tokenizer> tokenizer() {
-    return tokenizer_;
-  };
+  inline std::shared_ptr<Warren> warren() { return warren_; }
+  inline std::shared_ptr<Stemmer> stemmer() { return stemmer_; };
+  inline std::shared_ptr<Tokenizer> tokenizer() { return tokenizer_; };
 
   virtual ~Stats(){};
   Stats(const Stats &) = delete;
@@ -58,6 +59,7 @@ protected:
   std::shared_ptr<Tokenizer> tokenizer_;
 
 private:
+  virtual std::shared_ptr<Stats> clone_(std::string *error);
   virtual std::string recipe_() { return ""; }
   virtual bool have_(const std::string &name) { return false; };
   virtual fval avgl_() { return 1; };
@@ -67,6 +69,7 @@ private:
     return std::make_unique<EmptyHopper>();
   }
   virtual std::unique_ptr<Hopper> container_hopper_();
+  virtual std::unique_ptr<Hopper> id_hopper_();
   std::string name_ = "";
 };
 

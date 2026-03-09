@@ -36,6 +36,7 @@ private:
   fval rsj_(const std::string &term) final;
   std::unique_ptr<Hopper> tf_hopper_(const std::string &term) final;
   std::unique_ptr<Hopper> container_hopper_() final;
+  std::unique_ptr<Hopper> id_hopper_() final;
   std::string tag_;
   std::string label_;
   std::string id_query_;

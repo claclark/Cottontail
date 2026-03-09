@@ -40,6 +40,12 @@ private:
   virtual std::vector<RankingResult>
   rank_(const std::string &query, std::map<std::string, fval> *parameters) = 0;
 };
+
+bool trec(std::shared_ptr<Stats> stats, const std::string &pipeline,
+          std::map<std::string, std::string> queries,
+          std::map<std::string, std::vector<std::string>> *results,
+          std::string *error, size_t threads);
+
 } // namespace cottontail
 
 #endif // COTTONTAIL_SRC_BUILDER_H_

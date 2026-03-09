@@ -190,5 +190,11 @@ std::unique_ptr<Hopper> TfIdfStats::container_hopper_() {
   assert(hopper != nullptr);
   return hopper;
 }
+
+std::unique_ptr<Hopper> TfIdfStats::id_hopper_() {
+  std::unique_ptr<Hopper> hopper = warren_->hopper_from_gcl(id_query_);
+  assert(hopper != nullptr);
+  return hopper;
+}
 } // namespace meadowlark
 } // namespace cottontail

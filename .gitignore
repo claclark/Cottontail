@@ -2,6 +2,8 @@
 *.swp
 *.burrow
 *.meadow
+*temp*
+*test*
 .DS_Store
 MODULE.bazel.lock
 /bazel-Cottontail

@@ -33,8 +33,8 @@ std::shared_ptr<Stats> Stats::make(std::shared_ptr<Warren> warren,
     if (container_value != "") {
       stats_name = "idf";
     } else {
-       safe_error(error) = "No ranking statistic in warren";
-       return nullptr;
+      safe_error(error) = "No ranking statistic in warren";
+      return nullptr;
     }
   }
   std::shared_ptr<Stats> stats =
@@ -78,6 +78,14 @@ std::shared_ptr<Stats> Stats::make(const std::string &name,
   return stats;
 }
 
+std::shared_ptr<Stats> Stats::clone_(std::string *error) {
+  std::shared_ptr<cottontail::Warren> w = warren()->clone(error);
+  if (w == nullptr)
+    return nullptr;
+  w->start();
+  return Stats::make(name(), recipe(), w, error);
+}
+
 bool Stats::check(const std::string &name, const std::string &recipe,
                   std::string *error) {
   if (name == "") {
@@ -106,6 +114,17 @@ std::unique_ptr<Hopper> Stats::container_hopper_() {
     return std::make_unique<EmptyHopper>();
   std::unique_ptr<cottontail::Hopper> hopper =
       warren_->hopper_from_gcl(container_query);
+  if (hopper == nullptr)
+    return std::make_unique<EmptyHopper>();
+  return hopper;
+}
+
+std::unique_ptr<Hopper> Stats::id_hopper_() {
+  std::string id_query;
+  if (!warren()->get_parameter("id", &id_query))
+    return std::make_unique<EmptyHopper>();
+  std::unique_ptr<cottontail::Hopper> hopper =
+      warren()->hopper_from_gcl(id_query);
   if (hopper == nullptr)
     return std::make_unique<EmptyHopper>();
   return hopper;
