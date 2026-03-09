@@ -79,7 +79,12 @@ std::shared_ptr<Stats> Stats::make(const std::string &name,
 }
 
 std::shared_ptr<Stats> Stats::clone_(std::string *error) {
+  bool restart = warren()->started();
+  if (restart)
+    warren()->end();
   std::shared_ptr<cottontail::Warren> w = warren()->clone(error);
+  if (restart)
+    warren()->start();
   if (w == nullptr)
     return nullptr;
   w->start();
