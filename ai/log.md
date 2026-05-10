@@ -5,3 +5,4 @@
 2026-03-09T02:24:04Z Replaced `apps/working.cc` with a disposable `rank`-style CLI that uses the new batch `trec(...)` helper and emits surrogate TREC scores from rank order.
 2026-03-09T02:25:49Z Moved docno fallback probing into `src/ranker.cc::trec(...)` and simplified `apps/working.cc` to rely on the shared helper.
 2026-03-09T02:27:33Z Removed legacy docno fallback probing from `src/ranker.cc::trec(...)`; shared batch ranking now strictly relies on identifiers resolved by `Stats`.
+2026-03-10T20:45:53Z Performed repository reconnaissance: re-read `ai/architecture.md`, reviewed `README.md`, and surveyed top-level, `src/`, `meadowlark/`, and `test/` layout to refresh the current code map.
