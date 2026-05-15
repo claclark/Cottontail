@@ -1,0 +1,169 @@
+# Hazel v1 Plan
+
+## Goal
+
+Create a first Hazel writer by adding Fiver-to-Hazel conversion methods.
+
+A Hazel is a standalone immutable shard file. A Fiver is the first producer,
+but the format should not assume that all Hazels come from Fivers forever.
+
+Immediate scope:
+
+- Write `hazel.n.m` from a built in-memory Fiver.
+- Use a single-file format that can later be activated quickly.
+- Keep Fiver/Hazel activation, Hazel querying, Hazel/Hazel merge, and Bigwig
+  integration for later steps.
+- Do not support deletion or tombstones in Hazel v1.
+
+## Fiver API
+
+Add two methods near the existing pickle/discard declarations in `fiver.h`:
+
+```
+bool hazel(std::string *error = nullptr, bool discard = false);
+bool hazel(const std::string &filename, std::string *error = nullptr,
+           bool discard = false);
+```
+
+Implementation should live at the bottom of `fiver.cc`, with local Hazel
+helpers nearby so the long format-writing code stays out of the main Fiver
+transaction and merge flow.
+
+Default behavior:
+
+- Write to a temporary file first.
+- Link the completed temp file to `hazel.<sequence_start>.<sequence_end>`.
+- Remove the temp file after a successful link.
+- If `discard` is true, remove the corresponding Fiver pickle after the Hazel
+  link succeeds.
+- Leave the Fiver untouched if Hazel writing fails.
+
+This gives robust cleanup behavior: later activation can prefer `hazel.n.m`
+over `fiver.n.m` if both exist.
+
+## File Format
+
+Hazel v1 is:
+
+```
+#COTTONTAIL
+<dna>
+<newline>
+<top-level blob dictionary>
+<component blobs>
+```
+
+The first line and DNA are ASCII so `strings hazel.n.m` shows what the file is
+and which components it contains.
+
+The DNA is the semantic manifest. It should include:
+
+- `warren:"hazel"`
+- tokenizer name/recipe
+- featurizer name/recipe
+- `idx:[ name:"hazel", recipe:[ ... ] ]`
+- `txt:[ name:"hazel", recipe:[ ... ] ]`
+- Hazel metadata such as sequence start/end if useful in this framework
+
+All values use the existing recipe/DNA string format. Build DNA with
+`std::map<std::string, std::string>` and `freeze(...)`, not by hand-formatting
+large strings.
+
+The top-level blob dictionary is the physical manifest. It maps component blob
+names such as `idx` and `txt` to byte ranges in the file.
+
+## Component Blobs
+
+Each component blob is self-contained. The top-level dictionary only finds the
+component blob; the component then uses its own internal directory.
+
+### idx blob
+
+The idx blob is a posting directory plus posting lists:
+
+```
+<idx blob header>
+<posting directory>
+<posting list bytes>
+```
+
+The posting directory maps:
+
+```
+feature -> posting offset, posting length, posting count
+```
+
+Posting list bytes can use the existing `SimplePosting::write(...)` format.
+Later `hazel_idx` activation can binary-search the posting directory, read one
+posting list, and return its hopper.
+
+### txt blob
+
+The txt blob is a chunked compressed byte store:
+
+```
+<txt blob header>
+<text chunk directory>
+<compressed text chunks>
+```
+
+The text chunk directory maps:
+
+```
+raw byte start, raw byte length -> compressed offset, compressed length
+```
+
+The text chunk size is a creation-time parameter recorded in the `txt` recipe.
+
+Hazel txt does not need its own token-to-byte index. The idx contains
+`text_chunk_tag` postings, which later `hazel_txt` can use to translate token
+ranges into byte ranges before reading the needed compressed text chunks.
+
+## DNA And Compatibility
+
+Hazel carries its own DNA because its `idx` and `txt` components are Hazel
+components, not the outer Bigwig/Fiver components.
+
+Later activation should check compatibility with the outer context by checking:
+
+- tokenizer name/recipe
+- featurizer name/recipe
+
+Compressor names and recipes should come from the Fiver's compressor objects
+using `name()` and `recipe()`. If a compressor reports these incorrectly, that
+is a compressor bug.
+
+DNA parameters are treated as write-only build metadata here. Mutable Warren
+parameters should continue moving toward indexed or metadata-backed storage,
+not depend on old DNA parameter mutation.
+
+## CLI Step
+
+After the Fiver Hazel-writing methods exist, add `apps/fiver2hazel.cc`.
+
+The tool should convert one or more Fiver pickle files into Hazel files:
+
+```
+fiver2hazel fiver...
+```
+
+It expects a `dna` file at the same directory level as the input Fiver files.
+For example, when called from a burrow directory, it reads `./dna` and converts
+the named `fiver.n.m` files in that same directory.
+
+The `dna` file supplies the tokenizer, featurizer, and compressor recipes
+needed to unpickle each Fiver. The tool should then call the new Fiver Hazel
+writer and produce matching `hazel.n.m` files.
+
+This CLI is the final step for the first Hazel milestone. It gives a direct
+way to materialize Hazels before Hazel activation and Bigwig integration exist.
+
+## Deferred Work
+
+- `hazel_idx.*` and `hazel_txt.*` top-level component files.
+- Activation through `Idx::make("hazel", ...)` and `Txt::make("hazel", ...)`.
+- A Hazel Warren opener.
+- Bigwig/Fluffle integration.
+- Hazel/Hazel merge.
+- Direct Hazel building without an intermediate Fiver.
+- Deletion/tombstones.

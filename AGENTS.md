@@ -8,11 +8,20 @@ All agent documentation lives in the ai/ directory.
 Before doing any work, read:
     ai/architecture.md
 
+If it exists, also read:
+    ai/plan.ai
+
+This file records the current planned next coding step.
+
 Files in ai/:
 
 ai/architecture.md
     Overview of the core architecture.
     This file is authoritative and should not be modified unless explicitly requested.
+
+ai/plan.ai
+    Current plan for the next coding step, when one has been materialized.
+    Use this to continue planned work instead of restarting the design discussion.
 
 ai/notes.md
     Your working notes about the repository structure, modules, and behavior.
