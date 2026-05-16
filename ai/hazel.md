@@ -1,0 +1,210 @@
+# Hazel File Format
+
+This note describes the current Hazel v1 file produced by `Fiver::hazel(...)`.
+It is intended as a guide for implementing Hazel activation.
+
+Hazel is a single immutable shard file. The first producer is a live, built
+Fiver under Bigwig control, but the file should be activated as a standalone
+Hazel component pair: `hazel_idx` plus `hazel_txt`.
+
+## Top Level
+
+The file begins with readable identification and DNA:
+
+```
+#COTTONTAIL
+<dna>
+<blank line>
+<top-level blob dictionary>
+<component blobs>
+```
+
+The DNA is the semantic manifest. It is written with the existing recipe
+format and includes:
+
+- `warren:"hazel"`
+- `featurizer:[ name:"...", recipe:"..." ]`
+- `tokenizer:[ name:"...", recipe:"..." ]`
+- `idx:[ name:"hazel", recipe:[ ... ] ]`
+- `txt:[ name:"hazel", recipe:[ ... ] ]`
+- `hazel:[ sequence_start:"...", sequence_end:"..." ]`
+
+The `idx` recipe records the posting and fvalue compressors. The `txt` recipe
+records the text compressor and `chunk_size`.
+
+After the blank line comes the top-level blob dictionary:
+
+```
+"COTTONTAIL_HAZEL_BLOBS_V1\n"
+addr blob_count
+repeat blob_count:
+  addr name_length
+  char[name_length] name
+  addr offset
+  addr length
+```
+
+Top-level blob offsets are absolute file offsets. Current blob names are:
+
+- `idx`
+- `txt`
+
+The writer reserves this dictionary near the front of the file, streams the
+component blobs, then seeks back and patches the final byte ranges.
+
+All binary integer fields are currently written as native `addr` values, and
+floating values as native `fval` values. This is a v1 internal format, not yet
+a portable cross-architecture interchange format.
+
+## idx Blob
+
+The idx blob is self-contained. The top-level dictionary gives the absolute
+byte range of the blob; all offsets inside the idx blob are relative to the
+start of that blob.
+
+Header:
+
+```
+"COTTONTAIL_HAZEL_IDX_V1\n"
+addr directory_offset
+addr directory_length
+addr directory_count
+```
+
+The writer streams posting-list bytes first, keeps the posting directory in
+memory, writes the directory at the end of the idx blob, then patches the
+header.
+
+Directory entry:
+
+```
+addr feature
+addr offset
+addr length
+addr count
+addr singleton
+addr p
+addr q
+fval v
+```
+
+Directory entries are ordered by feature, matching the Fiver index map order.
+Activation can binary-search by `feature`.
+
+If `singleton` is non-zero, the posting is stored directly in the directory
+entry as `(p, q, v)` and no posting bytes need to be read. This is intended to
+avoid tiny posting-list records for single-entry features.
+
+If `singleton` is zero, `offset` and `length` identify posting-list bytes
+inside the idx blob. These bytes are currently written with
+`SimplePosting::write(...)`, using the posting and fvalue compressors recorded
+in the Hazel DNA. Activation may initially decode these bytes using the same
+`SimplePosting` physical encoding, but this should be treated as the Hazel v1
+wire encoding, not as a promise that all future Hazel producers have
+`SimplePosting` objects internally.
+
+## txt Blob
+
+The txt blob is also self-contained. The top-level dictionary gives the
+absolute byte range; all offsets inside the txt blob are relative to the start
+of that blob.
+
+Header:
+
+```
+"COTTONTAIL_HAZEL_TXT_V1\n"
+addr directory_offset
+addr directory_length
+addr directory_count
+addr raw_text_length
+addr target_chunk_size
+```
+
+The writer streams compressed text chunks first, keeps the text chunk directory
+in memory, writes the directory at the end of the txt blob, then patches the
+header.
+
+Text directory entry:
+
+```
+addr raw_offset
+addr raw_length
+addr compressed_offset
+addr compressed_length
+```
+
+The raw offsets are byte offsets into the original Fiver text blob. The
+compressed offsets are relative to the start of the txt blob.
+
+Text chunks are formed by walking a private hopper over the Fiver idx posting
+list for `text_chunk_tag`. Adjacent Fiver text chunks are grouped until the raw
+byte span reaches at least `target_chunk_size` when possible. The default
+target is 64 KiB, but `Fiver::hazel(...)` accepts an explicit value and
+`apps/fiver2hazel` exposes it as:
+
+```
+fiver2hazel --chunk-size bytes fiver...
+```
+
+The final chunk extends to `raw_text_length`.
+
+## Relationship Between idx And txt
+
+Hazel txt should not build its own token-to-byte index. As with `FiverTxt`,
+text lookup depends on the idx posting list for `text_chunk_tag`.
+
+That posting list maps:
+
+```
+token interval p,q -> raw text byte offset in v
+```
+
+Activation should use Hazel idx to obtain a hopper for `text_chunk_tag`.
+For a `translate(p, q)` request, Hazel txt should:
+
+1. Use a private or mutex-protected hopper over `text_chunk_tag`.
+2. Find the Fiver-style raw byte offsets bracketing the requested token range.
+3. Use the txt chunk directory to locate the compressed text chunk or chunks
+   containing those raw byte offsets.
+4. Decompress only the needed compressed chunks.
+5. Use the tokenizer's `skip(...)` logic to trim to exact token boundaries.
+
+This mirrors `FiverTxt::translate(...)`, but uses Hazel's compressed byte
+store instead of Fiver's in-memory `std::string`.
+
+Hoppers are stateful. Activation should not share a single hopper across
+threads without synchronization. Prefer creating private hoppers for readers
+when practical, or protect shared hopper state with a mutex as `FiverTxt` does.
+
+## Activation Sketch
+
+Opening a Hazel shard should roughly:
+
+1. Read and verify `#COTTONTAIL`.
+2. Read DNA until the blank line and parse it with `cook(...)`.
+3. Verify `warren:"hazel"` and component recipes.
+4. Read the top-level blob dictionary.
+5. Locate `idx` and `txt` blob ranges.
+6. Build `hazel_idx` from the idx blob header and directory.
+7. Build `hazel_txt` from the txt blob header and directory, plus a reference
+   to the activated `hazel_idx`.
+8. Check tokenizer and featurizer compatibility with the outer Bigwig context.
+
+The idx directory is small enough to load into memory for binary search. The
+txt directory is also expected to be much smaller than the compressed text and
+can be loaded into memory initially.
+
+## Bigwig Integration Notes
+
+Hazels produced from Fivers are expected to be materialized under Bigwig
+control. The source Fiver should already be built, immutable, and started.
+
+Later Bigwig activation can prefer `hazel.n.m` over `fiver.n.m` when both
+exist for the same sequence range. This allows a conservative transition:
+materialize a Hazel, keep the Fiver pickle until the Hazel is known good, then
+eventually discard the Fiver pickle.
+
+Hazel/Hazel merge is deferred. The v1 format is intended to make that later
+step straightforward: merge posting directories/lists for idx, and concatenate
+or rechunk compressed text blobs while preserving the `text_chunk_tag`
+relationship.

@@ -2,6 +2,7 @@
 #define COTTONTAIL_SRC_SIMPLE_POSTING_H_
 
 #include <memory>
+#include <ostream>
 #include <string>
 #include <vector>
 
@@ -15,7 +16,7 @@ namespace cottontail {
 class SimplePosting final : public std::enable_shared_from_this<SimplePosting> {
 public:
   void append(std::shared_ptr<SimplePosting> more);
-  void write(std::fstream *f);
+  void write(std::ostream *f);
   bool get(size_t index, addr *p, addr *q, fval *v);
   void push(addr p, addr q, fval v);
   addr feature() { return feature_; };

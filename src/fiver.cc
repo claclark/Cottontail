@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <fstream>
@@ -10,6 +11,7 @@
 #include <mutex>
 #include <sstream>
 #include <unistd.h>
+#include <vector>
 
 #include "src/annotator.h"
 #include "src/appender.h"
@@ -841,6 +843,384 @@ Fiver::unpickle(const std::string &filename, std::shared_ptr<Working> working,
   if (fiver->txt_ == nullptr)
     return nullptr;
   return fiver;
+}
+
+namespace {
+
+struct HazelBlob {
+  std::string name;
+  addr offset;
+  addr length;
+};
+
+struct HazelPostingEntry {
+  addr feature;
+  addr offset;
+  addr length;
+  addr count;
+  addr singleton;
+  addr p;
+  addr q;
+  fval v;
+};
+
+struct HazelTextEntry {
+  addr raw_offset;
+  addr raw_length;
+  addr compressed_offset;
+  addr compressed_length;
+};
+
+template <typename T> void hazel_write_pod(std::ostream *out, const T &value) {
+  out->write(reinterpret_cast<const char *>(&value), sizeof(value));
+}
+
+void hazel_write_string(std::ostream *out, const std::string &value) {
+  addr length = value.size();
+  hazel_write_pod(out, length);
+  out->write(value.data(), value.size());
+}
+
+std::string hazel_package(const std::string &name, const std::string &recipe) {
+  std::map<std::string, std::string> parameters;
+  parameters["name"] = name;
+  parameters["recipe"] = recipe;
+  return freeze(parameters);
+}
+
+std::string hazel_dna(std::shared_ptr<Featurizer> featurizer,
+                      std::shared_ptr<Tokenizer> tokenizer,
+                      std::shared_ptr<Compressor> posting_compressor,
+                      std::shared_ptr<Compressor> fvalue_compressor,
+                      std::shared_ptr<Compressor> text_compressor,
+                      addr sequence_start, addr sequence_end,
+                      addr text_chunk_size) {
+  std::map<std::string, std::string> idx_recipe;
+  idx_recipe["posting_compressor"] = posting_compressor->name();
+  idx_recipe["posting_compressor_recipe"] = posting_compressor->recipe();
+  idx_recipe["fvalue_compressor"] = fvalue_compressor->name();
+  idx_recipe["fvalue_compressor_recipe"] = fvalue_compressor->recipe();
+  std::map<std::string, std::string> idx;
+  idx["name"] = "hazel";
+  idx["recipe"] = freeze(idx_recipe);
+
+  std::map<std::string, std::string> txt_recipe;
+  txt_recipe["compressor"] = text_compressor->name();
+  txt_recipe["compressor_recipe"] = text_compressor->recipe();
+  txt_recipe["chunk_size"] = std::to_string(text_chunk_size);
+  std::map<std::string, std::string> txt;
+  txt["name"] = "hazel";
+  txt["recipe"] = freeze(txt_recipe);
+
+  std::map<std::string, std::string> metadata;
+  metadata["sequence_start"] = std::to_string(sequence_start);
+  metadata["sequence_end"] = std::to_string(sequence_end);
+
+  std::map<std::string, std::string> dna;
+  dna["warren"] = "hazel";
+  dna["featurizer"] = hazel_package(featurizer->name(), featurizer->recipe());
+  dna["tokenizer"] = hazel_package(tokenizer->name(), tokenizer->recipe());
+  dna["idx"] = freeze(idx);
+  dna["txt"] = freeze(txt);
+  dna["hazel"] = freeze(metadata);
+  return freeze(dna);
+}
+
+addr hazel_tellp(std::fstream *out) { return out->tellp(); }
+
+bool hazel_write_idx_blob(
+    std::fstream *out,
+    const std::map<addr, std::shared_ptr<SimplePosting>> &index,
+    addr *blob_start, addr *blob_length, std::string *error) {
+  *blob_start = hazel_tellp(out);
+  const std::string magic = "COTTONTAIL_HAZEL_IDX_V1\n";
+  out->write(magic.data(), magic.size());
+  addr directory_offset = 0;
+  addr directory_length = 0;
+  addr directory_count = 0;
+  hazel_write_pod(out, directory_offset);
+  hazel_write_pod(out, directory_length);
+  hazel_write_pod(out, directory_count);
+
+  std::vector<HazelPostingEntry> directory;
+  for (auto &posting : index) {
+    HazelPostingEntry entry;
+    entry.feature = posting.first;
+    entry.count = posting.second->size();
+    entry.singleton = 0;
+    entry.offset = 0;
+    entry.length = 0;
+    entry.p = entry.q = 0;
+    entry.v = 0.0;
+    if (entry.count == 1 && posting.second->get(0, &entry.p, &entry.q,
+                                                &entry.v)) {
+      entry.singleton = 1;
+    } else {
+      entry.offset = hazel_tellp(out) - *blob_start;
+      posting.second->write(out);
+      entry.length = hazel_tellp(out) - *blob_start - entry.offset;
+      if (out->fail()) {
+        safe_error(error) = "Fiver failed to write Hazel idx postings";
+        return false;
+      }
+    }
+    directory.push_back(entry);
+  }
+  directory_offset = hazel_tellp(out) - *blob_start;
+  directory_count = directory.size();
+  for (auto &entry : directory) {
+    hazel_write_pod(out, entry.feature);
+    hazel_write_pod(out, entry.offset);
+    hazel_write_pod(out, entry.length);
+    hazel_write_pod(out, entry.count);
+    hazel_write_pod(out, entry.singleton);
+    hazel_write_pod(out, entry.p);
+    hazel_write_pod(out, entry.q);
+    hazel_write_pod(out, entry.v);
+  }
+  directory_length = hazel_tellp(out) - *blob_start - directory_offset;
+  *blob_length = hazel_tellp(out) - *blob_start;
+  out->seekp(*blob_start + magic.size());
+  hazel_write_pod(out, directory_offset);
+  hazel_write_pod(out, directory_length);
+  hazel_write_pod(out, directory_count);
+  out->seekp(*blob_start + *blob_length);
+  if (out->fail()) {
+    safe_error(error) = "Fiver failed to write Hazel idx directory";
+    return false;
+  }
+  return true;
+}
+
+bool hazel_crush(std::shared_ptr<Compressor> compressor,
+                 const char *raw, addr raw_length, std::string *compressed,
+                 std::string *error) {
+  addr available = raw_length + compressor->extra(raw_length);
+  std::unique_ptr<char[]> in;
+  char *source = const_cast<char *>(raw);
+  if (compressor->destructive()) {
+    in = std::unique_ptr<char[]>(new char[raw_length + 1]);
+    memcpy(in.get(), raw, raw_length);
+    source = in.get();
+  }
+  std::unique_ptr<char[]> out = std::unique_ptr<char[]>(new char[available + 1]);
+  addr n = compressor->crush(source, raw_length, out.get(), available);
+  if (n > available) {
+    safe_error(error) = "Hazel compressor overflow";
+    return false;
+  }
+  compressed->assign(out.get(), n);
+  return true;
+}
+
+bool hazel_write_text_chunk(std::fstream *out, addr blob_start,
+                            const std::string &text, addr raw_start,
+                            addr raw_length,
+                            std::shared_ptr<Compressor> text_compressor,
+                            std::vector<HazelTextEntry> *directory,
+                            std::string *error) {
+  if (raw_length <= 0)
+    return true;
+  std::string compressed;
+  if (!hazel_crush(text_compressor, text.data() + raw_start, raw_length,
+                   &compressed, error))
+    return false;
+  HazelTextEntry entry;
+  entry.raw_offset = raw_start;
+  entry.raw_length = raw_length;
+  entry.compressed_offset = hazel_tellp(out) - blob_start;
+  entry.compressed_length = compressed.size();
+  directory->push_back(entry);
+  out->write(compressed.data(), compressed.size());
+  if (out->fail()) {
+    safe_error(error) = "Fiver failed to write Hazel txt chunk";
+    return false;
+  }
+  return true;
+}
+
+bool hazel_write_txt_blob(std::fstream *out, std::shared_ptr<Idx> idx,
+                          std::shared_ptr<Featurizer> featurizer,
+                          const std::string &text,
+                          std::shared_ptr<Compressor> text_compressor,
+                          addr target_chunk_size,
+                          addr *blob_start, addr *blob_length,
+                          std::string *error) {
+  *blob_start = hazel_tellp(out);
+  const std::string magic = "COTTONTAIL_HAZEL_TXT_V1\n";
+  out->write(magic.data(), magic.size());
+  addr directory_offset = 0;
+  addr directory_length = 0;
+  addr directory_count = 0;
+  addr raw_text_length = text.size();
+  hazel_write_pod(out, directory_offset);
+  hazel_write_pod(out, directory_length);
+  hazel_write_pod(out, directory_count);
+  hazel_write_pod(out, raw_text_length);
+  hazel_write_pod(out, target_chunk_size);
+
+  std::vector<HazelTextEntry> directory;
+  std::unique_ptr<Hopper> hopper =
+      idx->hopper(featurizer->featurize(text_chunk_tag));
+  addr p, q;
+  fval v;
+  bool have_chunk = false;
+  addr group_start = 0;
+  for (hopper->tau(minfinity + 1, &p, &q, &v); p < maxfinity;
+       hopper->tau(p + 1, &p, &q, &v)) {
+    addr raw_start = fval2addr(v);
+    if (raw_start < 0 || raw_start > (addr)text.size()) {
+      safe_error(error) = "Fiver has invalid text chunk offset";
+      return false;
+    }
+    if (!have_chunk) {
+      group_start = raw_start;
+      have_chunk = true;
+    } else if (raw_start - group_start >= target_chunk_size) {
+      if (!hazel_write_text_chunk(out, *blob_start, text, group_start,
+                                  raw_start - group_start, text_compressor,
+                                  &directory, error))
+        return false;
+      group_start = raw_start;
+    }
+  }
+  if (have_chunk) {
+    if (!hazel_write_text_chunk(out, *blob_start, text, group_start,
+                                (addr)text.size() - group_start,
+                                text_compressor, &directory, error))
+      return false;
+  } else if (text.size() > 0) {
+    if (!hazel_write_text_chunk(out, *blob_start, text, 0, text.size(),
+                                text_compressor, &directory, error))
+      return false;
+  }
+  directory_offset = hazel_tellp(out) - *blob_start;
+  directory_count = directory.size();
+  for (auto &entry : directory) {
+    hazel_write_pod(out, entry.raw_offset);
+    hazel_write_pod(out, entry.raw_length);
+    hazel_write_pod(out, entry.compressed_offset);
+    hazel_write_pod(out, entry.compressed_length);
+  }
+  directory_length = hazel_tellp(out) - *blob_start - directory_offset;
+  *blob_length = hazel_tellp(out) - *blob_start;
+  out->seekp(*blob_start + magic.size());
+  hazel_write_pod(out, directory_offset);
+  hazel_write_pod(out, directory_length);
+  hazel_write_pod(out, directory_count);
+  hazel_write_pod(out, raw_text_length);
+  hazel_write_pod(out, target_chunk_size);
+  out->seekp(*blob_start + *blob_length);
+  if (out->fail()) {
+    safe_error(error) = "Fiver failed to write Hazel txt directory";
+    return false;
+  }
+  return true;
+}
+
+std::string hazel_blob_dictionary(const std::vector<HazelBlob> &blobs) {
+  std::ostringstream out(std::ios::out | std::ios::binary);
+  const std::string magic = "COTTONTAIL_HAZEL_BLOBS_V1\n";
+  out.write(magic.data(), magic.size());
+  addr n = blobs.size();
+  hazel_write_pod(&out, n);
+  for (auto &blob : blobs) {
+    hazel_write_string(&out, blob.name);
+    hazel_write_pod(&out, blob.offset);
+    hazel_write_pod(&out, blob.length);
+  }
+  return out.str();
+}
+
+std::string hazel_default_name(addr sequence_start, addr sequence_end) {
+  return "hazel." + seq2str(sequence_start) + "." + seq2str(sequence_end);
+}
+
+} // namespace
+
+bool Fiver::hazel(std::string *error, bool discard, addr text_chunk_size) {
+  if (working() == nullptr) {
+    safe_error(error) = "Fiver needs a working directory for default Hazel name";
+    return false;
+  }
+  if (text_chunk_size <= 0) {
+    safe_error(error) = "Hazel text chunk size must be positive";
+    return false;
+  }
+  std::string tempname = working()->make_temp("hazel");
+  if (!hazel(tempname, error, false, text_chunk_size)) {
+    std::remove(tempname.c_str());
+    return false;
+  }
+  std::string hazelname =
+      working()->make_name(hazel_default_name(sequence_start_, sequence_end_));
+  if (link(tempname.c_str(), hazelname.c_str()) != 0) {
+    safe_error(error) = "Fiver can't link Hazel shard: " + hazelname;
+    std::remove(tempname.c_str());
+    return false;
+  }
+  std::remove(tempname.c_str());
+  if (discard)
+    return Fiver::discard(error);
+  return true;
+}
+
+bool Fiver::hazel(const std::string &filename, std::string *error,
+                  bool discard, addr text_chunk_size) {
+  if (idx_ == nullptr || txt_ == nullptr || index_ == nullptr ||
+      text_ == nullptr) {
+    safe_error(error) = "Fiver must have Idx and Txt before writing Hazel";
+    return false;
+  }
+  if (text_chunk_size <= 0) {
+    safe_error(error) = "Hazel text chunk size must be positive";
+    return false;
+  }
+  std::string dna =
+      hazel_dna(featurizer_, tokenizer_, posting_compressor_,
+                fvalue_compressor_, text_compressor_, sequence_start_,
+                sequence_end_, text_chunk_size);
+
+  std::vector<HazelBlob> blobs = {{"idx", 0, 0}, {"txt", 0, 0}};
+  const std::string file_header = "#COTTONTAIL\n";
+  std::string dictionary = hazel_blob_dictionary(blobs);
+
+  std::fstream out;
+  out.open(filename, std::ios::binary | std::ios::out);
+  if (out.fail()) {
+    safe_error(error) = "Fiver can't create Hazel shard: " + filename;
+    return false;
+  }
+  out.write(file_header.data(), file_header.size());
+  out.write(dna.data(), dna.size());
+  out.put('\n');
+  addr dictionary_offset = hazel_tellp(&out);
+  out.write(dictionary.data(), dictionary.size());
+  if (!hazel_write_idx_blob(&out, *index_, &blobs[0].offset, &blobs[0].length,
+                            error)) {
+    out.close();
+    return false;
+  }
+  if (!hazel_write_txt_blob(&out, idx(), featurizer_, *text_, text_compressor_,
+                            text_chunk_size, &blobs[1].offset,
+                            &blobs[1].length, error)) {
+    out.close();
+    return false;
+  }
+  addr end = hazel_tellp(&out);
+  dictionary = hazel_blob_dictionary(blobs);
+  out.seekp(dictionary_offset);
+  out.write(dictionary.data(), dictionary.size());
+  out.seekp(end);
+  if (out.fail()) {
+    safe_error(error) = "Fiver failed to write Hazel shard: " + filename;
+    out.close();
+    return false;
+  }
+  out.close();
+  if (discard)
+    return Fiver::discard(error);
+  return true;
 }
 
 } // namespace cottontail

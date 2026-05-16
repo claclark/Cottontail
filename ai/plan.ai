@@ -167,3 +167,81 @@ way to materialize Hazels before Hazel activation and Bigwig integration exist.
 - Hazel/Hazel merge.
 - Direct Hazel building without an intermediate Fiver.
 - Deletion/tombstones.
+
+## Implementation Notes Captured During Writer Work
+
+The Fiver-to-Hazel writer is expected to run under Bigwig control. A Fiver
+being materialized as Hazel should already be built, immutable, and started.
+It is therefore appropriate for the writer to use normal public Warren/Idx
+surfaces such as `idx()->hopper(...)` when deriving text chunk boundaries.
+The standalone `apps/fiver2hazel.cc` utility is mainly a testing shim and
+starts each unpickled Fiver before calling `hazel(...)`.
+
+The public Fiver Hazel API now includes a text compression chunk-size
+parameter, defaulting to 64 KiB:
+
+```
+bool hazel(std::string *error = nullptr, bool discard = false,
+           addr text_chunk_size = 64 * 1024);
+bool hazel(const std::string &filename, std::string *error = nullptr,
+           bool discard = false, addr text_chunk_size = 64 * 1024);
+```
+
+The same value is recorded in the Hazel `txt` recipe as `chunk_size` and in
+the txt blob header. The testing CLI exposes this as:
+
+```
+fiver2hazel --chunk-size bytes fiver...
+```
+
+Hazel writing should stream large data directly to the output temp file. The
+writer should not assemble full `idx` or `txt` component blobs in memory.
+Current layout strategy:
+
+- Reserve/write a small top-level blob dictionary near the front of the file.
+- Stream the `idx` blob.
+- Stream the `txt` blob.
+- Seek back and patch the top-level blob dictionary with final byte ranges.
+
+The `idx` blob follows the SimpleIdx-style trick:
+
+- Write an idx blob header with placeholder directory metadata.
+- Stream posting list bytes.
+- Keep only a posting directory in memory.
+- Write the posting directory at the end of the idx blob.
+- Seek back and patch the idx blob header with directory offset, length, and
+  count.
+
+Posting list bytes are currently produced with `SimplePosting::write(...)`.
+That coupling is acceptable for the first Fiver producer, but activation code
+should treat it as a Hazel v1 physical encoding detail, not as a long-term
+requirement that all Hazel producers use SimplePosting internally.
+
+Single-entry postings may be stored directly in the idx directory entry
+instead of as separate posting-list bytes. Hazel activation should check the
+directory entry's singleton flag/count before reading posting bytes.
+
+The `txt` blob uses the same stream-and-patch pattern:
+
+- Write a txt blob header with placeholder directory metadata.
+- Create a private hopper from `idx()->hopper(text_chunk_tag_feature)`.
+- Walk the Fiver text chunk postings to group adjacent raw text byte spans.
+- Each compressed Hazel text chunk should be at least the configured raw byte
+  target when possible.
+- Stream compressed text chunks directly to the output file.
+- Keep only the text chunk directory in memory.
+- Write the text chunk directory at the end of the txt blob.
+- Seek back and patch the txt blob header.
+
+The text chunk directory maps:
+
+```
+raw byte start, raw byte length -> compressed offset, compressed length
+```
+
+Hazel txt activation should not build a separate token-to-byte index. It should
+use the `text_chunk_tag` postings from Hazel idx to translate token intervals
+to raw byte offsets, then use the txt chunk directory to locate and decompress
+the needed compressed text chunk(s). This mirrors how `FiverTxt` uses the idx
+for text lookup while avoiding shared hopper state by creating private hoppers
+for readers/writers as needed.

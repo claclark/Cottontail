@@ -340,7 +340,7 @@ void SimplePosting::push(addr p, addr q, fval v) {
   postings_.push_back(p);
 }
 
-void SimplePosting::write(std::fstream *f) {
+void SimplePosting::write(std::ostream *f) {
   assert(!f->fail());
   addr n = postings_.size();
   if (n == 0) {

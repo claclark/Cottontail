@@ -41,6 +41,10 @@ public:
   bool pickle(const std::string &filename, std::string *error = nullptr);
   bool pickle(std::string *error = nullptr);
   bool discard(std::string *error = nullptr);
+  bool hazel(std::string *error = nullptr, bool discard = false,
+             addr text_chunk_size = 64 * 1024);
+  bool hazel(const std::string &filename, std::string *error = nullptr,
+             bool discard = false, addr text_chunk_size = 64 * 1024);
   static std::shared_ptr<Fiver>
   unpickle(const std::string &filename, std::shared_ptr<Working> working,
            std::shared_ptr<Featurizer> featurizer,

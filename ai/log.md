@@ -9,3 +9,8 @@
 2026-05-14T23:54:40Z Drafted `ai/plan.ai` for Hazel v1: a single-file, self-describing Fiver-to-Hazel conversion milestone.
 2026-05-14T23:57:08Z Updated `AGENTS.md` to direct future agents to read `ai/plan.ai` when it exists.
 2026-05-15T00:00:30Z Extended `ai/plan.ai` with a final `apps/fiver2hazel.cc` CLI step for converting Fiver pickle files using same-level `dna`.
+2026-05-15T17:57:23Z Implemented Hazel v1 Fiver writer methods, added `apps/fiver2hazel.cc`, updated the app build target, and verified `bazel build //apps:fiver2hazel`.
+2026-05-15T18:51:13Z Reworked Hazel writing to stream idx postings and compressed txt chunks directly to the shard, write per-blob directories at the end, patch blob headers, and verified `bazel build //apps:fiver2hazel`.
+2026-05-15T19:10:35Z Added configurable Hazel text compression chunk size, defaulting to 64 KiB, and exposed `--chunk-size` in `apps/fiver2hazel`.
+2026-05-15T19:12:41Z Updated `ai/plan.ai` with Hazel writer implementation notes for activation: Bigwig-controlled started Fivers, stream-and-patch blob layout, singleton postings, text chunk directory, and text lookup via `text_chunk_tag`.
+2026-05-15T23:59:56Z Added `ai/hazel.md` documenting the Hazel v1 file format, blob headers/directories, text chunking, and activation notes.

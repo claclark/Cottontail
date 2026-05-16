@@ -107,6 +107,19 @@ cc_binary(
 )
 
 cc_binary(
+    name = "fiver2hazel",
+    srcs = [
+      "fiver2hazel.cc",
+    ],
+    deps = [
+      "//src:cottontail",
+    ],
+    linkopts = [
+      "-pthread",
+    ],
+)
+
+cc_binary(
     name = "fluffy",
     srcs = [
       "fluffy.cc",
