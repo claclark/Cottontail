@@ -19,5 +19,8 @@ bool extract_option(const std::string &recipe, const std::string &option,
                     std::string *value, std::string *error = nullptr);
 bool unwrap(const std::string &package, std::string *name, std::string *recipe,
             std::string *error = nullptr);
+bool name_and_recipe(const std::map<std::string, std::string> &parameters,
+                     const std::string &key, std::string *name,
+                     std::string *recipe, std::string *error = nullptr);
 } // namespace cottontail
 #endif // COTTONTAIL_SRC_RECIPE_H_

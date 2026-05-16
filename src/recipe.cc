@@ -364,4 +364,15 @@ bool unwrap(const std::string &package, std::string *name, std::string *recipe,
   return true;
 }
 
+bool name_and_recipe(const std::map<std::string, std::string> &parameters,
+                     const std::string &key, std::string *name,
+                     std::string *recipe, std::string *error) {
+  auto item = parameters.find(key);
+  if (item == parameters.end()) {
+    safe_error(error) = "No " + key + " found";
+    return false;
+  }
+  return unwrap(item->second, name, recipe, error);
+}
+
 } // namespace cottontail

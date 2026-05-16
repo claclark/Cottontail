@@ -1194,6 +1194,7 @@ bool Fiver::hazel(const std::string &filename, std::string *error,
   out.write(file_header.data(), file_header.size());
   out.write(dna.data(), dna.size());
   out.put('\n');
+  out.put('\n');
   addr dictionary_offset = hazel_tellp(&out);
   out.write(dictionary.data(), dictionary.size());
   if (!hazel_write_idx_blob(&out, *index_, &blobs[0].offset, &blobs[0].length,

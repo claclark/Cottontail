@@ -1,247 +1,101 @@
-# Hazel v1 Plan
+# Featurizer Name/Recipe Round-Trip Plan
 
-## Goal
+## Collaboration Note
 
-Create a first Hazel writer by adding Fiver-to-Hazel conversion methods.
+Do not simply execute this plan straight through. Work through it with the
+user. This is a design side quest that affects component identity and DNA
+round-tripping, so pause at decision points and keep changes small.
 
-A Hazel is a standalone immutable shard file. A Fiver is the first producer,
-but the format should not assume that all Hazels come from Fivers forever.
+## Problem
 
-Immediate scope:
-
-- Write `hazel.n.m` from a built in-memory Fiver.
-- Use a single-file format that can later be activated quickly.
-- Keep Fiver/Hazel activation, Hazel querying, Hazel/Hazel merge, and Bigwig
-  integration for later steps.
-- Do not support deletion or tombstones in Hazel v1.
-
-## Fiver API
-
-Add two methods near the existing pickle/discard declarations in `fiver.h`:
+Hazel writing currently asks live components for their semantic identity:
 
 ```
-bool hazel(std::string *error = nullptr, bool discard = false);
-bool hazel(const std::string &filename, std::string *error = nullptr,
-           bool discard = false);
+featurizer->name()
+featurizer->recipe()
+tokenizer->name()
+tokenizer->recipe()
 ```
 
-Implementation should live at the bottom of `fiver.cc`, with local Hazel
-helpers nearby so the long format-writing code stays out of the main Fiver
-transaction and merge flow.
-
-Default behavior:
-
-- Write to a temporary file first.
-- Link the completed temp file to `hazel.<sequence_start>.<sequence_end>`.
-- Remove the temp file after a successful link.
-- If `discard` is true, remove the corresponding Fiver pickle after the Hazel
-  link succeeds.
-- Leave the Fiver untouched if Hazel writing fails.
-
-This gives robust cleanup behavior: later activation can prefer `hazel.n.m`
-over `fiver.n.m` if both exist.
-
-## File Format
-
-Hazel v1 is:
+That is the intended design, but `Featurizer` implementations do not currently
+round-trip reliably. A Hazel produced from `a.meadow/dna` reported:
 
 ```
-#COTTONTAIL
-<dna>
-<newline>
-<top-level blob dictionary>
-<component blobs>
+featurizer:[
+  name:"",
+  recipe:"hashing",
+]
 ```
 
-The first line and DNA are ASCII so `strings hazel.n.m` shows what the file is
-and which components it contains.
-
-The DNA is the semantic manifest. It should include:
-
-- `warren:"hazel"`
-- tokenizer name/recipe
-- featurizer name/recipe
-- `idx:[ name:"hazel", recipe:[ ... ] ]`
-- `txt:[ name:"hazel", recipe:[ ... ] ]`
-- Hazel metadata such as sequence start/end if useful in this framework
-
-All values use the existing recipe/DNA string format. Build DNA with
-`std::map<std::string, std::string>` and `freeze(...)`, not by hand-formatting
-large strings.
-
-The top-level blob dictionary is the physical manifest. It maps component blob
-names such as `idx` and `txt` to byte ranges in the file.
-
-## Component Blobs
-
-Each component blob is self-contained. The top-level dictionary only finds the
-component blob; the component then uses its own internal directory.
-
-### idx blob
-
-The idx blob is a posting directory plus posting lists:
+while the source DNA was:
 
 ```
-<idx blob header>
-<posting directory>
-<posting list bytes>
+featurizer:[
+  name:"json",
+  recipe:[
+    name:"hashing",
+    recipe:"",
+  ],
+]
 ```
 
-The posting directory maps:
+This caused Hazel activation to call `Featurizer::make("", "hashing", ...)`,
+which selects the hashing featurizer with a non-empty recipe and fails.
+
+## Desired Contract
+
+For any Featurizer created through the public factory:
 
 ```
-feature -> posting offset, posting length, posting count
+auto f = Featurizer::make(name, recipe, ...);
 ```
 
-Posting list bytes can use the existing `SimplePosting::write(...)` format.
-Later `hazel_idx` activation can binary-search the posting directory, read one
-posting list, and return its hopper.
-
-### txt blob
-
-The txt blob is a chunked compressed byte store:
+the following should describe how to reconstruct an equivalent featurizer:
 
 ```
-<txt blob header>
-<text chunk directory>
-<compressed text chunks>
+f->name()
+f->recipe()
 ```
 
-The text chunk directory maps:
+In particular:
 
-```
-raw byte start, raw byte length -> compressed offset, compressed length
-```
+- `Featurizer::make(f->name(), f->recipe(), ...)` should succeed when the
+  original construction succeeded.
+- Wrapper featurizers should report the wrapper name, not the wrapped
+  featurizer's name.
+- Wrapper recipes should describe the wrapped featurizer using the established
+  `name`/`recipe` package format.
+- Direct dynamic constructors such as `TaggingFeaturizer::make(base, tag, ...)`
+  may synthesize their recipe, but the result should still round-trip.
 
-The text chunk size is a creation-time parameter recorded in the `txt` recipe.
+## Things To Inspect
 
-Hazel txt does not need its own token-to-byte index. The idx contains
-`text_chunk_tag` postings, which later `hazel_txt` can use to translate token
-ranges into byte ranges before reading the needed compressed text chunks.
+- `Featurizer::make(...)` and how it sets `name_`.
+- `WrappingFeaturizer::recipe_()`.
+- `JsonFeaturizer::make(...)`, which currently wraps a base featurizer without
+  clearly preserving `name:"json"`.
+- `TaggingFeaturizer`, especially direct construction around an existing base
+  featurizer.
+- `VocabFeaturizer`, because it may return the wrapped featurizer directly if
+  a vocabulary already exists.
 
-## DNA And Compatibility
+## Possible Direction
 
-Hazel carries its own DNA because its `idx` and `txt` components are Hazel
-components, not the outer Bigwig/Fiver components.
+One possible fix is to store both component name and construction recipe in
+the parent `Featurizer`, with factories responsible for setting both values.
+This may reduce the need for a virtual `recipe_()` hook for ordinary
+factory-created featurizers.
 
-Later activation should check compatibility with the outer context by checking:
+However, dynamic wrappers such as `TaggingFeaturizer` may still need a
+deliberate way to synthesize and set their semantic recipe. Decide this with
+the user before changing the class contract.
 
-- tokenizer name/recipe
-- featurizer name/recipe
+## Validation Ideas
 
-Compressor names and recipes should come from the Fiver's compressor objects
-using `name()` and `recipe()`. If a compressor reports these incorrectly, that
-is a compressor bug.
-
-DNA parameters are treated as write-only build metadata here. Mutable Warren
-parameters should continue moving toward indexed or metadata-backed storage,
-not depend on old DNA parameter mutation.
-
-## CLI Step
-
-After the Fiver Hazel-writing methods exist, add `apps/fiver2hazel.cc`.
-
-The tool should convert one or more Fiver pickle files into Hazel files:
-
-```
-fiver2hazel fiver...
-```
-
-It expects a `dna` file at the same directory level as the input Fiver files.
-For example, when called from a burrow directory, it reads `./dna` and converts
-the named `fiver.n.m` files in that same directory.
-
-The `dna` file supplies the tokenizer, featurizer, and compressor recipes
-needed to unpickle each Fiver. The tool should then call the new Fiver Hazel
-writer and produce matching `hazel.n.m` files.
-
-This CLI is the final step for the first Hazel milestone. It gives a direct
-way to materialize Hazels before Hazel activation and Bigwig integration exist.
-
-## Deferred Work
-
-- `hazel_idx.*` and `hazel_txt.*` top-level component files.
-- Activation through `Idx::make("hazel", ...)` and `Txt::make("hazel", ...)`.
-- A Hazel Warren opener.
-- Bigwig/Fluffle integration.
-- Hazel/Hazel merge.
-- Direct Hazel building without an intermediate Fiver.
-- Deletion/tombstones.
-
-## Implementation Notes Captured During Writer Work
-
-The Fiver-to-Hazel writer is expected to run under Bigwig control. A Fiver
-being materialized as Hazel should already be built, immutable, and started.
-It is therefore appropriate for the writer to use normal public Warren/Idx
-surfaces such as `idx()->hopper(...)` when deriving text chunk boundaries.
-The standalone `apps/fiver2hazel.cc` utility is mainly a testing shim and
-starts each unpickled Fiver before calling `hazel(...)`.
-
-The public Fiver Hazel API now includes a text compression chunk-size
-parameter, defaulting to 64 KiB:
-
-```
-bool hazel(std::string *error = nullptr, bool discard = false,
-           addr text_chunk_size = 64 * 1024);
-bool hazel(const std::string &filename, std::string *error = nullptr,
-           bool discard = false, addr text_chunk_size = 64 * 1024);
-```
-
-The same value is recorded in the Hazel `txt` recipe as `chunk_size` and in
-the txt blob header. The testing CLI exposes this as:
-
-```
-fiver2hazel --chunk-size bytes fiver...
-```
-
-Hazel writing should stream large data directly to the output temp file. The
-writer should not assemble full `idx` or `txt` component blobs in memory.
-Current layout strategy:
-
-- Reserve/write a small top-level blob dictionary near the front of the file.
-- Stream the `idx` blob.
-- Stream the `txt` blob.
-- Seek back and patch the top-level blob dictionary with final byte ranges.
-
-The `idx` blob follows the SimpleIdx-style trick:
-
-- Write an idx blob header with placeholder directory metadata.
-- Stream posting list bytes.
-- Keep only a posting directory in memory.
-- Write the posting directory at the end of the idx blob.
-- Seek back and patch the idx blob header with directory offset, length, and
-  count.
-
-Posting list bytes are currently produced with `SimplePosting::write(...)`.
-That coupling is acceptable for the first Fiver producer, but activation code
-should treat it as a Hazel v1 physical encoding detail, not as a long-term
-requirement that all Hazel producers use SimplePosting internally.
-
-Single-entry postings may be stored directly in the idx directory entry
-instead of as separate posting-list bytes. Hazel activation should check the
-directory entry's singleton flag/count before reading posting bytes.
-
-The `txt` blob uses the same stream-and-patch pattern:
-
-- Write a txt blob header with placeholder directory metadata.
-- Create a private hopper from `idx()->hopper(text_chunk_tag_feature)`.
-- Walk the Fiver text chunk postings to group adjacent raw text byte spans.
-- Each compressed Hazel text chunk should be at least the configured raw byte
-  target when possible.
-- Stream compressed text chunks directly to the output file.
-- Keep only the text chunk directory in memory.
-- Write the text chunk directory at the end of the txt blob.
-- Seek back and patch the txt blob header.
-
-The text chunk directory maps:
-
-```
-raw byte start, raw byte length -> compressed offset, compressed length
-```
-
-Hazel txt activation should not build a separate token-to-byte index. It should
-use the `text_chunk_tag` postings from Hazel idx to translate token intervals
-to raw byte offsets, then use the txt chunk directory to locate and decompress
-the needed compressed text chunk(s). This mirrors how `FiverTxt` uses the idx
-for text lookup while avoiding shared hopper state by creating private hoppers
-for readers/writers as needed.
+- Add focused tests for featurizer name/recipe round-tripping.
+- Include `json` wrapping `hashing`.
+- Include `tagging` around hashing or JSON.
+- Include any existing vocabulary behavior that intentionally collapses to the
+  wrapped featurizer.
+- After the featurizer fix, regenerate a Hazel and verify its dumped DNA
+  preserves the source featurizer package.

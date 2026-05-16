@@ -52,7 +52,9 @@
 - Public include surface for most code is `#include "src/cottontail.h"`.
 - Warren instances are usually opened with `Warren::make(...)`, then explicitly `start()`ed before accessing `idx()` / `txt()` and `end()`ed afterwards.
 - Meadowlark validation is parameter-based: `format=meadowlark`.
-- Repo still contains older shell/Makefile build helpers, but Bazel files appear to be the maintained build definition.
+- Use the Makefile targets for routine builds/tests; they keep Bazel command
+  lines consistent (`make building`, `make debugging`, `make testing`,
+  `make fast`).
 
 ## Current design direction
 

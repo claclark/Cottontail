@@ -14,3 +14,12 @@
 2026-05-15T19:10:35Z Added configurable Hazel text compression chunk size, defaulting to 64 KiB, and exposed `--chunk-size` in `apps/fiver2hazel`.
 2026-05-15T19:12:41Z Updated `ai/plan.ai` with Hazel writer implementation notes for activation: Bigwig-controlled started Fivers, stream-and-patch blob layout, singleton postings, text chunk directory, and text lookup via `text_chunk_tag`.
 2026-05-15T23:59:56Z Added `ai/hazel.md` documenting the Hazel v1 file format, blob headers/directories, text chunking, and activation notes.
+2026-05-16T12:22:05Z Replaced the completed Hazel writer plan with a static shard activation plan centered on a reusable magic/DNA/blob envelope and dispatch by `warren` DNA.
+2026-05-16T12:26:00Z Updated Hazel/static shard writing to terminate the DNA section with a blank line before the top-level blob dictionary.
+2026-05-16T13:07:50Z Completed single-file burrow dispatch in `Warren::make(...)` and added inert Hazel/HazelIdx/HazelTxt activation stubs.
+2026-05-16T13:14:36Z Changed single-file burrow opening to read `#COTTONTAIL\n` as fixed magic bytes before line-reading DNA.
+2026-05-16T13:27:57Z Moved Hazel's local name/recipe extraction helper into `recipe.*` as a cooked-parameter-map overload.
+2026-05-16T16:01:09Z Added `ai/improvements.md` for potential cleanups and recorded the open `Txt::wrap(...)` design question.
+2026-05-16T16:04:54Z Added temporary Hazel activation DNA dump to stderr for short-term `apps/fluffy` testing.
+2026-05-16T16:07:26Z Corrected `ai/notes.md` to record Makefile targets as the preferred wrapper for consistent Bazel builds/tests.
+2026-05-16T16:45:22Z Added reusable single-file burrow envelope and current Hazel stub notes to `ai/hazel.md`, then replaced `ai/plan.ai` with the Featurizer name/recipe round-trip side quest plan.

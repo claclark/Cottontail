@@ -7,6 +7,35 @@ Hazel is a single immutable shard file. The first producer is a live, built
 Fiver under Bigwig control, but the file should be activated as a standalone
 Hazel component pair: `hazel_idx` plus `hazel_txt`.
 
+The current activation code is only a stub. `Warren::make(...)` can recognize
+a Hazel file as a single-file burrow, read and dump its DNA, and construct an
+inert Hazel Warren. The stub `HazelIdx` returns empty hoppers and zero counts;
+the stub `HazelTxt` returns empty strings and zero tokens. Real idx/txt blob
+activation is still pending.
+
+## Single-File Burrow Envelope
+
+The top-level file envelope is intended to be reusable beyond Hazel:
+
+```
+#COTTONTAIL
+<dna>
+<blank line>
+<top-level blob dictionary>
+<component blobs>
+```
+
+`#COTTONTAIL\n` is treated as fixed magic bytes. Once the magic matches, the
+reader line-reads DNA until the blank separator line. The DNA is the semantic
+dispatch point: its `warren` value determines which single-file Warren opener
+should interpret the rest of the file.
+
+The top-level blob dictionary is the physical manifest. It gives named byte
+ranges in the file, but it should not know the meaning of component payloads.
+Hazel is the first `warren` type using this envelope. Future static shard types
+can reuse the same magic/DNA/blob structure and interpret their own component
+blobs.
+
 ## Top Level
 
 The file begins with readable identification and DNA:
