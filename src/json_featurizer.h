@@ -22,6 +22,7 @@ public:
 private:
   JsonFeaturizer(std::shared_ptr<Featurizer> wrapped)
       : WrappingFeaturizer(wrapped){};
+  std::string name_() final { return "json"; }
   addr featurize_(const char *key, addr length) final;
 };
 } // namespace cottontail

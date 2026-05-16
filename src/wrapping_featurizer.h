@@ -25,6 +25,7 @@ protected:
 
 private:
   WrappingFeaturizer(){};
+  std::string name_() override = 0;
   std::string recipe_() final;
   addr featurize_(const char *key, addr length);
   std::string translate_(addr feature);

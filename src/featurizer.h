@@ -18,7 +18,7 @@ public:
   static bool check(const std::string &name, const std::string &recipe,
                     std::string *error = nullptr);
   inline std::string recipe() { return recipe_(); }
-  inline std::string name() { return name_; }
+  inline std::string name() { return name_(); }
   inline addr featurize(const char *key, addr length) {
     return featurize_(key, length);
   }
@@ -37,10 +37,10 @@ protected:
   Featurizer(){};
 
 private:
+  virtual std::string name_() = 0;
   virtual std::string recipe_() = 0;
   virtual addr featurize_(const char *key, addr length) = 0;
   virtual std::string translate_(addr feature) = 0;
-  std::string name_ = "";
 };
 } // namespace cottontail
 #endif // COTTONTAIL_SRC_FEATURIZER_H_

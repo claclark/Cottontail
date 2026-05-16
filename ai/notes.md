@@ -55,6 +55,10 @@
 - Use the Makefile targets for routine builds/tests; they keep Bazel command
   lines consistent (`make building`, `make debugging`, `make testing`,
   `make fast`).
+- Featurizer persistent identity is object-owned: `Featurizer::name()` is
+  virtual, `""` remains only an input alias for hashing in `Featurizer::make`,
+  JSON/tagging wrappers report their wrapper names, and `vocab` passes through
+  the wrapped featurizer identity because it is a build-time vocabulary tap.
 
 ## Current design direction
 

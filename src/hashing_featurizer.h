@@ -28,6 +28,7 @@ public:
   HashingFeaturizer &operator=(HashingFeaturizer &&) = delete;
 
 private:
+  std::string name_() final { return "hashing"; }
   std::string recipe_() final;
   addr featurize_(const char *key, addr length) final;
   std::string translate_(addr feature) final;

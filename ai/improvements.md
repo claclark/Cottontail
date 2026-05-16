@@ -1,7 +1,7 @@
 # Potential Improvements
 
 Concise list of possible cleanups, design questions, and follow-up work. These
-are not committed plans unless promoted into `ai/plan.ai`.
+are not committed plans unless promoted into `ai/plan.md`.
 
 ## Txt Wrapping
 

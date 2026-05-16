@@ -9,7 +9,7 @@ Before doing any work, read:
     ai/architecture.md
 
 If it exists, also read:
-    ai/plan.ai
+    ai/plan.md
 
 This file records the current planned next coding step.
 
@@ -19,7 +19,7 @@ ai/architecture.md
     Overview of the core architecture.
     This file is authoritative and should not be modified unless explicitly requested.
 
-ai/plan.ai
+ai/plan.md
     Current plan for the next coding step, when one has been materialized.
     Use this to continue planned work instead of restarting the design discussion.
 

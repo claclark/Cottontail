@@ -23,3 +23,8 @@
 2026-05-16T16:04:54Z Added temporary Hazel activation DNA dump to stderr for short-term `apps/fluffy` testing.
 2026-05-16T16:07:26Z Corrected `ai/notes.md` to record Makefile targets as the preferred wrapper for consistent Bazel builds/tests.
 2026-05-16T16:45:22Z Added reusable single-file burrow envelope and current Hazel stub notes to `ai/hazel.md`, then replaced `ai/plan.ai` with the Featurizer name/recipe round-trip side quest plan.
+2026-05-16T20:07:07Z Changed Featurizer identity to virtual per-class names, made vocab pass through wrapped identity for persistent DNA, fixed tagging/json wrapper round-trips, and verified `make testing`.
+2026-05-16T20:17:02Z Added compositional featurizer round-trip tests for nested tagging, JSON wrapping tagging, and tagging wrapping JSON; reverified `make testing`.
+2026-05-16T20:28:22Z Renamed `ai/plan.ai` to `ai/plan.md` and updated current agent documentation references.
+2026-05-16T20:30:03Z Removed completed `ai/plan.md` after finishing the Featurizer name/recipe round-trip side quest.
+2026-05-16T20:43:33Z Recorded restart notes for completed Featurizer identity work; user verified Hazel dumped DNA error is gone.

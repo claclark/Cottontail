@@ -27,6 +27,7 @@ public:
 
 private:
   NullFeaturizer(){};
+  virtual std::string name_() final { return "null"; }
   virtual std::string recipe_() final { return ""; }
   virtual addr featurize_(const char *key, addr length) final { return 0; };
   virtual std::string translate_(addr feature) final { return ""; };

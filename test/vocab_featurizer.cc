@@ -26,6 +26,11 @@ TEST(VocabFeaturizer, VocabBeforeTag) {
   static std::shared_ptr<cottontail::Featurizer> featurizer =
       cottontail::Featurizer::make(name, recipe, &error, working);
   ASSERT_NE(featurizer, nullptr);
+  EXPECT_EQ(featurizer->name(), "tagging");
+  std::shared_ptr<cottontail::Featurizer> round_tripped =
+      cottontail::Featurizer::make(featurizer->name(), featurizer->recipe(),
+                                   &error, working);
+  ASSERT_NE(round_tripped, nullptr) << error;
   std::string s_the = "the";
   std::string s_cat = "cat";
   std::string s_in = "in";
@@ -52,6 +57,12 @@ TEST(VocabFeaturizer, VocabBeforeTag) {
   EXPECT_EQ(contents[2], "6563246511431673955 3 the");
   EXPECT_EQ(contents[3], "7752353018252607658 1 cat");
   featurizer = cottontail::Featurizer::make(name, recipe, &error, working);
+  ASSERT_NE(featurizer, nullptr);
+  EXPECT_EQ(featurizer->name(), "tagging");
+  round_tripped =
+      cottontail::Featurizer::make(featurizer->name(), featurizer->recipe(),
+                                   &error, working);
+  ASSERT_NE(round_tripped, nullptr) << error;
   EXPECT_EQ(featurizer->featurize(s_the), f_the);
   EXPECT_EQ(featurizer->featurize(s_cat), f_cat);
   EXPECT_EQ(featurizer->featurize(s_in), f_in);
@@ -71,6 +82,11 @@ TEST(VocabFeaturizer, TagBeforeVocab) {
   static std::shared_ptr<cottontail::Featurizer> featurizer =
       cottontail::Featurizer::make(name, recipe, &error, working);
   ASSERT_NE(featurizer, nullptr);
+  EXPECT_EQ(featurizer->name(), "tagging");
+  std::shared_ptr<cottontail::Featurizer> round_tripped =
+      cottontail::Featurizer::make(featurizer->name(), featurizer->recipe(),
+                                   &error, working);
+  ASSERT_NE(round_tripped, nullptr) << error;
   std::string s_the = "the";
   std::string s_cat = "cat";
   std::string s_in = "in";

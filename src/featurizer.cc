@@ -21,18 +21,12 @@ std::shared_ptr<Featurizer> Featurizer::make(const std::string &name,
   std::shared_ptr<Featurizer> featurizer;
   if (name == "" || name == "hashing") {
     featurizer = HashingFeaturizer::make(recipe, error);
-    if (featurizer != nullptr)
-      featurizer->name_ = "hashing";
     return featurizer;
   } else if (name == "tagging") {
     featurizer = TaggingFeaturizer::make(recipe, error, working);
-    if (featurizer != nullptr)
-      featurizer->name_ = "tagging";
     return featurizer;
   } else if (name == "vocab") {
     featurizer = VocabFeaturizer::make(recipe, working, error);
-    if (featurizer != nullptr)
-      featurizer->name_ = "vocab";
     return featurizer;
   } else if (name == "json") {
     std::string wrapped_name;
@@ -45,8 +39,6 @@ std::shared_ptr<Featurizer> Featurizer::make(const std::string &name,
     return JsonFeaturizer::make(featurizer);
   } else if (name == "null") {
     featurizer = NullFeaturizer::make(recipe, error);
-    if (featurizer != nullptr)
-      featurizer->name_ = "null";
     return featurizer;
   } else {
     safe_error(error) = "No Featurizer named: " + name;
@@ -68,7 +60,7 @@ bool Featurizer::check(const std::string &name, const std::string &recipe,
     if (!unwrap(recipe, &wrapped_name, &wrapped_recipe, error))
       return false;
     return check(wrapped_name, wrapped_recipe, error);
-  } else if (name == "vocab") {
+  } else if (name == "null") {
     return NullFeaturizer::check(recipe, error);
   } else {
     safe_error(error) = "No Featurizer named: " + name;

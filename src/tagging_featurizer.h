@@ -28,6 +28,7 @@ public:
   TaggingFeaturizer &operator=(TaggingFeaturizer &&) = delete;
 
 private:
+  std::string name_() final { return "tagging"; }
   std::string recipe_() final;
   addr featurize_(const char *key, addr length) final {
     std::string key_string(key, length);

@@ -92,20 +92,10 @@ VocabFeaturizer::~VocabFeaturizer() {
   }
 }
 
+std::string VocabFeaturizer::name_() { return wrapped_featurizer_->name(); }
+
 std::string VocabFeaturizer::recipe_() {
-  std::string wrapped_name = wrapped_featurizer_->name();
-  if (wrapped_name == "")
-    return "";
-  std::string wrapped_recipe = wrapped_featurizer_->recipe();
-  if (wrapped_name == DEFAULT_WRAPPED_NAME &&
-      wrapped_recipe == DEFAULT_WRAPPED_RECIPE)
-    return "";
-  if (wrapped_recipe == "")
-    return wrapped_name;
-  std::map<std::string, std::string> parameters;
-  parameters["name"] = wrapped_name;
-  parameters["recipe"] = wrapped_recipe;
-  return freeze(parameters);
+  return wrapped_featurizer_->recipe();
 }
 
 addr VocabFeaturizer::featurize_(const char *key, addr length) {

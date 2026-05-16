@@ -14,8 +14,6 @@ std::string WrappingFeaturizer::recipe_() {
   if (wrapped_name == "")
     return "";
   std::string wrapped_recipe = wrapped_->recipe();
-  if (wrapped_recipe == "")
-    return wrapped_name;
   std::map<std::string, std::string> parameters;
   parameters["name"] = wrapped_name;
   parameters["recipe"] = wrapped_recipe;

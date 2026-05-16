@@ -26,6 +26,7 @@ public:
 
 private:
   VocabFeaturizer(){};
+  std::string name_() final;
   std::string recipe_() final;
   addr featurize_(const char *key, addr length) final;
   std::string translate_(addr feature) final;

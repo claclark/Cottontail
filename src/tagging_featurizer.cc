@@ -86,7 +86,7 @@ bool TaggingFeaturizer::check(const std::string &recipe, std::string *error) {
 
 std::string TaggingFeaturizer::recipe_() {
   std::map<std::string, std::string> parameters;
-  parameters["tag"] = tag_;
+  parameters["tag"] = tag_.substr(0, tag_.length() - 1);
   parameters["name"] = base_->name();
   parameters["recipe"] = base_->recipe();
   std::string recipe;
