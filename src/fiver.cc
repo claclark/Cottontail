@@ -855,20 +855,13 @@ struct HazelBlob {
 
 struct HazelPostingEntry {
   addr feature;
-  addr offset;
-  addr length;
+  addr end;
   addr count;
-  addr singleton;
-  addr p;
-  addr q;
-  fval v;
 };
 
 struct HazelTextEntry {
-  addr raw_offset;
-  addr raw_length;
-  addr compressed_offset;
-  addr compressed_length;
+  addr raw_end;
+  addr compressed_end;
 };
 
 template <typename T> void hazel_write_pod(std::ostream *out, const T &value) {
@@ -946,19 +939,16 @@ bool hazel_write_idx_blob(
   for (auto &posting : index) {
     HazelPostingEntry entry;
     entry.feature = posting.first;
+    entry.end = hazel_tellp(out) - *blob_start;
     entry.count = posting.second->size();
-    entry.singleton = 0;
-    entry.offset = 0;
-    entry.length = 0;
-    entry.p = entry.q = 0;
-    entry.v = 0.0;
-    if (entry.count == 1 && posting.second->get(0, &entry.p, &entry.q,
-                                                &entry.v)) {
-      entry.singleton = 1;
+    addr p, q;
+    fval v;
+    if (entry.count == 1 && posting.second->get(0, &p, &q, &v) && p == q &&
+        v == 0.0) {
+      entry.count = p;
     } else {
-      entry.offset = hazel_tellp(out) - *blob_start;
       posting.second->write(out);
-      entry.length = hazel_tellp(out) - *blob_start - entry.offset;
+      entry.end = hazel_tellp(out) - *blob_start;
       if (out->fail()) {
         safe_error(error) = "Fiver failed to write Hazel idx postings";
         return false;
@@ -970,13 +960,8 @@ bool hazel_write_idx_blob(
   directory_count = directory.size();
   for (auto &entry : directory) {
     hazel_write_pod(out, entry.feature);
-    hazel_write_pod(out, entry.offset);
-    hazel_write_pod(out, entry.length);
+    hazel_write_pod(out, entry.end);
     hazel_write_pod(out, entry.count);
-    hazel_write_pod(out, entry.singleton);
-    hazel_write_pod(out, entry.p);
-    hazel_write_pod(out, entry.q);
-    hazel_write_pod(out, entry.v);
   }
   directory_length = hazel_tellp(out) - *blob_start - directory_offset;
   *blob_length = hazel_tellp(out) - *blob_start;
@@ -1026,12 +1011,10 @@ bool hazel_write_text_chunk(std::fstream *out, addr blob_start,
                    &compressed, error))
     return false;
   HazelTextEntry entry;
-  entry.raw_offset = raw_start;
-  entry.raw_length = raw_length;
-  entry.compressed_offset = hazel_tellp(out) - blob_start;
-  entry.compressed_length = compressed.size();
-  directory->push_back(entry);
+  entry.raw_end = raw_start + raw_length;
   out->write(compressed.data(), compressed.size());
+  entry.compressed_end = hazel_tellp(out) - blob_start;
+  directory->push_back(entry);
   if (out->fail()) {
     safe_error(error) = "Fiver failed to write Hazel txt chunk";
     return false;
@@ -1097,10 +1080,8 @@ bool hazel_write_txt_blob(std::fstream *out, std::shared_ptr<Idx> idx,
   directory_offset = hazel_tellp(out) - *blob_start;
   directory_count = directory.size();
   for (auto &entry : directory) {
-    hazel_write_pod(out, entry.raw_offset);
-    hazel_write_pod(out, entry.raw_length);
-    hazel_write_pod(out, entry.compressed_offset);
-    hazel_write_pod(out, entry.compressed_length);
+    hazel_write_pod(out, entry.raw_end);
+    hazel_write_pod(out, entry.compressed_end);
   }
   directory_length = hazel_tellp(out) - *blob_start - directory_offset;
   *blob_length = hazel_tellp(out) - *blob_start;

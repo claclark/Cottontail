@@ -108,26 +108,29 @@ Directory entry:
 
 ```
 addr feature
-addr offset
-addr length
-addr count
-addr singleton
-addr p
-addr q
-fval v
+addr end
+addr count_or_p
 ```
 
 Directory entries are ordered by feature, matching the Fiver index map order.
 Activation can binary-search by `feature`.
 
-If `singleton` is non-zero, the posting is stored directly in the directory
-entry as `(p, q, v)` and no posting bytes need to be read. This is intended to
-avoid tiny posting-list records for single-entry features.
+The directory is a boundary list, similar to `SimpleIdx`. For entry `i`, the
+posting byte range begins at the previous entry's `end`, or at the end of the
+idx blob header for the first entry. It ends at this entry's `end`.
 
-If `singleton` is zero, `offset` and `length` identify posting-list bytes
-inside the idx blob. These bytes are currently written with
-`SimplePosting::write(...)`, using the posting and fvalue compressors recorded
-in the Hazel DNA. Activation may initially decode these bytes using the same
+If the inferred byte range is non-empty, it contains a posting list written
+with `SimplePosting::write(...)`, using the posting and fvalue compressors
+recorded in the Hazel DNA. In that case `count_or_p` is the posting count,
+duplicating the `PstRecord::n` value for fast query planning.
+
+If the inferred byte range is empty, the entry represents the common singleton
+posting `<feature, p, p, 0>`, and `count_or_p` is `p`. Empty posting-list
+ranges are therefore not legal zero-count lists; they are inline singleton
+token postings. Singleton annotations with `p != q` or `v != 0` are written as
+normal `SimplePosting` records.
+
+Activation may initially decode non-empty ranges using the same
 `SimplePosting` physical encoding, but this should be treated as the Hazel v1
 wire encoding, not as a promise that all future Hazel producers have
 `SimplePosting` objects internally.
@@ -156,14 +159,17 @@ header.
 Text directory entry:
 
 ```
-addr raw_offset
-addr raw_length
-addr compressed_offset
-addr compressed_length
+addr raw_end
+addr compressed_end
 ```
 
-The raw offsets are byte offsets into the original Fiver text blob. The
-compressed offsets are relative to the start of the txt blob.
+The text directory is also a boundary list. The first raw chunk starts at raw
+offset `0`, and later raw chunks start at the previous entry's `raw_end`. The
+first compressed chunk starts at the end of the txt blob header, and later
+compressed chunks start at the previous entry's `compressed_end`.
+
+`raw_end` is a byte offset into the original Fiver text blob. `compressed_end`
+is relative to the start of the txt blob.
 
 Text chunks are formed by walking a private hopper over the Fiver idx posting
 list for `text_chunk_tag`. Adjacent Fiver text chunks are grouped until the raw

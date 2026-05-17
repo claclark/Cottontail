@@ -28,3 +28,4 @@
 2026-05-16T20:28:22Z Renamed `ai/plan.ai` to `ai/plan.md` and updated current agent documentation references.
 2026-05-16T20:30:03Z Removed completed `ai/plan.md` after finishing the Featurizer name/recipe round-trip side quest.
 2026-05-16T20:43:33Z Recorded restart notes for completed Featurizer identity work; user verified Hazel dumped DNA error is gone.
+2026-05-17T15:58:51Z Revised Hazel v1 writer format: idx directories now use boundary triples with inline token singleton overloads, txt directories now use raw/compressed boundary pairs, updated `ai/hazel.md`, and verified `bazel build //apps:fiver2hazel`.
