@@ -64,6 +64,9 @@ public:
   posting_from_annotations(std::vector<Annotation>::iterator *start,
                            const std::vector<Annotation>::iterator &end);
   std::shared_ptr<SimplePosting> posting_from_feature(addr feature);
+  std::shared_ptr<SimplePosting>
+  posting_from_compressed_blob(const char *data, addr length,
+                               std::string *error = nullptr);
   std::shared_ptr<SimplePosting> posting_from_file(std::fstream *f);
   std::shared_ptr<SimplePosting> posting_from_merge(
       const std::vector<std::shared_ptr<SimplePosting>> &postings);

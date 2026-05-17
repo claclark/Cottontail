@@ -80,6 +80,84 @@ SimplePostingFactory::posting_from_feature(addr feature) {
 }
 
 std::shared_ptr<SimplePosting>
+SimplePostingFactory::posting_from_compressed_blob(const char *data,
+                                                   addr length,
+                                                   std::string *error) {
+  if (data == nullptr || length < (addr)sizeof(PstRecord)) {
+    safe_error(error) = "Compressed posting blob is too short";
+    return nullptr;
+  }
+  PstRecord idx;
+  memcpy(&idx, data, sizeof(PstRecord));
+  if (idx.n < 0 || idx.pst < 0 || idx.qst < 0 || idx.fst < 0) {
+    safe_error(error) = "Compressed posting blob has negative sizes";
+    return nullptr;
+  }
+  addr header = sizeof(PstRecord);
+  if (idx.pst > length - header) {
+    safe_error(error) = "Compressed posting blob has truncated postings";
+    return nullptr;
+  }
+  addr qoffset = header + idx.pst;
+  if (idx.qst > length - qoffset) {
+    safe_error(error) = "Compressed posting blob has truncated qostings";
+    return nullptr;
+  }
+  addr foffset = qoffset + idx.qst;
+  if (idx.fst > length - foffset) {
+    safe_error(error) = "Compressed posting blob has truncated fostings";
+    return nullptr;
+  }
+  std::shared_ptr<SimplePosting> posting = std::shared_ptr<SimplePosting>(
+      new SimplePosting(posting_compressor_, fvalue_compressor_));
+  posting->feature_ = idx.feature;
+  if (idx.n == 0)
+    return posting;
+  addr postings_size = idx.n * sizeof(addr);
+  addr fvalues_size = idx.n * sizeof(fval);
+  std::unique_ptr<char[]> tanged =
+      std::unique_ptr<char[]>(new char[std::max(postings_size, fvalues_size)]);
+
+  addr posting_size =
+      posting_compressor_->tang(const_cast<char *>(data + header), idx.pst,
+                                tanged.get(), postings_size);
+  if (posting_size != postings_size) {
+    safe_error(error) = "Compressed posting blob has bad postings";
+    return nullptr;
+  }
+  addr *pstart = reinterpret_cast<addr *>(tanged.get());
+  addr *pend = pstart + idx.n;
+  for (addr *p = pstart; p < pend; p++)
+    posting->postings_.push_back(*p);
+
+  if (idx.qst > 0) {
+    posting_size =
+        posting_compressor_->tang(const_cast<char *>(data + qoffset), idx.qst,
+                                  tanged.get(), postings_size);
+    if (posting_size != postings_size) {
+      safe_error(error) = "Compressed posting blob has bad qostings";
+      return nullptr;
+    }
+    for (addr *q = pstart; q < pend; q++)
+      posting->qostings_.push_back(*q);
+  }
+  if (idx.fst > 0) {
+    posting_size =
+        fvalue_compressor_->tang(const_cast<char *>(data + foffset), idx.fst,
+                                 tanged.get(), fvalues_size);
+    if (posting_size != fvalues_size) {
+      safe_error(error) = "Compressed posting blob has bad fostings";
+      return nullptr;
+    }
+    fval *fstart = reinterpret_cast<fval *>(tanged.get());
+    fval *fend = fstart + idx.n;
+    for (fval *f = fstart; f < fend; f++)
+      posting->fostings_.push_back(*f);
+  }
+  return posting;
+}
+
+std::shared_ptr<SimplePosting>
 SimplePostingFactory::posting_from_file(std::fstream *f) {
   if (f->fail())
     return nullptr;

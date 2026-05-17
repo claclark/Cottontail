@@ -27,6 +27,7 @@ private:
         std::shared_ptr<Tokenizer> tokenizer, std::shared_ptr<Idx> idx,
         std::shared_ptr<Txt> txt)
       : Warren(nullptr, featurizer, tokenizer, idx, txt){};
+  std::shared_ptr<Warren> clone_(std::string *error) final;
   std::string recipe_() final { return dna_; };
   bool set_parameter_(const std::string &key, const std::string &value,
                       std::string *error) final;

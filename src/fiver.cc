@@ -887,7 +887,8 @@ std::string hazel_dna(std::shared_ptr<Featurizer> featurizer,
                       std::shared_ptr<Compressor> fvalue_compressor,
                       std::shared_ptr<Compressor> text_compressor,
                       addr sequence_start, addr sequence_end,
-                      addr text_chunk_size) {
+                      addr text_chunk_size,
+                      const std::string &parameters_recipe) {
   std::map<std::string, std::string> idx_recipe;
   idx_recipe["posting_compressor"] = posting_compressor->name();
   idx_recipe["posting_compressor_recipe"] = posting_compressor->recipe();
@@ -916,6 +917,8 @@ std::string hazel_dna(std::shared_ptr<Featurizer> featurizer,
   dna["idx"] = freeze(idx);
   dna["txt"] = freeze(txt);
   dna["hazel"] = freeze(metadata);
+  if (parameters_recipe != "")
+    dna["parameters"] = parameters_recipe;
   return freeze(dna);
 }
 
@@ -1119,7 +1122,8 @@ std::string hazel_default_name(addr sequence_start, addr sequence_end) {
 
 } // namespace
 
-bool Fiver::hazel(std::string *error, bool discard, addr text_chunk_size) {
+bool Fiver::hazel(std::string *error, bool discard, addr text_chunk_size,
+                  const std::string &parameters) {
   if (working() == nullptr) {
     safe_error(error) = "Fiver needs a working directory for default Hazel name";
     return false;
@@ -1129,7 +1133,7 @@ bool Fiver::hazel(std::string *error, bool discard, addr text_chunk_size) {
     return false;
   }
   std::string tempname = working()->make_temp("hazel");
-  if (!hazel(tempname, error, false, text_chunk_size)) {
+  if (!hazel(tempname, error, false, text_chunk_size, parameters)) {
     std::remove(tempname.c_str());
     return false;
   }
@@ -1147,7 +1151,8 @@ bool Fiver::hazel(std::string *error, bool discard, addr text_chunk_size) {
 }
 
 bool Fiver::hazel(const std::string &filename, std::string *error,
-                  bool discard, addr text_chunk_size) {
+                  bool discard, addr text_chunk_size,
+                  const std::string &parameters) {
   if (idx_ == nullptr || txt_ == nullptr || index_ == nullptr ||
       text_ == nullptr) {
     safe_error(error) = "Fiver must have Idx and Txt before writing Hazel";
@@ -1160,7 +1165,7 @@ bool Fiver::hazel(const std::string &filename, std::string *error,
   std::string dna =
       hazel_dna(featurizer_, tokenizer_, posting_compressor_,
                 fvalue_compressor_, text_compressor_, sequence_start_,
-                sequence_end_, text_chunk_size);
+                sequence_end_, text_chunk_size, parameters);
 
   std::vector<HazelBlob> blobs = {{"idx", 0, 0}, {"txt", 0, 0}};
   const std::string file_header = "#COTTONTAIL\n";
@@ -1174,7 +1179,6 @@ bool Fiver::hazel(const std::string &filename, std::string *error,
   }
   out.write(file_header.data(), file_header.size());
   out.write(dna.data(), dna.size());
-  out.put('\n');
   out.put('\n');
   addr dictionary_offset = hazel_tellp(&out);
   out.write(dictionary.data(), dictionary.size());

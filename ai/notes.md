@@ -74,3 +74,11 @@
 - Long-term direction: move metadata/parameters out of Warren-era scaffolding and into persistent database-backed metadata, while evolving interfaces incrementally instead of doing large refactors.
 - SPLADE support predates full JSON support; newer direction is to ingest model output as JSON-backed content/annotations and update ranking support around that.
 - This is research programming: keep interfaces clean where possible, but prefer evolutionary progress and flexibility over premature abstraction freeze.
+
+## Current Hazel status
+
+- Hazel v1 writer and first activation pass are in progress: standalone Hazel files can be recognized, parse idx/txt blobs, construct hoppers from posting blobs, translate text through cached decompressed txt chunks, and shallow-clone the Hazel Warren.
+- `fiver2hazel` is currently a pragmatic conversion path from a Fiver pickle plus its enclosing burrow DNA; it now preserves the owner Warren `parameters` block in generated Hazel DNA.
+- Hazel idx activation is intentionally slow and simple: no posting cache, locked reads into a local buffer, decode into a fresh hopper.
+- Hazel txt activation keeps a persistent `text_chunk_tag` hopper and a simple decompressed chunk cache protected by a mutex.
+- Open ranking issue: Meadow/Hazel BM25 setup reaches `TfIdfStats::make(...)` and fails on `warren->set_parameter("stemmer", ...)`; see `ai/plan.md`.

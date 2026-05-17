@@ -117,6 +117,16 @@ int main(int argc, char **argv) {
       status = 1;
       continue;
     }
+    std::map<std::string, std::string> source_parameters;
+    if (!cottontail::cook(dna, &source_parameters, &error)) {
+      std::cerr << program_name << ": " << error << "\n";
+      status = 1;
+      continue;
+    }
+    std::string warren_parameters;
+    auto parameters = source_parameters.find("parameters");
+    if (parameters != source_parameters.end())
+      warren_parameters = parameters->second;
 
     std::string featurizer_name, featurizer_recipe;
     std::string tokenizer_name, tokenizer_recipe;
@@ -174,7 +184,7 @@ int main(int argc, char **argv) {
       continue;
     }
     fiver->start();
-    if (!fiver->hazel(&error, false, text_chunk_size)) {
+    if (!fiver->hazel(&error, false, text_chunk_size, warren_parameters)) {
       std::cerr << program_name << ": " << error << "\n";
       fiver->end();
       status = 1;

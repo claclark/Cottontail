@@ -29,3 +29,5 @@
 2026-05-16T20:30:03Z Removed completed `ai/plan.md` after finishing the Featurizer name/recipe round-trip side quest.
 2026-05-16T20:43:33Z Recorded restart notes for completed Featurizer identity work; user verified Hazel dumped DNA error is gone.
 2026-05-17T15:58:51Z Revised Hazel v1 writer format: idx directories now use boundary triples with inline token singleton overloads, txt directories now use raw/compressed boundary pairs, updated `ai/hazel.md`, and verified `bazel build //apps:fiver2hazel`.
+2026-05-17T20:35:26Z Implemented first Hazel activation pass: real idx/txt blob parsing, no-cache locked idx reads, cached decompressed txt chunks, shallow Hazel cloning, compressed posting blob decoding, fixed the Hazel DNA separator, preserved owner Warren parameters in `fiver2hazel`, and verified `make testing` plus `bazel build //apps:fiver2hazel //apps:working`.
+2026-05-17T23:21:14Z Added `ai/plan.md` for the Meadow/Hazel ranking metadata issue: `TfIdfStats::make(...)` currently requires a Warren-global `stemmer` parameter write, which conflicts with immutable Hazel shards and the desired database-scoped metadata direction.
