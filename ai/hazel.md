@@ -7,11 +7,11 @@ Hazel is a single immutable shard file. The first producer is a live, built
 Fiver under Bigwig control, but the file should be activated as a standalone
 Hazel component pair: `hazel_idx` plus `hazel_txt`.
 
-The current activation code is only a stub. `Warren::make(...)` can recognize
-a Hazel file as a single-file burrow, read and dump its DNA, and construct an
-inert Hazel Warren. The stub `HazelIdx` returns empty hoppers and zero counts;
-the stub `HazelTxt` returns empty strings and zero tokens. Real idx/txt blob
-activation is still pending.
+The current activation code is no longer just a stub. `Warren::make(...)` can
+recognize a Hazel file as a single-file burrow, parse its DNA and blob
+dictionary, and construct working Hazel idx/txt components. The first reader is
+intentionally simple and correctness-oriented. It is now being improved for
+efficiency under threaded ranking workloads.
 
 ## Single-File Burrow Envelope
 
@@ -57,9 +57,13 @@ format and includes:
 - `idx:[ name:"hazel", recipe:[ ... ] ]`
 - `txt:[ name:"hazel", recipe:[ ... ] ]`
 - `hazel:[ sequence_start:"...", sequence_end:"..." ]`
+- optional `parameters:[ ... ]` copied from the owning Warren during conversion
 
 The `idx` recipe records the posting and fvalue compressors. The `txt` recipe
-records the text compressor and `chunk_size`.
+records the text compressor and `chunk_size`. The optional `parameters` block is
+currently used to preserve Meadowlark/legacy owner metadata, such as
+`format:"meadowlark"` and default container settings, when a standalone Hazel is
+created from a Fiver by `apps/fiver2hazel`.
 
 After the blank line comes the top-level blob dictionary:
 
@@ -211,9 +215,9 @@ Hoppers are stateful. Activation should not share a single hopper across
 threads without synchronization. Prefer creating private hoppers for readers
 when practical, or protect shared hopper state with a mutex as `FiverTxt` does.
 
-## Activation Sketch
+## Activation Status
 
-Opening a Hazel shard should roughly:
+Opening a Hazel shard currently:
 
 1. Read and verify `#COTTONTAIL`.
 2. Read DNA until the blank line and parse it with `cook(...)`.
@@ -223,11 +227,20 @@ Opening a Hazel shard should roughly:
 6. Build `hazel_idx` from the idx blob header and directory.
 7. Build `hazel_txt` from the txt blob header and directory, plus a reference
    to the activated `hazel_idx`.
-8. Check tokenizer and featurizer compatibility with the outer Bigwig context.
 
 The idx directory is small enough to load into memory for binary search. The
 txt directory is also expected to be much smaller than the compressed text and
 can be loaded into memory initially.
+
+The current `hazel_idx` implementation is intentionally minimal: it reads and
+decodes posting data on demand and does not yet provide the caching needed for
+Fiver-like ranking performance. The current `hazel_txt` implementation keeps a
+simple decompressed text-chunk cache and uses the idx-backed `text_chunk_tag`
+relationship for token-to-byte translation.
+
+Hazel supports shallow Warren cloning. This is sufficient for basic activation
+and query tests, but the clone/caching model is part of the ongoing efficiency
+work.
 
 ## Bigwig Integration Notes
 

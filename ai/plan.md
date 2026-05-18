@@ -1,78 +1,119 @@
-# Plan: Ranking Metadata And Parameters
+# Plan: Hazel Efficiency
 
-## Context
+## Status
 
-Hazel activation now works far enough to open a standalone Hazel shard and run
-queries against it. `fiver2hazel` preserves the owner Warren `parameters` block,
-so a Meadow-derived Hazel is recognized as `format:"meadowlark"`.
+Planning is not finished yet.
 
-The next blocker is ranking setup, not basic Hazel idx/txt activation. Running
-the threaded BM25 script against a standalone Hazel reaches
-`meadowlark::TfIdfStats::make(...)`, then fails when that code calls:
+The current goal is to make Hazel efficient enough for serious threaded ranking
+work. The first activation pass was deliberately simple and correct-first. It
+can open a standalone Hazel shard and run queries, but a long `rank.sh` stress
+test shows that the reference implementation is far too slow compared with the
+Fiver-backed Meadow.
 
-```
-warren->set_parameter("stemmer", stemmer_name, error)
-```
+This plan is a starting sketch, not a final design.
 
-`Hazel` is immutable and currently rejects all `set_parameter(...)` calls, so
-the ranker exits with `Hazel can't set its parameters`.
+Track concrete measurements and before/after outcomes in
+`ai/hazel-progress.md`.
 
-## Design Issue
+## Current Baseline
 
-This is not just a Hazel bug. It exposes an older global-parameter model:
+- Hazel idx activation loads the idx directory, but does not cache decoded
+  postings.
+- `HazelIdx::hopper(feature)` binary-searches the directory, reads the posting
+  bytes under a shared file lock, decodes the compressed posting blob, returns
+  a fresh hopper, and forgets it.
+- Hazel txt activation keeps one persistent `text_chunk_tag` hopper and a
+  simple cache of decompressed text chunks.
+- `HazelTxt::translate(...)` currently serializes too much work behind one
+  mutex.
+- `Hazel::clone_()` is shallow, so cloned Warrens share the same `HazelIdx`
+  and `HazelTxt`.
 
-- Warren-level parameters currently mix persistent collection metadata with
-  runtime/session ranking configuration.
-- Meadowlark ranking metadata already stores more precise per-ranking-view
-  details in tf-idf forager JSON (`gcl`, `container`, `id`, `stemmer`,
-  `tokenizer`).
-- The long-term direction is for a database / Meadow to hold many different
-  collections, views, stemmers, tokenizers, ids, containers, and ranking
-  metadata objects, rather than one global Warren parameter set.
+## Stress-Test Observations
 
-## Immediate Goal
+The user's `rank.sh` script is the semi-serious test:
 
-Make Meadow/Hazel ranking work without strengthening the old global-parameter
-model more than necessary.
+- It runs threaded BM25 over thousands of MARCO queries.
+- It uses many threads (`--threads 54` in the current script).
+- The Fiver-backed Meadow path is reasonably fast once loaded.
+- The Hazel-backed path runs much longer, exposing the reference
+  implementation's bottlenecks.
+- The first successful Hazel run took `43:36.18` wall time while producing the
+  same MRR as the Fiver-backed run; details are recorded in
+  `ai/hazel-progress.md`.
 
-## Suggested Next Step
+Known or suspected bottlenecks:
 
-Inspect `meadowlark/tf-idf_stats.cc` and decide whether
-`TfIdfStats::make(...)` actually needs to mutate the Warren.
+- Over-serialization in `HazelTxt::translate(...)`.
+- Repeated reading and decompression of idx entries in `HazelIdx::hopper(...)`.
+- Shallow Hazel cloning means worker threads share one `HazelTxt` mutex and
+  one text-chunk hopper.
+- `HazelTxt::clone_()` exists, but `Hazel::clone_()` currently bypasses it by
+  shallow-copying `txt_`.
+- Per-thread `Stats` clones can stampede on the same metadata/stat hoppers when
+  there is no idx cache.
+- `text_chunk_tag` itself is decoded through Hazel idx; if txt clones each make
+  their own text-chunk hopper, idx caching becomes even more important.
+- BM25 may request related information separately (`rsj`, `tf_hopper`, id and
+  container hoppers), so repeated feature lookups should avoid repeated decode.
+- Missing-feature lookups should probably be cached too, since repeated query
+  terms may not exist in the vocabulary.
+- The shared `std::fstream` plus mutex is safe, but cold cache reads still
+  serialize. Later designs may want positioned reads or per-loader descriptors.
+- `HazelTxt::tokens_in_chunk()` currently falls back to token splitting in one
+  path; this may be acceptable for now but should be checked if translate
+  remains hot.
+- The text chunk cache currently has no eviction. That is fine for early
+  stress testing but eventually needs a memory budget.
+- Output/id translation after ranking may use both idx hoppers and txt
+  translation heavily; optimize this path as part of the full ranking workload,
+  not just query evaluation.
 
-Likely direction:
+## Likely Direction
 
-- Treat the tf-idf metadata object as authoritative for ranking setup.
-- Construct `stats->stemmer_` from the metadata directly.
-- Avoid requiring `warren->set_parameter("stemmer", ...)` to succeed.
-- Keep any Warren-level `stemmer` parameter as optional compatibility metadata,
-  not a required side effect.
+First design an integrated cache story, then implement it incrementally.
 
-## Compatibility Options
+Potential first moves:
 
-Option A: adjust `TfIdfStats::make(...)`
+- Add a Hazel idx decoded-posting cache keyed by feature.
+- Use a cache record that supports in-flight loading so concurrent requests for
+  the same feature wait instead of duplicating reads/decompression.
+- Keep the file-read critical section short: copy compressed bytes while locked,
+  then decompress outside the file lock.
+- Decide whether the cached value should be `CacheRecord`, `SimplePosting`, or
+  another hopper-ready representation.
+- Make Hazel clones less shallow for txt: each clone should likely get its own
+  `text_chunk_tag` hopper while sharing immutable txt metadata and the
+  decompressed chunk cache.
+- Split Hazel txt locking so hopper state, chunk-cache state, file IO, and
+  decompression are not all serialized behind one broad mutex.
 
-- Best aligned with the future metadata direction.
-- Remove or soften the hard failure around `set_parameter("stemmer", ...)`.
-- Ranking clones should still work because `TfIdfStats::make(...)` rereads the
-  tf-idf metadata for each cloned Warren.
+Open design questions:
 
-Option B: let `Hazel::set_parameter_("stemmer", ...)` succeed in memory only
+- Should idx caches live per `HazelIdx`, per Bigwig/Meadow, or eventually in a
+  shared cache across Fiver/Hazel shard types?
+- How should cache keys identify a static shard, sequence range, and feature?
+- What memory budget and eviction policy are appropriate for decoded postings
+  and decompressed text chunks?
+- How much should the first cache borrow from `SimpleIdx` versus introducing a
+  small Hazel-specific cache that can later be generalized?
+- How should future Bigwig activation choose and coordinate Fivers and Hazels
+  for the same sequence range?
 
-- Smaller local compatibility shim.
-- Keeps static Hazel files immutable.
-- But it continues to bless the old Warren-global mutation path.
+## Related Metadata Work
 
-Prefer Option A unless a quick experiment shows clone/ranker behavior depends
-on `warren->stemmer()` being updated.
+The ranking metadata transition remains relevant but is not the main efficiency
+problem.
+
+- `TfIdfStats::make(...)` now treats the ranking-view stemmer/tokenizer as
+  `Stats` state.
+- The older Warren-global `stemmer` write is disabled under `#if 0` as a
+  transitional artifact.
+- Long-term, Meadowlark conventions should make ranking views discoverable from
+  in-index metadata rather than one global mutable parameter block.
 
 ## Validation
 
-After the change:
-
-- Rebuild `//apps:working`.
-- Rebuild a fresh Hazel from `a.meadow/fiver...` with `//apps:fiver2hazel`.
-- Run the user's `rank.sh` against the standalone Hazel shard.
-- Compare behavior against `rank.sh a.meadow`; exact runtime may differ, but
-  the Hazel run should get past stats setup and produce ranked output.
-
+Use the user's `rank.sh` as the main stress test after each meaningful
+optimization. Compare against the Fiver-backed `rank.sh a.meadow` run for both
+correctness and rough performance.

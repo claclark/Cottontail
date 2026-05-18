@@ -77,8 +77,10 @@
 
 ## Current Hazel status
 
-- Hazel v1 writer and first activation pass are in progress: standalone Hazel files can be recognized, parse idx/txt blobs, construct hoppers from posting blobs, translate text through cached decompressed txt chunks, and shallow-clone the Hazel Warren.
+- Hazel v1 writer and first activation pass are in place: standalone Hazel files can be recognized, parse idx/txt blobs, construct hoppers from posting blobs, translate text through cached decompressed txt chunks, and shallow-clone the Hazel Warren.
 - `fiver2hazel` is currently a pragmatic conversion path from a Fiver pickle plus its enclosing burrow DNA; it now preserves the owner Warren `parameters` block in generated Hazel DNA.
 - Hazel idx activation is intentionally slow and simple: no posting cache, locked reads into a local buffer, decode into a fresh hopper.
 - Hazel txt activation keeps a persistent `text_chunk_tag` hopper and a simple decompressed chunk cache protected by a mutex.
-- Open ranking issue: Meadow/Hazel BM25 setup reaches `TfIdfStats::make(...)` and fails on `warren->set_parameter("stemmer", ...)`; see `ai/plan.md`.
+- Ranking transition note: `TfIdfStats::make(...)` owns its ranking-view stemmer/tokenizer through `Stats`; the old Warren-global `stemmer` write has been disabled as a transitional artifact. Continue tracking parameter/metadata scoping in `ai/plan.md`.
+- Current planned work is Hazel efficiency. The `rank.sh` threaded BM25 stress test exposes two major starting bottlenecks: serialized txt translation and repeated idx posting reads/decompression.
+- Record Hazel performance milestones and before/after measurements in `ai/hazel-progress.md`.

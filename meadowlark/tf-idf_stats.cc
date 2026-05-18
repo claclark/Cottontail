@@ -71,8 +71,13 @@ std::shared_ptr<Stats> TfIdfStats::make(const std::string &recipe,
     stemmer_name = "porter";
   else
     stemmer_name = parameters["stemmer"];
+#if 0
+  // Transitional artifact from the older Warren-global parameter model.
+  // TfIdfStats now owns the ranking-view stemmer directly; remove this block
+  // once its clear that its not required.
   if (!warren->set_parameter("stemmer", stemmer_name, error))
     return nullptr;
+#endif
   stats->stemmer_ = Stemmer::make(stemmer_name, "", error);
   if (stats->stemmer_ == nullptr)
     return nullptr;
