@@ -84,3 +84,4 @@
 - Ranking transition note: `TfIdfStats::make(...)` owns its ranking-view stemmer/tokenizer through `Stats`; the old Warren-global `stemmer` write has been disabled as a transitional artifact. Continue tracking parameter/metadata scoping in `ai/plan.md`.
 - Current planned work is Hazel efficiency. The `rank.sh` threaded BM25 stress test exposes two major starting bottlenecks: serialized txt translation and repeated idx posting reads/decompression.
 - Record Hazel performance milestones and before/after measurements in `ai/hazel-progress.md`.
+- Next concrete starting point is reviewing and wiring `src/read_gate.h`: a tiny bounded positioned-read helper using one fd, `pread`, and two concurrent read permits by default.

@@ -70,4 +70,17 @@ Current suspected bottlenecks:
 - `Stats` clones likely repeat metadata/stat hopper construction, amplifying
   the no-cache idx behavior.
 
+Next starting point:
+
+- Review and wire in `src/read_gate.h`.
+- `ReadGate` is a small header-only helper that owns one file descriptor, uses
+  `pread`, and allows two concurrent reads by default.
+- It returns a `std::unique_ptr<char[]>` because callers immediately
+  decompress/decode and discard the compressed buffer.
+- Its nested `Permit` class is an RAII guard: constructing it acquires one read
+  slot, and destruction releases the slot on all return paths.
+- `ReadGate` intentionally does no caching, coalescing, decompression, or worker
+  thread management. In-flight deduplication belongs in the future idx/txt
+  caches above the read layer.
+
 Next measurements should be added here after each meaningful optimization.

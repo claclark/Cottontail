@@ -75,6 +75,10 @@ First design an integrated cache story, then implement it incrementally.
 
 Potential first moves:
 
+- Start by wiring in `src/read_gate.h`, a small header-only helper that owns one
+  file descriptor, uses `pread`, and gates concurrent reads with two permits by
+  default. It returns caller-owned compressed byte buffers and does no caching
+  or decompression.
 - Add a Hazel idx decoded-posting cache keyed by feature.
 - Use a cache record that supports in-flight loading so concurrent requests for
   the same feature wait instead of duplicating reads/decompression.
@@ -87,6 +91,13 @@ Potential first moves:
   decompressed chunk cache.
 - Split Hazel txt locking so hopper state, chunk-cache state, file IO, and
   decompression are not all serialized behind one broad mutex.
+
+Immediate next starting point:
+
+- Review and wire `ReadGate` into `HazelFile`/Hazel shard state, replacing the
+  current shared `std::fstream` read mutex with bounded positioned reads.
+- Keep `ReadGate` deliberately dumb: no cache, no decompression, no worker
+  threads. Semantic coordination remains in idx/txt caches above it.
 
 Open design questions:
 

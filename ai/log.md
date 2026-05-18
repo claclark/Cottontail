@@ -35,3 +35,4 @@
 2026-05-18T14:44:35Z Replaced `ai/plan.md` with an unfinished Hazel efficiency planning sketch, updated `ai/hazel.md` to reflect working first-pass activation and current efficiency work, and refreshed `ai/notes.md` with the threaded BM25 stress-test bottlenecks.
 2026-05-18T15:09:17Z Added `ai/hazel-progress.md` to track Hazel performance milestones; recorded the first successful standalone-Hazel `rank.sh` run with matching MRR and 43:36 wall time, and linked the progress log from `ai/plan.md` and `ai/notes.md`.
 2026-05-18T15:10:33Z Clarified in `ai/hazel-progress.md` that the Fiver-backed wall time mostly reflects loading the Fiver into memory and that the hot internal ranking timer is the more meaningful comparison.
+2026-05-18T16:20:48Z Added `src/read_gate.h` as the next Hazel efficiency starting point and documented it in `ai/plan.md`, `ai/hazel-progress.md`, and `ai/notes.md`; the helper is not yet wired into Hazel.
