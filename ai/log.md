@@ -36,3 +36,12 @@
 2026-05-18T15:09:17Z Added `ai/hazel-progress.md` to track Hazel performance milestones; recorded the first successful standalone-Hazel `rank.sh` run with matching MRR and 43:36 wall time, and linked the progress log from `ai/plan.md` and `ai/notes.md`.
 2026-05-18T15:10:33Z Clarified in `ai/hazel-progress.md` that the Fiver-backed wall time mostly reflects loading the Fiver into memory and that the hot internal ranking timer is the more meaningful comparison.
 2026-05-18T16:20:48Z Added `src/read_gate.h` as the next Hazel efficiency starting point and documented it in `ai/plan.md`, `ai/hazel-progress.md`, and `ai/notes.md`; the helper is not yet wired into Hazel.
+2026-05-19T15:01:56Z Adjusted `Fiver::hazel` txt chunk map writing so txt directory offsets and compressed chunk ends are relative to the start of chunk space after the txt header.
+2026-05-19T15:44:36Z Simplified Hazel txt activation for the chunk-space-relative format: removed cross-chunk token-count skipping, kept at most two one-chunk tokenizer skips, and made `target_chunk_size` load-time validation only.
+2026-05-19T16:16:57Z Stripped `HazelTxt` in `src/hazel.cc` down to placeholder methods and minimal wiring so the text activation path can be rebuilt from a clean skeleton.
+2026-05-19T16:34:51Z Made `HazelTxt::clone_()` assert false, set an error, and return `nullptr`, documenting the intended non-cloning component model for Hazel text.
+2026-05-19T16:42:30Z Rewired Hazel assembly so `Hazel::make` constructs the `text_chunk_tag` hopper and passes it into `HazelTxt`, removing HazelTxt's stored idx and featurizer dependencies.
+2026-05-19T16:54:39Z Changed `HazelTxt` construction to take the Hazel filename plus txt blob offset/length, create its own `ReadGate`, and keep blob length scoped to the future map-loading step.
+2026-05-19T17:03:39Z Folded Hazel txt map loading into `HazelTxt::make`: it now reads the txt header, sets `offset_` to the absolute start of chunk space, loads and validates the chunk map, and sizes the fixed cache vector.
+2026-05-20T15:34:52Z Updated `ai/hazel.md` to document that txt `directory_offset` and directory `compressed_end` values are relative to chunk space after the txt header.
+2026-05-20T16:42:18Z Reworked `ai/plan.md` into a HazelTxt rebuild plan and sanity-checked it against the writer format, hopper semantics, tokenizer skipping, compressor APIs, and cache representation constraints.

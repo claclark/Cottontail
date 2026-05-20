@@ -19,6 +19,7 @@
 #include "src/hopper.h"
 #include "src/null_annotator.h"
 #include "src/null_appender.h"
+#include "src/read_gate.h"
 #include "src/recipe.h"
 #include "src/simple_posting.h"
 #include "src/stemmer.h"
@@ -329,28 +330,18 @@ struct HazelTextEntry {
 class HazelTxt final : public Txt {
 public:
   static std::shared_ptr<Txt> make(const std::string &recipe,
-                                   std::shared_ptr<HazelFile> file,
-                                   const HazelBlob &blob,
-                                   std::shared_ptr<Idx> idx,
-                                   std::shared_ptr<Featurizer> featurizer,
+                                   const std::string &filename,
+                                   addr blob_offset, addr blob_length,
                                    std::shared_ptr<Tokenizer> tokenizer,
+                                   std::unique_ptr<Hopper> hopper,
                                    std::string *error = nullptr) {
     std::shared_ptr<HazelTxt> txt = std::shared_ptr<HazelTxt>(new HazelTxt());
     txt->therecipe_ = recipe;
-    txt->file_ = file;
-    txt->blob_offset_ = blob.offset;
-    txt->blob_length_ = blob.length;
-    txt->idx_ = idx;
-    txt->featurizer_ = featurizer;
+    txt->read_gate_ = ReadGate::make(filename, error);
+    if (txt->read_gate_ == nullptr)
+      return nullptr;
     txt->tokenizer_ = tokenizer;
-    txt->count_ = -1;
-    txt->range_valid_ = false;
-    if (!compressor_from_recipe(recipe, "compressor", "compressor_recipe",
-                                &txt->compressor_, error))
-      return nullptr;
-    if (!txt->load(error))
-      return nullptr;
-    txt->hopper_ = idx->hopper(featurizer->featurize(text_chunk_tag));
+    txt->hopper_ = std::move(hopper);
     return txt;
   }
 
@@ -365,275 +356,24 @@ private:
   std::string name_() final { return "hazel"; };
   std::string recipe_() final { return therecipe_; };
   std::shared_ptr<Txt> clone_(std::string *error) final {
-    return HazelTxt::make(therecipe_, file_,
-                          HazelBlob{"txt", blob_offset_, blob_length_}, idx_,
-                          featurizer_, tokenizer_, error);
+    safe_error(error) = "HazelTxt should not be cloned";
+    return nullptr;
   }
   std::string translate_(addr p, addr q) final {
-    if (p < 0)
-      p = 0;
-    if (p == maxfinity || q < p)
-      return "";
-    addr p0, q0, i;
-    addr p1, q1, j;
-    std::vector<std::shared_ptr<const std::string>> chunks;
-    std::vector<addr> raw_starts;
-    std::vector<addr> raw_ends;
-    addr raw_start, raw_end;
-    {
-      std::lock_guard<std::mutex> lock(mutex_);
-      hopper_->rho(p, &p0, &q0, &i);
-      if (p0 == maxfinity || p0 > q)
-        return "";
-      hopper_->ohr(q, &p1, &q1, &j);
-      raw_start = i;
-      raw_end = q > q1 ? raw_text_length_ : j;
-      if (p0 < p)
-        raw_start = skip_in_cache(raw_start, p - p0);
-      else
-        p = p0;
-      if (q <= q1) {
-        if (q0 == q1)
-          raw_end = skip_in_cache(raw_start, q - p + 1);
-        else
-          raw_end = skip_in_cache(raw_end, q - p1 + 1);
-      }
-      if (raw_start < 0)
-        raw_start = 0;
-      if (raw_end > raw_text_length_)
-        raw_end = raw_text_length_;
-      if (raw_end < raw_start)
-        return "";
-      if (!cache_range(raw_start, raw_end, &chunks, &raw_starts, &raw_ends))
-        return "";
-    }
-    std::string result;
-    result.reserve(raw_end - raw_start);
-    for (size_t k = 0; k < chunks.size(); k++) {
-      addr start = std::max(raw_start, raw_starts[k]);
-      addr end = std::min(raw_end, raw_ends[k]);
-      if (start < end)
-        result.append(chunks[k]->data() + (start - raw_starts[k]),
-                      end - start);
-    }
-    return result;
+    return "";
   };
   std::string raw_(addr p, addr q) final { return translate(p, q); };
-  addr tokens_() final {
-    std::lock_guard<std::mutex> lock(mutex_);
-    if (count_ >= 0)
-      return count_;
-    count_ = 0;
-    addr p, q;
-    for (hopper_->tau(0, &p, &q); p < maxfinity; hopper_->tau(p + 1, &p, &q))
-      count_ += q - p + 1;
-    return count_;
-  };
+  addr tokens_() final { return 0; };
   bool range_(addr *p, addr *q) final {
-    if (!range_valid_) {
-      std::lock_guard<std::mutex> lock(mutex_);
-      if (!range_valid_) {
-        range_valid_ = true;
-        hopper_->tau(minfinity + 1, &range_p_, &range_q_);
-        if (range_p_ < maxfinity) {
-          addr ignore;
-          hopper_->uat(maxfinity - 1, &ignore, &range_q_);
-        }
-      }
-    }
-    *p = range_p_;
-    *q = range_q_;
-    return range_p_ < maxfinity;
-  }
-
-  bool load(std::string *error) {
-    const std::string magic = "COTTONTAIL_HAZEL_TXT_V1\n";
-    chunks_start_ = magic.size() + 5 * sizeof(addr);
-    if (blob_length_ < chunks_start_) {
-      safe_error(error) = "Hazel txt blob is too short";
-      return false;
-    }
-    std::string header(chunks_start_, '\0');
-    if (!file_->read(blob_offset_, &header[0], header.size(), error))
-      return false;
-    if (header.compare(0, magic.size(), magic) != 0) {
-      safe_error(error) = "Hazel got bad txt blob magic";
-      return false;
-    }
-    const char *p = header.data() + magic.size();
-    addr directory_offset = read_pod<addr>(p);
-    p += sizeof(addr);
-    addr directory_length = read_pod<addr>(p);
-    p += sizeof(addr);
-    addr directory_count = read_pod<addr>(p);
-    p += sizeof(addr);
-    raw_text_length_ = read_pod<addr>(p);
-    p += sizeof(addr);
-    target_chunk_size_ = read_pod<addr>(p);
-    if (directory_offset < chunks_start_ || directory_length < 0 ||
-        directory_count < 0 || raw_text_length_ < 0 ||
-        target_chunk_size_ <= 0 ||
-        directory_offset + directory_length > blob_length_ ||
-        directory_length != directory_count * (addr)(2 * sizeof(addr))) {
-      safe_error(error) = "Hazel got bad txt directory";
-      return false;
-    }
-    std::string bytes(directory_length, '\0');
-    if (!file_->read(blob_offset_ + directory_offset, &bytes[0], bytes.size(),
-                     error))
-      return false;
-    directory_.reserve(directory_count);
-    p = bytes.data();
-    for (addr i = 0; i < directory_count; i++) {
-      HazelTextEntry entry;
-      entry.raw_end = read_pod<addr>(p);
-      p += sizeof(addr);
-      entry.compressed_end = read_pod<addr>(p);
-      p += sizeof(addr);
-      if (entry.raw_end < 0 || entry.raw_end > raw_text_length_ ||
-          entry.compressed_end < chunks_start_ ||
-          entry.compressed_end > directory_offset ||
-          (!directory_.empty() &&
-           (entry.raw_end < directory_.back().raw_end ||
-            entry.compressed_end < directory_.back().compressed_end))) {
-        safe_error(error) = "Hazel got bad txt chunk boundary";
-        return false;
-      }
-      directory_.push_back(entry);
-    }
-    return true;
-  }
-
-  bool chunk_bounds(size_t chunk, addr *raw_start, addr *raw_end,
-                    addr *compressed_start, addr *compressed_end) {
-    if (chunk >= directory_.size())
-      return false;
-    *raw_start = chunk == 0 ? 0 : directory_[chunk - 1].raw_end;
-    *raw_end = directory_[chunk].raw_end;
-    *compressed_start =
-        chunk == 0 ? chunks_start_ : directory_[chunk - 1].compressed_end;
-    *compressed_end = directory_[chunk].compressed_end;
-    return true;
-  }
-
-  size_t chunk_for_raw(addr raw) {
-    auto it = std::upper_bound(
-        directory_.begin(), directory_.end(), raw,
-        [](addr raw, const HazelTextEntry &entry) {
-          return raw < entry.raw_end;
-        });
-    if (it == directory_.end())
-      return directory_.size();
-    return it - directory_.begin();
-  }
-
-  std::shared_ptr<const std::string> chunk(size_t k) {
-    auto cached = cache_.find(k);
-    if (cached != cache_.end())
-      return cached->second;
-    addr raw_start, raw_end, compressed_start, compressed_end;
-    if (!chunk_bounds(k, &raw_start, &raw_end, &compressed_start,
-                      &compressed_end))
-      return nullptr;
-    std::string compressed(compressed_end - compressed_start, '\0');
-    std::string error;
-    if (!file_->read(blob_offset_ + compressed_start, &compressed[0],
-                     compressed.size(), &error)) {
-      assert(false);
-      return nullptr;
-    }
-    std::shared_ptr<std::string> raw = std::make_shared<std::string>();
-    raw->resize(raw_end - raw_start);
-    addr n = compressor_->tang(&compressed[0], compressed.size(), &(*raw)[0],
-                               raw->size());
-    if (n != (addr)raw->size()) {
-      assert(false);
-      return nullptr;
-    }
-    cache_[k] = raw;
-    return raw;
-  }
-
-  bool cache_range(addr raw_start, addr raw_end,
-                   std::vector<std::shared_ptr<const std::string>> *chunks,
-                   std::vector<addr> *raw_starts,
-                   std::vector<addr> *raw_ends) {
-    if (raw_start == raw_end)
-      return true;
-    size_t first = chunk_for_raw(raw_start);
-    size_t last = chunk_for_raw(raw_end - 1);
-    if (first >= directory_.size() || last >= directory_.size())
-      return false;
-    for (size_t k = first; k <= last; k++) {
-      addr rs, re, cs, ce;
-      if (!chunk_bounds(k, &rs, &re, &cs, &ce))
-        return false;
-      std::shared_ptr<const std::string> c = chunk(k);
-      if (c == nullptr)
-        return false;
-      chunks->push_back(c);
-      raw_starts->push_back(rs);
-      raw_ends->push_back(re);
-    }
-    return true;
-  }
-
-  addr skip_in_cache(addr raw, addr tokens) {
-    if (tokens <= 0)
-      return raw;
-    size_t k = chunk_for_raw(raw);
-    addr remaining = tokens;
-    addr current = raw;
-    while (k < directory_.size()) {
-      addr raw_start, raw_end, compressed_start, compressed_end;
-      if (!chunk_bounds(k, &raw_start, &raw_end, &compressed_start,
-                        &compressed_end))
-        return current;
-      std::shared_ptr<const std::string> c = chunk(k);
-      if (c == nullptr)
-        return current;
-      addr offset = std::max<addr>(0, current - raw_start);
-      const char *start = c->data() + offset;
-      const char *end =
-          tokenizer_->skip(start, c->size() - offset, remaining);
-      current = raw_start + (end - c->data());
-      if (current < raw_end)
-        return current;
-      addr consumed = tokens_in_chunk(start, c->data() + c->size() - start);
-      if (consumed >= remaining)
-        return current;
-      remaining -= consumed;
-      if (remaining <= 0)
-        return current;
-      k++;
-    }
-    return raw_text_length_;
-  }
-
-  addr tokens_in_chunk(const char *text, addr length) {
-    if (length <= 0)
-      return 0;
-    return tokenizer_->split(std::string(text, length)).size();
+    *p = maxfinity;
+    *q = maxfinity;
+    return false;
   }
 
   std::string therecipe_;
-  std::shared_ptr<HazelFile> file_;
-  addr blob_offset_;
-  addr blob_length_;
-  addr chunks_start_;
-  addr raw_text_length_;
-  addr target_chunk_size_;
-  std::vector<HazelTextEntry> directory_;
-  std::shared_ptr<Compressor> compressor_;
-  std::shared_ptr<Idx> idx_;
-  std::shared_ptr<Featurizer> featurizer_;
+  std::shared_ptr<ReadGate> read_gate_;
   std::shared_ptr<Tokenizer> tokenizer_;
-  std::mutex mutex_;
   std::unique_ptr<Hopper> hopper_;
-  std::map<size_t, std::shared_ptr<const std::string>> cache_;
-  addr count_;
-  bool range_valid_;
-  addr range_p_, range_q_;
 };
 
 } // namespace
@@ -694,10 +434,17 @@ std::shared_ptr<Warren> Hazel::make(const std::string &filename,
       HazelIdx::make(idx_recipe, file, idx_blob->second, error);
   if (idx == nullptr)
     return nullptr;
+  std::unique_ptr<Hopper> text_chunk_hopper =
+      idx->hopper(featurizer->featurize(text_chunk_tag));
+  if (text_chunk_hopper == nullptr) {
+    safe_error(error) = "Hazel can't make text chunk hopper";
+    return nullptr;
+  }
   std::shared_ptr<Txt> txt =
       Txt::wrap(txt_recipe,
-                HazelTxt::make(txt_recipe, file, txt_blob->second, idx,
-                               featurizer, tokenizer, error),
+                HazelTxt::make(txt_recipe, filename, txt_blob->second.offset,
+                               txt_blob->second.length, tokenizer,
+                               std::move(text_chunk_hopper), error),
                 error);
   if (txt == nullptr)
     return nullptr;

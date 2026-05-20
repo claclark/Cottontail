@@ -4,6 +4,8 @@
 *.meadow
 *temp*
 *test*
+*.sh
+*.py
 .DS_Store
 MODULE.bazel.lock
 /bazel-Cottontail

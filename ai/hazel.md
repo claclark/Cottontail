@@ -142,8 +142,9 @@ wire encoding, not as a promise that all future Hazel producers have
 ## txt Blob
 
 The txt blob is also self-contained. The top-level dictionary gives the
-absolute byte range; all offsets inside the txt blob are relative to the start
-of that blob.
+absolute byte range. Header fields are relative to the start of the txt blob
+unless otherwise noted. Compressed chunk boundaries in the text directory are
+relative to the start of chunk space, immediately after the txt header.
 
 Header:
 
@@ -156,9 +157,10 @@ addr raw_text_length
 addr target_chunk_size
 ```
 
-The writer streams compressed text chunks first, keeps the text chunk directory
-in memory, writes the directory at the end of the txt blob, then patches the
-header.
+The writer reserves the header, records the start of chunk space, streams
+compressed text chunks, keeps the text chunk directory in memory, writes the
+directory at the end of chunk space, then patches the header. `directory_offset`
+is relative to the start of chunk space, not the start of the txt blob.
 
 Text directory entry:
 
@@ -169,11 +171,12 @@ addr compressed_end
 
 The text directory is also a boundary list. The first raw chunk starts at raw
 offset `0`, and later raw chunks start at the previous entry's `raw_end`. The
-first compressed chunk starts at the end of the txt blob header, and later
-compressed chunks start at the previous entry's `compressed_end`.
+first compressed chunk starts at chunk-space offset `0`, and later compressed
+chunks start at the previous entry's `compressed_end`.
 
 `raw_end` is a byte offset into the original Fiver text blob. `compressed_end`
-is relative to the start of the txt blob.
+is relative to the start of chunk space. For a non-empty txt blob, the final
+`compressed_end` should equal `directory_offset`.
 
 Text chunks are formed by walking a private hopper over the Fiver idx posting
 list for `text_chunk_tag`. Adjacent Fiver text chunks are grouped until the raw

@@ -1001,7 +1001,7 @@ bool hazel_crush(std::shared_ptr<Compressor> compressor,
   return true;
 }
 
-bool hazel_write_text_chunk(std::fstream *out, addr blob_start,
+bool hazel_write_text_chunk(std::fstream *out, addr chunk_space_start,
                             const std::string &text, addr raw_start,
                             addr raw_length,
                             std::shared_ptr<Compressor> text_compressor,
@@ -1016,7 +1016,7 @@ bool hazel_write_text_chunk(std::fstream *out, addr blob_start,
   HazelTextEntry entry;
   entry.raw_end = raw_start + raw_length;
   out->write(compressed.data(), compressed.size());
-  entry.compressed_end = hazel_tellp(out) - blob_start;
+  entry.compressed_end = hazel_tellp(out) - chunk_space_start;
   directory->push_back(entry);
   if (out->fail()) {
     safe_error(error) = "Fiver failed to write Hazel txt chunk";
@@ -1044,6 +1044,7 @@ bool hazel_write_txt_blob(std::fstream *out, std::shared_ptr<Idx> idx,
   hazel_write_pod(out, directory_count);
   hazel_write_pod(out, raw_text_length);
   hazel_write_pod(out, target_chunk_size);
+  addr chunk_space_start = hazel_tellp(out);
 
   std::vector<HazelTextEntry> directory;
   std::unique_ptr<Hopper> hopper =
@@ -1063,7 +1064,7 @@ bool hazel_write_txt_blob(std::fstream *out, std::shared_ptr<Idx> idx,
       group_start = raw_start;
       have_chunk = true;
     } else if (raw_start - group_start >= target_chunk_size) {
-      if (!hazel_write_text_chunk(out, *blob_start, text, group_start,
+      if (!hazel_write_text_chunk(out, chunk_space_start, text, group_start,
                                   raw_start - group_start, text_compressor,
                                   &directory, error))
         return false;
@@ -1071,22 +1072,23 @@ bool hazel_write_txt_blob(std::fstream *out, std::shared_ptr<Idx> idx,
     }
   }
   if (have_chunk) {
-    if (!hazel_write_text_chunk(out, *blob_start, text, group_start,
+    if (!hazel_write_text_chunk(out, chunk_space_start, text, group_start,
                                 (addr)text.size() - group_start,
                                 text_compressor, &directory, error))
       return false;
   } else if (text.size() > 0) {
-    if (!hazel_write_text_chunk(out, *blob_start, text, 0, text.size(),
+    if (!hazel_write_text_chunk(out, chunk_space_start, text, 0, text.size(),
                                 text_compressor, &directory, error))
       return false;
   }
-  directory_offset = hazel_tellp(out) - *blob_start;
+  addr directory_start = hazel_tellp(out);
+  directory_offset = directory_start - chunk_space_start;
   directory_count = directory.size();
   for (auto &entry : directory) {
     hazel_write_pod(out, entry.raw_end);
     hazel_write_pod(out, entry.compressed_end);
   }
-  directory_length = hazel_tellp(out) - *blob_start - directory_offset;
+  directory_length = hazel_tellp(out) - directory_start;
   *blob_length = hazel_tellp(out) - *blob_start;
   out->seekp(*blob_start + magic.size());
   hazel_write_pod(out, directory_offset);
