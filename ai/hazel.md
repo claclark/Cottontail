@@ -190,6 +190,18 @@ fiver2hazel --chunk-size bytes fiver...
 
 The final chunk extends to `raw_text_length`.
 
+An empty txt blob is represented by the fixed header only:
+
+```
+directory_offset = 0
+directory_length = 0
+directory_count = 0
+raw_text_length = 0
+```
+
+`target_chunk_size` is still present and must be positive. Activation treats
+this as a normal no-text shard.
+
 ## Relationship Between idx And txt
 
 Hazel txt should not build its own token-to-byte index. As with `FiverTxt`,
@@ -237,9 +249,27 @@ can be loaded into memory initially.
 
 The current `hazel_idx` implementation is intentionally minimal: it reads and
 decodes posting data on demand and does not yet provide the caching needed for
-Fiver-like ranking performance. The current `hazel_txt` implementation keeps a
-simple decompressed text-chunk cache and uses the idx-backed `text_chunk_tag`
-relationship for token-to-byte translation.
+Fiver-like ranking performance.
+
+The current `hazel_txt` implementation:
+
+- builds its text compressor from the txt recipe keys `compressor` and
+  `compressor_recipe`;
+- loads the txt chunk directory into memory at activation;
+- precomputes the managed token range from the supplied `text_chunk_tag`
+  hopper;
+- uses `ReadGate` for positioned compressed-chunk reads;
+- keeps a no-eviction decompressed chunk cache parallel to the txt directory;
+- protects the shared `text_chunk_tag` hopper with a mutex;
+- translates by trimming requests to the managed token range, using
+  `rho(...)`/`ohr(...)` anchors, decompressing the external chunks that cover
+  the needed byte window, and applying at most two tokenizer skips to trim
+  edges.
+
+`translate(...)` is forgiving: impossible, inverted, out-of-range, or failed
+read/decompression requests return the empty string because the `Txt` API has
+no error channel. `HazelTxt::clone_()` is unsupported; Hazel Warren cloning is
+currently a shallow compatibility shim over shared components.
 
 Hazel supports shallow Warren cloning. This is sufficient for basic activation
 and query tests, but the clone/caching model is part of the ongoing efficiency

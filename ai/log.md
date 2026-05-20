@@ -45,3 +45,8 @@
 2026-05-19T17:03:39Z Folded Hazel txt map loading into `HazelTxt::make`: it now reads the txt header, sets `offset_` to the absolute start of chunk space, loads and validates the chunk map, and sizes the fixed cache vector.
 2026-05-20T15:34:52Z Updated `ai/hazel.md` to document that txt `directory_offset` and directory `compressed_end` values are relative to chunk space after the txt header.
 2026-05-20T16:42:18Z Reworked `ai/plan.md` into a HazelTxt rebuild plan and sanity-checked it against the writer format, hopper semantics, tokenizer skipping, compressor APIs, and cache representation constraints.
+2026-05-20T18:58:29Z Performed repository reconnaissance: re-read architecture and current HazelTxt rebuild plan, surveyed top-level files/build setup, inspected Hazel activation stubs, ReadGate, and current notes.
+2026-05-20T19:07:30Z Rebuilt `HazelTxt` activation and translation in `src/hazel.cc`: txt header/map validation, token range discovery, ReadGate-backed decompression cache, and Fiver-style token-to-byte translation; verified `bazel build //...`.
+2026-05-20T19:10:12Z Fixed HazelTxt compressor recipe activation to use the writer's `compressor` / `compressor_recipe` txt keys; reverified `bazel build //apps:fiver2hazel //apps:working` and `bazel build //...`.
+2026-05-20T20:00:58Z Added the post-HazelTxt-rebuild `rank.sh` timing/correctness result to `ai/hazel-progress.md`: same MRR/queries as baseline, 2566150 ms internal timer, 43:17.83 wall time.
+2026-05-20T20:07:03Z Moved durable HazelTxt rebuild details into `ai/hazel.md`, refreshed Hazel notes, and reduced `ai/plan.md` to the next goal: plan HazelIdx caching.

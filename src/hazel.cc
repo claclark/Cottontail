@@ -1,6 +1,7 @@
 #include "src/hazel.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cassert>
 #include <cstring>
 #include <fstream>
@@ -323,8 +324,13 @@ private:
 };
 
 struct HazelTextEntry {
-  addr raw_end;
-  addr compressed_end;
+  addr raw_byte_end;
+  addr compressed_byte_end;
+};
+
+struct HazelTextCacheEntry {
+  std::unique_ptr<char[]> bytes;
+  std::atomic<bool> present{false};
 };
 
 class HazelTxt final : public Txt {
@@ -342,6 +348,11 @@ public:
       return nullptr;
     txt->tokenizer_ = tokenizer;
     txt->hopper_ = std::move(hopper);
+    if (!compressor_from_recipe(recipe, "compressor", "compressor_recipe",
+                                &txt->compressor_, error) ||
+        !txt->load(blob_offset, blob_length, error) ||
+        !txt->load_token_range())
+      return nullptr;
     return txt;
   }
 
@@ -360,20 +371,275 @@ private:
     return nullptr;
   }
   std::string translate_(addr p, addr q) final {
-    return "";
+    if (token_start_ == maxfinity)
+      return "";
+    if (p < token_start_)
+      p = token_start_;
+    if (q > token_end_)
+      q = token_end_;
+    if (p == maxfinity || q < p)
+      return "";
+
+    addr p0, q0, left_anchor_byte;
+    addr p1, q1, right_anchor_byte;
+    {
+      std::lock_guard<std::mutex> lock(hopper_lock_);
+      hopper_->rho(p, &p0, &q0, &left_anchor_byte);
+      if (p0 == maxfinity || p0 > q)
+        return "";
+      hopper_->ohr(q, &p1, &q1, &right_anchor_byte);
+    }
+    if (p1 == minfinity || p1 == maxfinity)
+      return "";
+    if (left_anchor_byte < 0 || left_anchor_byte > raw_text_length_ ||
+        right_anchor_byte < 0 || right_anchor_byte > raw_text_length_)
+      return "";
+
+    addr cover_byte_start = left_anchor_byte;
+    addr cover_byte_end = q > q1 ? raw_text_length_ : right_anchor_byte;
+    if (cover_byte_start > cover_byte_end || map_.empty())
+      return "";
+
+    size_t first_chunk = chunk_containing(left_anchor_byte);
+    size_t last_chunk;
+    if (q > q1)
+      last_chunk = map_.size() - 1;
+    else
+      last_chunk = chunk_containing(right_anchor_byte);
+    if (first_chunk >= map_.size() || last_chunk >= map_.size() ||
+        first_chunk > last_chunk)
+      return "";
+    addr window_byte_start =
+        first_chunk == 0 ? 0 : map_[first_chunk - 1].raw_byte_end;
+    addr window_byte_end = map_[last_chunk].raw_byte_end;
+    if (cover_byte_start < window_byte_start ||
+        cover_byte_end > window_byte_end)
+      return "";
+    std::string cover = raw_bytes(window_byte_start, window_byte_end);
+    if ((addr)cover.size() != window_byte_end - window_byte_start)
+      return "";
+
+    const char *base = cover.data();
+    const char *limit = base + cover.size();
+    const char *start = base + (left_anchor_byte - window_byte_start);
+    if (p0 < p)
+      start = tokenizer_->skip(start, limit - start, p - p0);
+    else
+      p = p0;
+
+    const char *end;
+    if (q > q1) {
+      end = limit;
+    } else if (q0 == q1) {
+      end = tokenizer_->skip(start, limit - start, q - p + 1);
+    } else {
+      addr offset = right_anchor_byte - window_byte_start;
+      if (offset < 0 || offset > (addr)cover.size())
+        return "";
+      end = tokenizer_->skip(base + offset, limit - (base + offset),
+                             q - p1 + 1);
+    }
+    if (start < base || end < start || end > limit)
+      return "";
+    return std::string(start, end - start);
   };
   std::string raw_(addr p, addr q) final { return translate(p, q); };
-  addr tokens_() final { return 0; };
+  addr tokens_() final {
+    if (token_start_ == maxfinity)
+      return 0;
+    return token_end_ - token_start_ + 1;
+  };
   bool range_(addr *p, addr *q) final {
-    *p = maxfinity;
-    *q = maxfinity;
-    return false;
+    if (token_start_ == maxfinity) {
+      *p = maxfinity;
+      *q = maxfinity;
+      return false;
+    }
+    *p = token_start_;
+    *q = token_end_;
+    return true;
+  }
+
+  bool load(addr blob_offset, addr blob_length, std::string *error) {
+    const std::string magic = "COTTONTAIL_HAZEL_TXT_V1\n";
+    addr header_length = magic.size() + 5 * sizeof(addr);
+    if (blob_length < header_length) {
+      safe_error(error) = "Hazel txt blob is too short";
+      return false;
+    }
+    std::unique_ptr<char[]> header =
+        read_gate_->read(blob_offset, header_length, error);
+    if (header == nullptr)
+      return false;
+    if (std::string(header.get(), magic.size()) != magic) {
+      safe_error(error) = "Hazel got bad txt blob magic";
+      return false;
+    }
+    const char *data = header.get() + magic.size();
+    addr directory_offset = read_pod<addr>(data);
+    data += sizeof(addr);
+    addr directory_length = read_pod<addr>(data);
+    data += sizeof(addr);
+    addr directory_count = read_pod<addr>(data);
+    data += sizeof(addr);
+    raw_text_length_ = read_pod<addr>(data);
+    data += sizeof(addr);
+    addr target_chunk_size = read_pod<addr>(data);
+    chunk_space_start_ = blob_offset + header_length;
+    addr chunk_space_length = blob_length - header_length;
+    if (directory_offset < 0 || directory_length < 0 || directory_count < 0 ||
+        raw_text_length_ < 0 || target_chunk_size <= 0 ||
+        directory_length != directory_count * (addr)(2 * sizeof(addr)) ||
+        directory_offset > chunk_space_length ||
+        directory_length > chunk_space_length - directory_offset) {
+      safe_error(error) = "Hazel got bad txt directory";
+      return false;
+    }
+    if (directory_count == 0) {
+      if (raw_text_length_ != 0 || directory_length != 0 ||
+          directory_offset != 0) {
+        safe_error(error) = "Hazel got bad empty txt directory";
+        return false;
+      }
+      return true;
+    }
+
+    std::unique_ptr<char[]> directory = read_gate_->read(
+        chunk_space_start_ + directory_offset, directory_length, error);
+    if (directory == nullptr)
+      return false;
+    map_.reserve(directory_count);
+    data = directory.get();
+    for (addr i = 0; i < directory_count; i++) {
+      HazelTextEntry entry;
+      entry.raw_byte_end = read_pod<addr>(data);
+      data += sizeof(addr);
+      entry.compressed_byte_end = read_pod<addr>(data);
+      data += sizeof(addr);
+      if (entry.raw_byte_end < 0 || entry.compressed_byte_end < 0 ||
+          entry.compressed_byte_end > directory_offset ||
+          (!map_.empty() &&
+           (entry.raw_byte_end < map_.back().raw_byte_end ||
+            entry.compressed_byte_end < map_.back().compressed_byte_end))) {
+        safe_error(error) = "Hazel got bad txt chunk boundary";
+        return false;
+      }
+      map_.push_back(entry);
+    }
+    if (map_.back().raw_byte_end != raw_text_length_ ||
+        map_.back().compressed_byte_end != directory_offset) {
+      safe_error(error) = "Hazel got bad txt final boundary";
+      return false;
+    }
+    cache_ = std::unique_ptr<HazelTextCacheEntry[]>(
+        new HazelTextCacheEntry[map_.size()]);
+    return true;
+  }
+
+  bool load_token_range() {
+    token_start_ = maxfinity;
+    token_end_ = maxfinity;
+    addr p, q, value;
+    {
+      std::lock_guard<std::mutex> lock(hopper_lock_);
+      hopper_->tau(minfinity + 1, &p, &q, &value);
+      if (p == maxfinity)
+        return true;
+      token_start_ = p;
+      hopper_->uat(maxfinity - 1, &p, &q, &value);
+      token_end_ = q;
+    }
+    if (token_end_ < token_start_) {
+      token_start_ = maxfinity;
+      token_end_ = maxfinity;
+    }
+    return true;
+  }
+
+  size_t chunk_containing(addr raw_byte) {
+    if (raw_byte == raw_text_length_ && !map_.empty())
+      return map_.size() - 1;
+    auto it = std::upper_bound(
+        map_.begin(), map_.end(), raw_byte,
+        [](addr raw_byte, const HazelTextEntry &entry) {
+          return raw_byte < entry.raw_byte_end;
+        });
+    return it - map_.begin();
+  }
+
+  char *obtain(size_t k) {
+    HazelTextCacheEntry &entry = cache_[k];
+    if (entry.present.load(std::memory_order_acquire))
+      return entry.bytes.get();
+
+    addr raw_byte_start = k == 0 ? 0 : map_[k - 1].raw_byte_end;
+    addr raw_byte_end = map_[k].raw_byte_end;
+    addr compressed_byte_start = k == 0 ? 0 : map_[k - 1].compressed_byte_end;
+    addr compressed_byte_end = map_[k].compressed_byte_end;
+    addr raw_length = raw_byte_end - raw_byte_start;
+    addr compressed_length = compressed_byte_end - compressed_byte_start;
+    if (raw_length < 0 || compressed_length < 0)
+      return nullptr;
+    std::unique_ptr<char[]> compressed =
+        read_gate_->read(chunk_space_start_ + compressed_byte_start,
+                         compressed_length);
+    if (compressed == nullptr)
+      return nullptr;
+    std::unique_ptr<char[]> raw(new char[raw_length == 0 ? 1 : raw_length]);
+    size_t actual = compressor_->tang(compressed.get(), compressed_length,
+                                      raw.get(), raw_length);
+    if (actual != (size_t)raw_length)
+      return nullptr;
+
+    if (entry.present.load(std::memory_order_acquire))
+      return entry.bytes.get();
+    std::lock_guard<std::mutex> lock(cache_write_lock_);
+    if (!entry.present.load(std::memory_order_acquire)) {
+      entry.bytes = std::move(raw);
+      entry.present.store(true, std::memory_order_release);
+    }
+    return entry.bytes.get();
+  }
+
+  std::string raw_bytes(addr byte_start, addr byte_end) {
+    if (byte_start < 0 || byte_end < byte_start ||
+        byte_end > raw_text_length_ || byte_start == byte_end)
+      return byte_start == byte_end ? std::string() : std::string();
+    if (map_.empty())
+      return "";
+    size_t first = chunk_containing(byte_start);
+    size_t last = chunk_containing(byte_end - 1);
+    if (first >= map_.size() || last >= map_.size() || first > last)
+      return "";
+    std::string result;
+    result.reserve(byte_end - byte_start);
+    for (size_t k = first; k <= last; k++) {
+      char *bytes = obtain(k);
+      if (bytes == nullptr)
+        return "";
+      addr chunk_start = k == 0 ? 0 : map_[k - 1].raw_byte_end;
+      addr chunk_end = map_[k].raw_byte_end;
+      addr start = std::max(byte_start, chunk_start);
+      addr end = std::min(byte_end, chunk_end);
+      if (end > start)
+        result.append(bytes + (start - chunk_start), end - start);
+    }
+    return result;
   }
 
   std::string therecipe_;
   std::shared_ptr<ReadGate> read_gate_;
+  addr chunk_space_start_;
+  addr raw_text_length_;
+  std::vector<HazelTextEntry> map_;
+  std::unique_ptr<HazelTextCacheEntry[]> cache_;
   std::shared_ptr<Tokenizer> tokenizer_;
+  std::shared_ptr<Compressor> compressor_;
   std::unique_ptr<Hopper> hopper_;
+  std::mutex hopper_lock_;
+  std::mutex cache_write_lock_;
+  addr token_start_ = maxfinity;
+  addr token_end_ = maxfinity;
 };
 
 } // namespace

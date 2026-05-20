@@ -84,3 +84,49 @@ Next starting point:
   caches above the read layer.
 
 Next measurements should be added here after each meaningful optimization.
+
+## 2026-05-20: HazelTxt Rebuild Ranker Check
+
+Test:
+
+```
+./rank.sh a.meadow/hazel.00000000000000000000.00000000000000000058
+```
+
+Pipeline:
+
+```
+bm25:b=0.68 bm25:k1=0.82 bm25:depth=10 stop stem bm25
+```
+
+Workload:
+
+- MARCO dev small queries.
+- `--threads 54`.
+- Same standalone Hazel shard as the 2026-05-18 baseline.
+- Rank binary was `bazel-bin/apps/working`.
+
+Result:
+
+- Ranking completed successfully after the `HazelTxt` rebuild.
+- `MRR @10: 0.18923028380406587`.
+- `QueriesRanked: 6980`.
+- Same missing-result topic as earlier runs: `645252`.
+
+Timing/resource output:
+
+- Internal ranking timer: `2566150` ms.
+- Wall time: `43:17.83`.
+- User time: `13174.75`.
+- System time: `20697.36`.
+- CPU: `1303%`.
+- Max RSS: `32068276` KB.
+- Minor page faults: `3249193947`.
+
+Interpretation:
+
+- Correctness remains consistent with the earlier Hazel and Fiver-backed runs.
+- The HazelTxt rebuild did not materially change the overall ranker runtime for
+  this workload.
+- This supports the current suspicion that the next major bottleneck is still
+  repeated HazelIdx posting reads/decompression rather than text translation.
