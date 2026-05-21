@@ -12,3 +12,12 @@ are not committed plans unless promoted into `ai/plan.md`.
   concrete `Txt`, then call `Txt::wrap(recipe, txt, error)`. This may be right,
   but static single-file shards make the distinction between physical component
   recipe and wrapper recipe more visible.
+
+## Deep Error Logging
+
+- Add a logging path for deep internal errors that currently only assert.
+- Consider making `safe_error(...)` also log to stderr when it records an
+  error, then add a separate helper for invariant/deep-format failures that
+  should be visible even when assertions are disabled.
+- Hazel cache loading should eventually use this for corrupted posting reads or
+  decode failures before returning structured bogus fallback data.

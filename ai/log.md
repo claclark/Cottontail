@@ -51,3 +51,5 @@
 2026-05-20T20:00:58Z Added the post-HazelTxt-rebuild `rank.sh` timing/correctness result to `ai/hazel-progress.md`: same MRR/queries as baseline, 2566150 ms internal timer, 43:17.83 wall time.
 2026-05-20T20:07:03Z Moved durable HazelTxt rebuild details into `ai/hazel.md`, refreshed Hazel notes, and reduced `ai/plan.md` to the next goal: plan HazelIdx caching.
 2026-05-21T00:16:46Z Changed `HazelTxt::load_token_range()` from `bool` to `void` because it only derives cached range state and has no error path; verified `bazel build //apps:working`.
+2026-05-21T19:54:37Z Replaced the HazelIdx caching placeholder in `ai/plan.md` with the agreed implementation plan: CacheRecord-backed Hazel cache, ReadGate loading, SimplePostingFactory cache decode, async hopper fills, and future Bigwig merged-cache direction.
+2026-05-21T19:58:59Z Added a future improvement note for deep internal error logging, including Hazel cache read/decode failure visibility when assertions are disabled.
