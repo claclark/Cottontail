@@ -10,10 +10,12 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "src/annotator.h"
 #include "src/appender.h"
+#include "src/array_hopper.h"
 #include "src/compressor.h"
 #include "src/core.h"
 #include "src/featurizer.h"
@@ -188,9 +190,49 @@ bool locate_posting(const std::vector<HazelPostingEntry> &directory,
   return true;
 }
 
+void mark_cache_ready(std::shared_ptr<CacheRecord> entry) {
+  {
+    std::lock_guard<std::mutex> lock(entry->lock);
+    entry->ready = true;
+  }
+  entry->condition.notify_all();
+}
+
+void fill_bogus_cache_entry(std::shared_ptr<CacheRecord> entry) {
+  addr n = entry->n;
+  entry->postings = shared_array<addr>(n);
+  entry->qostings = shared_array<addr>(n);
+  entry->fostings = nullptr;
+  for (addr i = 0; i < n; i++) {
+    entry->postings.get()[i] = minfinity + 1 + i;
+    entry->qostings.get()[i] = minfinity + 2 + i;
+  }
+  mark_cache_ready(entry);
+}
+
+void fill_hazel_cache_entry(std::shared_ptr<CacheRecord> entry,
+                            std::shared_ptr<ReadGate> read_gate,
+                            std::shared_ptr<SimplePostingFactory> factory,
+                            addr offset, addr length) {
+  std::string error;
+  std::unique_ptr<char[]> bytes = read_gate->read(offset, length, &error);
+  if (bytes != nullptr &&
+      factory->cache_entry_from_compressed_blob(entry, bytes.get(), length,
+                                                &error))
+    return;
+  assert(false);
+  fill_bogus_cache_entry(entry);
+}
+
+template <typename Work> void async(Work work) {
+  std::thread thread(work);
+  thread.detach();
+}
+
 class HazelIdx final : public Idx {
 public:
   static std::shared_ptr<Idx> make(const std::string &recipe,
+                                   const std::string &filename,
                                    std::shared_ptr<HazelFile> file,
                                    const HazelBlob &blob,
                                    std::string *error = nullptr) {
@@ -199,15 +241,20 @@ public:
     idx->file_ = file;
     idx->blob_offset_ = blob.offset;
     idx->blob_length_ = blob.length;
+    idx->read_gate_ = ReadGate::make(filename, error, 16);
+    if (idx->read_gate_ == nullptr)
+      return nullptr;
+    std::shared_ptr<Compressor> posting_compressor;
+    std::shared_ptr<Compressor> fvalue_compressor;
     if (!compressor_from_recipe(recipe, "posting_compressor",
                                 "posting_compressor_recipe",
-                                &idx->posting_compressor_, error) ||
+                                &posting_compressor, error) ||
         !compressor_from_recipe(recipe, "fvalue_compressor",
                                 "fvalue_compressor_recipe",
-                                &idx->fvalue_compressor_, error))
+                                &fvalue_compressor, error))
       return nullptr;
-    idx->posting_factory_ = SimplePostingFactory::make(
-        idx->posting_compressor_, idx->fvalue_compressor_);
+    idx->posting_factory_ =
+        SimplePostingFactory::make(posting_compressor, fvalue_compressor);
     if (!idx->load(error))
       return nullptr;
     return idx;
@@ -219,6 +266,26 @@ public:
   HazelIdx(HazelIdx &&) = delete;
   HazelIdx &operator=(HazelIdx &&) = delete;
 
+  std::shared_ptr<CacheRecord> cache(addr feature) {
+    size_t index;
+    if (!locate_posting(directory_, feature, &index))
+      return nullptr;
+    addr start = posting_start(index);
+    addr end = directory_[index].end;
+    if (start == end)
+      return singleton_cache(directory_[index].count_or_p);
+    if (start > end) {
+      assert(false);
+      return nullptr;
+    }
+    bool created;
+    std::shared_ptr<CacheRecord> entry = cache_record(index, &created);
+    if (created)
+      fill_hazel_cache_entry(entry, read_gate_, posting_factory_,
+                             blob_offset_ + start, end - start);
+    return entry;
+  }
+
 private:
   HazelIdx(){};
   std::string recipe_() final { return therecipe_; };
@@ -226,7 +293,7 @@ private:
     size_t index;
     if (!locate_posting(directory_, feature, &index))
       return std::make_unique<EmptyHopper>();
-    addr start = index == 0 ? postings_start_ : directory_[index - 1].end;
+    addr start = posting_start(index);
     addr end = directory_[index].end;
     if (start == end)
       return std::make_unique<SingletonHopper>(directory_[index].count_or_p,
@@ -236,30 +303,62 @@ private:
       assert(false);
       return std::make_unique<EmptyHopper>();
     }
-    std::string bytes(end - start, '\0');
-    std::string error;
-    if (!file_->read(blob_offset_ + start, &bytes[0], bytes.size(), &error)) {
-      assert(false);
-      return std::make_unique<EmptyHopper>();
+    bool created;
+    std::shared_ptr<CacheRecord> entry = cache_record(index, &created);
+    if (created) {
+      std::shared_ptr<ReadGate> read_gate = read_gate_;
+      std::shared_ptr<SimplePostingFactory> factory = posting_factory_;
+      addr offset = blob_offset_ + start;
+      addr length = end - start;
+      async([entry, read_gate, factory, offset, length] {
+        fill_hazel_cache_entry(entry, read_gate, factory, offset, length);
+      });
     }
-    std::shared_ptr<SimplePosting> posting =
-        posting_factory_->posting_from_compressed_blob(bytes.data(),
-                                                       bytes.size(), &error);
-    assert(posting != nullptr);
-    if (posting == nullptr)
-      return std::make_unique<EmptyHopper>();
-    return posting->hopper();
+    return ArrayHopper::make(entry);
   };
   addr count_(addr feature) final {
     size_t index;
     if (!locate_posting(directory_, feature, &index))
       return 0;
-    addr start = index == 0 ? postings_start_ : directory_[index - 1].end;
+    addr start = posting_start(index);
     if (start == directory_[index].end)
       return 1;
     return directory_[index].count_or_p;
   };
   addr vocab_() final { return directory_.size(); };
+
+  addr posting_start(size_t index) {
+    return index == 0 ? postings_start_ : directory_[index - 1].end;
+  }
+
+  std::shared_ptr<CacheRecord> singleton_cache(addr p) {
+    std::shared_ptr<CacheRecord> entry =
+        std::shared_ptr<CacheRecord>(new CacheRecord);
+    entry->n = 1;
+    entry->postings = shared_array<addr>(1);
+    entry->qostings = entry->postings;
+    entry->fostings = nullptr;
+    *entry->postings = p;
+    entry->ready = true;
+    return entry;
+  }
+
+  std::shared_ptr<CacheRecord> cache_record(size_t index, bool *created) {
+    addr feature = directory_[index].feature;
+    std::lock_guard<std::mutex> lock(cache_lock_);
+    auto cached = cache_.find(feature);
+    if (cached != cache_.end()) {
+      *created = false;
+      return cached->second;
+    }
+    std::shared_ptr<CacheRecord> entry =
+        std::shared_ptr<CacheRecord>(new CacheRecord);
+    entry->n = directory_[index].count_or_p;
+    entry->ready = false;
+    cache_[feature] = entry;
+    *created = true;
+    return entry;
+  }
 
   bool load(std::string *error) {
     const std::string magic = "COTTONTAIL_HAZEL_IDX_V1\n";
@@ -318,8 +417,9 @@ private:
   addr blob_length_;
   addr postings_start_;
   std::vector<HazelPostingEntry> directory_;
-  std::shared_ptr<Compressor> posting_compressor_;
-  std::shared_ptr<Compressor> fvalue_compressor_;
+  std::shared_ptr<ReadGate> read_gate_;
+  std::map<addr, std::shared_ptr<CacheRecord>> cache_;
+  std::mutex cache_lock_;
   std::shared_ptr<SimplePostingFactory> posting_factory_;
 };
 
@@ -343,7 +443,7 @@ public:
                                    std::string *error = nullptr) {
     std::shared_ptr<HazelTxt> txt = std::shared_ptr<HazelTxt>(new HazelTxt());
     txt->therecipe_ = recipe;
-    txt->read_gate_ = ReadGate::make(filename, error);
+    txt->read_gate_ = ReadGate::make(filename, error, 16);
     if (txt->read_gate_ == nullptr)
       return nullptr;
     txt->tokenizer_ = tokenizer;
@@ -696,7 +796,7 @@ std::shared_ptr<Warren> Hazel::make(const std::string &filename,
   if (file == nullptr)
     return nullptr;
   std::shared_ptr<Idx> idx =
-      HazelIdx::make(idx_recipe, file, idx_blob->second, error);
+      HazelIdx::make(idx_recipe, filename, file, idx_blob->second, error);
   if (idx == nullptr)
     return nullptr;
   std::unique_ptr<Hopper> text_chunk_hopper =

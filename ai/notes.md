@@ -79,9 +79,10 @@
 
 - Hazel v1 writer and first activation pass are in place: standalone Hazel files can be recognized, parse idx/txt blobs, construct hoppers from posting blobs, translate text through cached decompressed txt chunks, and shallow-clone the Hazel Warren.
 - `fiver2hazel` is currently a pragmatic conversion path from a Fiver pickle plus its enclosing burrow DNA; it now preserves the owner Warren `parameters` block in generated Hazel DNA.
-- Hazel idx activation is intentionally slow and simple: no posting cache, locked reads into a local buffer, decode into a fresh hopper. This is the next Hazel efficiency target.
-- Hazel txt activation loads the txt map, uses `ReadGate`, keeps a persistent mutex-protected `text_chunk_tag` hopper, and caches decompressed text chunks without eviction.
+- Hazel idx activation now has the first CacheRecord-backed decoded posting cache: non-inline posting hoppers share cache lines, async fills use a 16-reader `ReadGate`, and `HazelIdx::cache(feature)` fills synchronously when it creates the line.
+- Hazel txt activation loads the txt map, uses a 16-reader `ReadGate`, keeps a persistent mutex-protected `text_chunk_tag` hopper, and caches decompressed text chunks without eviction.
 - Ranking transition note: `TfIdfStats::make(...)` owns its ranking-view stemmer/tokenizer through `Stats`; the old Warren-global `stemmer` write has been disabled as a transitional artifact. Continue tracking parameter/metadata scoping in `ai/plan.md`.
-- Current planned work is HazelIdx efficiency. The `rank.sh` threaded BM25 stress test still points at repeated idx posting reads/decompression after the HazelTxt rebuild.
+- Current HazelIdx cache implementation has a clean `bazel build //apps:working`; rank.sh checks remain correct with `MRR @10: 0.18923028380406587` and `QueriesRanked: 6980`.
+- Latest Hazel rank.sh measurements are about 12 seconds internal for 6,980 queries, or roughly 1.7 ms/query: HazelIdx 16-reader gate alone measured `11850` ms internally, while the noisy 16/16 HazelIdx/HazelTxt run measured `12111` ms.
 - Record Hazel performance milestones and before/after measurements in `ai/hazel-progress.md`.
-- `ai/plan.md` is intentionally only a goal marker now; write a concrete HazelIdx caching plan before implementation.
+- Next planned step is a Hazel regression test; discuss and confirm the exact test shape with the user before implementing it.

@@ -53,3 +53,13 @@
 2026-05-21T00:16:46Z Changed `HazelTxt::load_token_range()` from `bool` to `void` because it only derives cached range state and has no error path; verified `bazel build //apps:working`.
 2026-05-21T19:54:37Z Replaced the HazelIdx caching placeholder in `ai/plan.md` with the agreed implementation plan: CacheRecord-backed Hazel cache, ReadGate loading, SimplePostingFactory cache decode, async hopper fills, and future Bigwig merged-cache direction.
 2026-05-21T19:58:59Z Added a future improvement note for deep internal error logging, including Hazel cache read/decode failure visibility when assertions are disabled.
+2026-05-21T21:21:54Z Re-read `ai/architecture.md` and the current HazelIdx cache loading plan, then inspected HazelIdx, SimpleIdx cache loading, ArrayHopper cache records, ReadGate, and SimplePosting compressed-blob decode paths before implementation.
+2026-05-21T21:27:07Z Implemented the first HazelIdx decoded posting cache, added SimplePostingFactory cache-line fill from compressed blobs with error returns, adjusted cache-backed ArrayHopper to allow singleton lists, and verified `bazel build //apps:working`.
+2026-05-21T21:33:11Z Recorded the first post-HazelIdx-cache `rank.sh` result in `ai/hazel-progress.md`: matching MRR/queries, 12794 ms internal timer, and 0:43.78 wall time.
+2026-05-21T21:43:02Z Increased HazelIdx `ReadGate` reader count from 4 to 16 for the next utilization experiment and verified `bazel build //apps:working`.
+2026-05-21T21:46:01Z Increased HazelTxt `ReadGate` reader count from the default 2 to 16 for the next utilization experiment and verified `bazel build //apps:working`.
+2026-05-21T21:46:34Z Recorded the HazelIdx-only 16-reader `rank.sh` result in `ai/hazel-progress.md`: matching MRR/queries, 11850 ms internal timer, and 0:42.91 wall time.
+2026-05-21T21:48:56Z Recorded the Hazel read-gate 16/16 `rank.sh` result in `ai/hazel-progress.md`: matching MRR/queries, 12111 ms internal timer, and 0:43.30 wall time on a noisy host.
+2026-05-21T21:53:51Z Updated `ai/notes.md` with the current Hazel cache/read-gate status and replaced `ai/plan.md` with a next-step Hazel regression test plan that requires user confirmation before coding.
+2026-05-21T22:01:45Z Recorded the Hazel read-gate 16/16 `rank.sh` result with 128 ranker threads: matching MRR/queries, 11801 ms internal timer, 0:42.88 wall time, and little change versus 54 threads.
+2026-05-21T22:41:51Z Recorded the Hazel read-gate 16/16 `rank.sh` result with 1 ranker thread: matching MRR/queries, 172635 ms internal timer, 3:23.65 wall time, and 101% CPU.

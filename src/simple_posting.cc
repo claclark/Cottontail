@@ -157,6 +157,109 @@ SimplePostingFactory::posting_from_compressed_blob(const char *data,
   return posting;
 }
 
+bool SimplePostingFactory::cache_entry_from_compressed_blob(
+    std::shared_ptr<CacheRecord> cache_line, const char *data, addr length,
+    std::string *error) {
+  if (cache_line == nullptr) {
+    safe_error(error) = "Compressed posting blob has no cache line";
+    return false;
+  }
+  if (data == nullptr || length < (addr)sizeof(PstRecord)) {
+    safe_error(error) = "Compressed posting blob is too short";
+    return false;
+  }
+  PstRecord idx;
+  memcpy(&idx, data, sizeof(PstRecord));
+  if (idx.n < 0 || idx.pst < 0 || idx.qst < 0 || idx.fst < 0) {
+    safe_error(error) = "Compressed posting blob has negative sizes";
+    return false;
+  }
+  if (idx.n != cache_line->n) {
+    safe_error(error) = "Compressed posting blob has wrong posting count";
+    return false;
+  }
+  addr header = sizeof(PstRecord);
+  if (idx.pst > length - header) {
+    safe_error(error) = "Compressed posting blob has truncated postings";
+    return false;
+  }
+  addr qoffset = header + idx.pst;
+  if (idx.qst > length - qoffset) {
+    safe_error(error) = "Compressed posting blob has truncated qostings";
+    return false;
+  }
+  addr foffset = qoffset + idx.qst;
+  if (idx.fst > length - foffset) {
+    safe_error(error) = "Compressed posting blob has truncated fostings";
+    return false;
+  }
+  if (idx.n == 0) {
+    cache_line->postings = nullptr;
+    cache_line->qostings = nullptr;
+    cache_line->fostings = nullptr;
+    std::lock_guard<std::mutex> lock(cache_line->lock);
+    cache_line->ready = true;
+    cache_line->condition.notify_all();
+    return true;
+  }
+
+  addr postings_size = idx.n * sizeof(addr);
+  cache_line->postings = cottontail::shared_array<cottontail::addr>(idx.n);
+  addr posting_size =
+      posting_compressor_->tang(const_cast<char *>(data + header), idx.pst,
+                                reinterpret_cast<char *>(
+                                    cache_line->postings.get()),
+                                postings_size);
+  if (posting_size != postings_size) {
+    cache_line->postings = nullptr;
+    safe_error(error) = "Compressed posting blob has bad postings";
+    return false;
+  }
+
+  if (idx.qst == 0) {
+    cache_line->qostings = cache_line->postings;
+  } else {
+    cache_line->qostings = cottontail::shared_array<cottontail::addr>(idx.n);
+    posting_size =
+        posting_compressor_->tang(const_cast<char *>(data + qoffset), idx.qst,
+                                  reinterpret_cast<char *>(
+                                      cache_line->qostings.get()),
+                                  postings_size);
+    if (posting_size != postings_size) {
+      cache_line->postings = nullptr;
+      cache_line->qostings = nullptr;
+      safe_error(error) = "Compressed posting blob has bad qostings";
+      return false;
+    }
+  }
+
+  if (idx.fst == 0) {
+    cache_line->fostings = nullptr;
+  } else {
+    addr fvalues_size = idx.n * sizeof(fval);
+    cache_line->fostings = cottontail::shared_array<cottontail::fval>(idx.n);
+    posting_size =
+        fvalue_compressor_->tang(const_cast<char *>(data + foffset), idx.fst,
+                                 reinterpret_cast<char *>(
+                                     cache_line->fostings.get()),
+                                 fvalues_size);
+    if (posting_size != fvalues_size) {
+      cache_line->postings = nullptr;
+      cache_line->qostings = nullptr;
+      cache_line->fostings = nullptr;
+      safe_error(error) = "Compressed posting blob has bad fostings";
+      return false;
+    }
+  }
+
+  {
+    std::lock_guard<std::mutex> lock(cache_line->lock);
+    cache_line->ready = true;
+  }
+  cache_line->condition.notify_all();
+  return true;
+}
+
 std::shared_ptr<SimplePosting>
 SimplePostingFactory::posting_from_file(std::fstream *f) {
   if (f->fail())

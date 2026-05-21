@@ -13,6 +13,8 @@
 
 namespace cottontail {
 
+struct CacheRecord;
+
 class SimplePosting final : public std::enable_shared_from_this<SimplePosting> {
 public:
   void append(std::shared_ptr<SimplePosting> more);
@@ -67,6 +69,9 @@ public:
   std::shared_ptr<SimplePosting>
   posting_from_compressed_blob(const char *data, addr length,
                                std::string *error = nullptr);
+  bool cache_entry_from_compressed_blob(std::shared_ptr<CacheRecord> cache_line,
+                                        const char *data, addr length,
+                                        std::string *error = nullptr);
   std::shared_ptr<SimplePosting> posting_from_file(std::fstream *f);
   std::shared_ptr<SimplePosting> posting_from_merge(
       const std::vector<std::shared_ptr<SimplePosting>> &postings);

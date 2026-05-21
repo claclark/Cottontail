@@ -54,7 +54,7 @@ public:
       : n_(cache_line->n), p_storage_(nullptr), q_storage_(nullptr),
         f_storage_(nullptr), cache_line_(cache_line), posting_storage_(nullptr),
         ready_(false) {
-    assert(n_ >= 2);
+    assert(n_ >= 1);
   };
   static std::unique_ptr<Hopper> make(std::shared_ptr<CacheRecord> cache_line) {
     return std::make_unique<ArrayHopper>(cache_line);
