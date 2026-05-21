@@ -350,9 +350,9 @@ public:
     txt->hopper_ = std::move(hopper);
     if (!compressor_from_recipe(recipe, "compressor", "compressor_recipe",
                                 &txt->compressor_, error) ||
-        !txt->load(blob_offset, blob_length, error) ||
-        !txt->load_token_range())
+        !txt->load(blob_offset, blob_length, error))
       return nullptr;
+    txt->load_token_range();
     return txt;
   }
 
@@ -536,7 +536,7 @@ private:
     return true;
   }
 
-  bool load_token_range() {
+  void load_token_range() {
     token_start_ = maxfinity;
     token_end_ = maxfinity;
     addr p, q, value;
@@ -544,7 +544,7 @@ private:
       std::lock_guard<std::mutex> lock(hopper_lock_);
       hopper_->tau(minfinity + 1, &p, &q, &value);
       if (p == maxfinity)
-        return true;
+        return;
       token_start_ = p;
       hopper_->uat(maxfinity - 1, &p, &q, &value);
       token_end_ = q;
@@ -553,7 +553,6 @@ private:
       token_start_ = maxfinity;
       token_end_ = maxfinity;
     }
-    return true;
   }
 
   size_t chunk_containing(addr raw_byte) {

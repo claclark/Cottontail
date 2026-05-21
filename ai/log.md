@@ -50,3 +50,4 @@
 2026-05-20T19:10:12Z Fixed HazelTxt compressor recipe activation to use the writer's `compressor` / `compressor_recipe` txt keys; reverified `bazel build //apps:fiver2hazel //apps:working` and `bazel build //...`.
 2026-05-20T20:00:58Z Added the post-HazelTxt-rebuild `rank.sh` timing/correctness result to `ai/hazel-progress.md`: same MRR/queries as baseline, 2566150 ms internal timer, 43:17.83 wall time.
 2026-05-20T20:07:03Z Moved durable HazelTxt rebuild details into `ai/hazel.md`, refreshed Hazel notes, and reduced `ai/plan.md` to the next goal: plan HazelIdx caching.
+2026-05-21T00:16:46Z Changed `HazelTxt::load_token_range()` from `bool` to `void` because it only derives cached range state and has no error path; verified `bazel build //apps:working`.
