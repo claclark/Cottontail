@@ -582,7 +582,7 @@ bool SimplePosting::invariants(std::string *error) {
     safe_error(error) = "Postings and qostings have inconsistent sizes";
     return false;
   }
-  if (fostings_.size() != 0 && fostings_.size() != fostings_.size()) {
+  if (fostings_.size() != 0 && fostings_.size() != postings_.size()) {
     safe_error(error) = "Postings and fostings have inconsistent sizes";
     return false;
   }

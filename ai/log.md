@@ -63,3 +63,8 @@
 2026-05-21T21:53:51Z Updated `ai/notes.md` with the current Hazel cache/read-gate status and replaced `ai/plan.md` with a next-step Hazel regression test plan that requires user confirmation before coding.
 2026-05-21T22:01:45Z Recorded the Hazel read-gate 16/16 `rank.sh` result with 128 ranker threads: matching MRR/queries, 11801 ms internal timer, 0:42.88 wall time, and little change versus 54 threads.
 2026-05-21T22:41:51Z Recorded the Hazel read-gate 16/16 `rank.sh` result with 1 ranker thread: matching MRR/queries, 172635 ms internal timer, 3:23.65 wall time, and 101% CPU.
+2026-05-22T15:54:18+00:00 - Moved current plan.md to hazel-testing.md and created a new plan.md for planning to merge Hazels.
+2026-05-24T07:13:38+00:00 - Fixed `SimplePosting::invariants()` fostings size check to compare against postings size.
+2026-05-24T08:18:10+00:00 - Rewrote `ai/plan.md` with the agreed on-disk Hazel merge design and validation rules.
+2026-05-24T08:26:59+00:00 - Updated `ai/plan.md` with a Hazel merge implementation reading guide and clarified separator-newline handling.
+2026-05-24T08:30:26+00:00 - Added the `Fiver::hazel(...)` trailing-separator prerequisite to the Hazel merge plan.
