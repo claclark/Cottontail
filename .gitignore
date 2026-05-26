@@ -3,7 +3,9 @@
 *.burrow
 *.meadow
 *temp*
-*test*
+/*test*
+!/*test*/
+!/*test*/**
 *.sh
 *.py
 .DS_Store

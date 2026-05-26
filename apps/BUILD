@@ -532,18 +532,14 @@ cc_binary(
 )
 
 cc_binary(
-    name = "working",
+    name = "scratch",
     srcs = [
-      "working.cc",
+      "scratch.cc",
     ],
     deps = [
       "//src:cottontail",
-      "collection",
-    ],
-    copts = [
-      "'-std=c++14'",
     ],
     linkopts = [
-      "-lreadline -pthread",
+      "-pthread",
     ],
 )

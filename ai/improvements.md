@@ -3,6 +3,8 @@
 Concise list of possible cleanups, design questions, and follow-up work. These
 are not committed plans unless promoted into `ai/plan.md`.
 
+Especially don't do these things without discussion and approval from the user.
+
 ## Txt Wrapping
 
 - Revisit `Txt::wrap(...)` and the general wrapper model.
@@ -43,3 +45,16 @@ are not committed plans unless promoted into `ai/plan.md`.
   applies.
 - Consider adding a dedicated exclusion/null merge helper instead of relying on
   ordinary posting-list merge behavior.
+
+## Split Test Targets
+
+- The old aggregate `//test:tests` target makes it awkward to run or reason
+  about one focused regression at a time.
+- Use `//test:hazel_test` as the pattern: move coherent test files or families
+  into dedicated `cc_test` targets with clear names, while keeping an aggregate
+  target for broad checks if it remains useful.
+- Smaller targets should make individual failures faster to isolate, reduce
+  accidental coupling between unrelated tests, and let slow or specialized
+  regressions declare their own size/resources.
+- When splitting, keep shared fixtures explicit and avoid hiding runtime-heavy
+  tests inside broad default targets.

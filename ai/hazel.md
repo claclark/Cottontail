@@ -1,7 +1,8 @@
 # Hazel File Format
 
 This note describes the current Hazel v1 file produced by `Fiver::hazel(...)`,
-the activation path, and the first Hazel-to-Hazel merge implementation.
+the activation path, Hazel-to-Hazel merge, and the regression coverage that
+protects the current behavior.
 
 Hazel is a single immutable shard file. The first producer is a live, built
 Fiver under Bigwig control, but the file should be activated as a standalone
@@ -181,10 +182,10 @@ Text chunks are formed by walking a private hopper over the Fiver idx posting
 list for `text_chunk_tag`. Adjacent Fiver text chunks are grouped until the raw
 byte span reaches at least `target_chunk_size` when possible. The default
 target is 64 KiB, but `Fiver::hazel(...)` accepts an explicit value and
-`apps/fiver2hazel` exposes it as:
+`apps/fiver2hazel` exposes it for all live Fivers in a burrow as:
 
 ```
-fiver2hazel --chunk-size bytes fiver...
+fiver2hazel [--chunk-size bytes] [--force] burrow
 ```
 
 The final chunk extends to `raw_text_length`.
@@ -229,10 +230,10 @@ Hoppers are stateful. Activation should not share a single hopper across
 threads without synchronization. Prefer creating private hoppers for readers
 when practical, or protect shared hopper state with a mutex as `FiverTxt` does.
 
-## Hazel Merge Status
+## Hazel Merge
 
-`Hazel::merge(...)` now has a first Working-based implementation in
-`src/hazel.cc`, declared in `src/hazel.h`:
+`Hazel::merge(...)` has a Working-based implementation in `src/hazel.cc`,
+declared in `src/hazel.h`:
 
 ```
 Hazel::merge(working, hazels, parameters, error)
@@ -297,15 +298,53 @@ a non-empty Fiver to Hazel, it appends a trailing newline if the Fiver text does
 not already end in a separator. Hazel merge itself does not invent separator
 bytes.
 
-Current verification is compile-only:
+## Regression Coverage
+
+Hazel merge has a dedicated regression target, `//test:hazel_test`, in
+`test/hazel.cc`. The aggregate `//test:tests` target intentionally excludes
+`hazel.cc` so the Hazel regression can be run independently.
+
+The test builds a temporary no-merge Bigwig from three small text inputs, one
+transaction per input file, producing one Fiver shard per file. The corpus
+includes ordinary token features, line/file annotations, an inline singleton
+feature, valued ordinal annotations, phrase/query cases across file boundaries,
+and enough repeated text to exercise Hazel text chunking.
+
+Each run then:
+
+1. Converts each Fiver to a standalone Hazel with `Fiver::hazel(...)`.
+2. Compares each Fiver shard against its matching Hazel.
+3. Merges the Hazels with `Hazel::merge(...)`.
+4. Moves the merged Hazel out of the Bigwig burrow so it opens as a standalone
+   Hazel Warren.
+5. Compares the source Bigwig against the merged Hazel.
+
+The comparisons cover:
+
+- `Txt::tokens()`, `Txt::range(...)`, and selected `Txt::translate(...)` spans;
+- selected feature ids, counts, full posting streams, and absent-feature
+  behavior;
+- hopper probes through `L`, `R`, `tau`, `rho`, `uat`, and `ohr`;
+- GCL queries including `line:`, `file:`, containment queries, term queries,
+  matching phrases, and absent phrases.
+
+The regression is run with multiple compressor/chunk profiles:
+
+- null posting/fvalue/text compressors with 16-byte Hazel text chunks;
+- real compressors (`post` postings, `zlib` fvalues/text) with 16-byte chunks;
+- the deliberately awkward `bad` compressor for posting/fvalue/text with
+  16-byte chunks;
+- real compressors with the default 64 KiB chunk size.
+
+The last agent-side verification was compile-only:
 
 ```
-bazel build //apps:fiver2hazel //apps:working
-bazel build //...
+bazel build //test:hazel_test
 ```
 
-Behavioral/regression testing has not been run. The user wants to guide the
-test shape and supply/choose small Hazel test inputs.
+The user then ran `bazel test //test:hazel_test` successfully on
+2026-05-26. Future agents should continue to follow the repository rule: do not
+run test cases themselves unless the user explicitly asks for that specific run.
 
 ## Activation Status
 
@@ -350,9 +389,9 @@ read/decompression requests return the empty string because the `Txt` API has
 no error channel. `HazelTxt::clone_()` is unsupported; Hazel Warren cloning is
 currently a shallow compatibility shim over shared components.
 
-Hazel supports shallow Warren cloning. This is sufficient for basic activation
-and query tests, but the clone/caching model is part of the ongoing efficiency
-work.
+Hazel supports shallow Warren cloning. This is sufficient for current
+activation, ranking, and regression use, but the clone/caching model should be
+kept in mind during Bigwig integration.
 
 ## Bigwig Integration Notes
 
@@ -364,9 +403,22 @@ exist for the same sequence range. This allows a conservative transition:
 materialize a Hazel, keep the Fiver pickle until the Hazel is known good, then
 eventually discard the Fiver pickle.
 
-Hazel/Hazel merge now has a first standalone implementation as
-`Hazel::merge(...)`; see `Hazel Merge Status` above. Bigwig/Fluffle does not
-yet call it for background compaction. That integration remains future work:
-Bigwig should eventually choose Hazel shard names for compatible ranges, invoke
-the Working-based merge primitive, and publish merged Hazel shards without
-disturbing existing inputs on failure.
+Hazel/Hazel merge now has a standalone implementation as `Hazel::merge(...)`;
+see `Hazel Merge` above. Bigwig/Fluffle does not yet call it for background
+compaction. That integration is the next design step: Bigwig should eventually
+choose Hazel shard names for compatible ranges, invoke the Working-based merge
+primitive, and publish merged Hazel shards without disturbing existing inputs on
+failure.
+
+Open integration questions include:
+
+- when Bigwig should create Hazel shards from newly committed Fivers;
+- how long Fiver pickle shards should be retained while Hazel is proving itself;
+- whether activation should prefer Hazel over Fiver when both cover the same
+  live range;
+- how background merge selection should represent live Hazel ranges;
+- whether merged Hazel publication should rename/move the final shard out of a
+  staging location or leave `Hazel::merge(...)` responsible for canonical
+  publication;
+- how Bigwig should handle mixed Fiver/Hazel states during an incremental
+  transition.

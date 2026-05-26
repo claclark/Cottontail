@@ -2,7 +2,7 @@ load("@rules_cc//cc:defs.bzl", "cc_test")
 
 cc_test(
     name = "tests",
-    srcs = glob(["**/*.cc"]) + glob(["**/*.h"]),
+    srcs = glob(["**/*.cc"], exclude = ["hazel.cc"]) + glob(["**/*.h"]),
     deps = [
         "//src:cottontail",
         "@googletest//:gtest_main",
@@ -20,5 +20,21 @@ cc_test(
         "test.tsv",
         "test0.txt",
         "test.qrels",
+    ],
+)
+
+cc_test(
+    name = "hazel_test",
+    size = "small",
+    srcs = [
+        "hazel.cc",
+    ],
+    deps = [
+        "//src:cottontail",
+        "@googletest//:gtest_main",
+    ],
+    linkopts = [
+        "-lz",
+        "-pthread",
     ],
 )

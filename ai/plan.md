@@ -1,53 +1,55 @@
-# Goal: Plan Hazel Merge Testing
+# Goal: Discuss Hazel Integration Into Bigwig
 
-Plan behavioral and regression testing for the existing Hazel-to-Hazel merge
-implementation, then implement tests only after the user explicitly approves
-the plan.
+Hazel writer, activation, merge, scratch conversion utilities, and the dedicated
+Hazel regression test are in place. The next step is not another Hazel
+correctness test; it is a design discussion about how Hazel should join the
+Bigwig/Fluffle infrastructure.
 
-## Current Status
+Do not start coding this integration before discussing the shape with the user.
 
-- A first Working-based `Hazel::merge(...)` implementation exists in
-  `src/hazel.*`.
-- The implementation is documented in `ai/hazel.md`.
-- It has been compile-checked, including:
-  - `bazel build //apps:fiver2hazel //apps:working`
-  - `bazel build //...`
-- Behavioral/regression testing has not yet been designed or implemented.
+## Current Hazel Position
 
-## Important Constraint
+- `Fiver::hazel(...)` can materialize a standalone Hazel shard from a built
+  Fiver.
+- `Warren::make(...)` can open a standalone Hazel as a Warren.
+- `Hazel::merge(...)` can merge compatible Hazel shards into one canonical
+  `hazel.<start>.<end>` shard.
+- `apps/fiver2hazel` can convert live Fiver shards in a burrow into Hazel
+  shards and merge them into a final Hazel for manual activation/testing.
+- `test/hazel.cc` compares Fiver shard behavior against per-shard Hazel output
+  and compares a no-merge Bigwig against the final merged Hazel under null,
+  real, and bad compressor profiles.
 
-Do not write test code or implementation code without explicit user approval.
-The next step is planning and review only.
+## Discussion Targets
 
-Also follow the top-level verification rule: run compile/build checks only
-unless the user explicitly asks for runtime experiments, ranking runs, evals,
-or benchmarks.
+- When should Bigwig create Hazel shards from committed Fivers?
+- Should Bigwig retain Fiver pickle shards after Hazel materialization, and for
+  how long?
+- When both `fiver.<start>.<end>` and `hazel.<start>.<end>` exist, should
+  activation prefer Hazel by default?
+- How should Fluffle represent live ranges if some are Fivers and some are
+  Hazels?
+- Should background compaction merge only Hazels, or should it also convert
+  Fivers opportunistically before merge?
+- What is the failure/publication protocol for background Hazel materialization
+  and merge?
+- What command-line/manual escape hatches should remain while this transition
+  is experimental?
 
-## Planning Targets
+## Useful Starting Points
 
-A test plan might include these ideas, but talk to the user first:
-
-- merging two small Hazel files with disjoint text/address ranges;
-- preserving DNA and owner Warren `parameters` semantics where intended;
-- validating idx posting lookup after merge for inline and non-inline postings;
-- validating txt translation across chunk boundaries and across input files;
-- confirming feature counts/vocabulary behavior after merge;
-- handling deletion/null-feature semantics if already supported by the merge;
-- rejecting incompatible Hazel inputs with clear errors;
-- checking separator-newline handling from `Fiver::hazel(...)`;
-- identifying which checks belong in automated unit tests versus user-guided
-  local scripts.
-
-## Starting Points
-
-Review these before planning:
-
-- `ai/architecture.md`
 - `ai/hazel.md`
-- `ai/hazel-testing.md` if relevant
+- `src/bigwig.h`
+- `src/bigwig.cc`
+- `src/fluffle.h`
+- `src/fiver.h`
+- `src/fiver.cc`
 - `src/hazel.h`
 - `src/hazel.cc`
-- `src/fiver.cc`
-- existing tests under `test/`
+- `apps/fiver2hazel.cc`
+- `test/hazel.cc`
 
-After review, talk to the user.
+## Verification Rule
+
+Agents should run compile/build checks only. Do not run test cases, including
+`bazel test`, unless the user explicitly asks for that specific test run.

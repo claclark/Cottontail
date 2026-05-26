@@ -82,3 +82,11 @@
 2026-05-26T03:59:46Z - Removed the Meadowlark creation-time write of the Warren-global `container` parameter; verified `bazel build //apps:meadowlark //apps:forage //apps:rank`.
 2026-05-26T05:19:23Z - Fixed a `TfIdfForager` null-check typo for `total_featurizer_` and made default `open_meadow(...)` delegate through the format-validating overload; verified `bazel build //apps:meadowlark //apps:forage //apps:rank`.
 2026-05-26T05:24:13Z - Refreshed restart notes for the completed Meadowlark stemmer/container work and replaced `ai/plan.md` with a planning-only Hazel merge testing plan that requires explicit user approval before coding.
+2026-05-26T05:52:08Z - Rewrote `apps/fiver2hazel.cc` as a burrow-directory converter: discover live Fiver shards, materialize matching Hazel shards, merge them into one final Hazel when needed, and verified `bazel build //apps:fiver2hazel`.
+2026-05-26T06:47:58Z - Replaced the old `apps/working.cc` scratch-ranking app with `apps/scratch.cc`, a no-merge Bigwig text-file builder that annotates `line:` and `file:` spans; verified `bazel build //apps:scratch //apps:fiver2hazel`.
+2026-05-26T07:21:40Z - Strengthened `ai/plan.md` and `ai/notes.md` verification guidance: agents should run compile/build checks only and must not run test cases, including `bazel test`, unless explicitly asked for that specific test run.
+2026-05-26T07:32:40Z - Added null, real, and bad-compressor Hazel regression profiles and marked the dedicated Hazel test target small; verified `bazel build //test:hazel_test`.
+2026-05-26T07:36:09Z - Narrowed the `*test*` ignore rule so top-level test-named files remain ignored while directories such as `test/` and their contents are visible to Git.
+2026-05-26T07:44:03Z - Finalized Hazel documentation around current format, activation, merge, and regression coverage; removed stale Hazel testing plan state and replaced `ai/plan.md` with the next-step Bigwig integration discussion plan.
+2026-05-26T07:53:51Z - Rewrote `ai/notes.md` to remove stale restart/test-planning notes and summarize the current repo map, Hazel state, verification rule, and Bigwig integration next step.
+2026-05-26T07:55:09Z - Added an `ai/improvements.md` note to split aggregate tests into focused Bazel targets, using `//test:hazel_test` as the pattern.

@@ -1,44 +1,125 @@
+#include <algorithm>
+#include <cstdio>
+#include <exception>
 #include <iostream>
 #include <map>
 #include <memory>
-#include <stdexcept>
+#include <sstream>
 #include <string>
+#include <vector>
 
 #include "src/compressor.h"
 #include "src/dna.h"
 #include "src/featurizer.h"
 #include "src/fiver.h"
+#include "src/hazel.h"
 #include "src/recipe.h"
 #include "src/tokenizer.h"
 #include "src/working.h"
 
 namespace {
 
+struct ShardName {
+  cottontail::addr start = 0;
+  cottontail::addr end = 0;
+  std::string name;
+};
+
 void usage(const std::string &program_name) {
-  std::cerr << "usage: " << program_name << " [--chunk-size bytes] fiver...\n";
+  std::cerr << "usage: " << program_name
+            << " [--chunk-size bytes] [--force] burrow\n";
 }
 
-std::string dirname(const std::string &path) {
-  size_t slash = path.find_last_of('/');
-  if (slash == std::string::npos)
-    return ".";
-  if (slash == 0)
-    return "/";
-  return path.substr(0, slash);
+bool parse_shard_name(const std::string &name, const std::string &prefix,
+                      cottontail::addr *start, cottontail::addr *end) {
+  std::string full_prefix = prefix + ".";
+  if (name.compare(0, full_prefix.size(), full_prefix) != 0)
+    return false;
+  size_t dot = name.find('.', full_prefix.size());
+  if (dot == std::string::npos)
+    return false;
+  std::string start_string =
+      name.substr(full_prefix.size(), dot - full_prefix.size());
+  std::string end_string = name.substr(dot + 1);
+  if (start_string.empty() || end_string.empty())
+    return false;
+  for (char c : start_string)
+    if (c < '0' || c > '9')
+      return false;
+  for (char c : end_string)
+    if (c < '0' || c > '9')
+      return false;
+  try {
+    *start = std::stoll(start_string);
+    *end = std::stoll(end_string);
+  } catch (const std::exception &) {
+    return false;
+  }
+  return *start >= 0 && *end >= *start;
 }
 
-std::string basename(const std::string &path) {
-  size_t slash = path.find_last_of('/');
-  if (slash == std::string::npos)
-    return path;
-  return path.substr(slash + 1);
+std::string shard_name(const std::string &prefix, cottontail::addr start,
+                       cottontail::addr end) {
+  auto seq2str = [](cottontail::addr sequence) {
+    std::stringstream ss;
+    ss.fill('0');
+    ss.width(20);
+    ss << sequence;
+    return ss.str();
+  };
+  return prefix + "." + seq2str(start) + "." + seq2str(end);
+}
+
+bool living_fivers(std::shared_ptr<cottontail::Working> working,
+                   std::vector<ShardName> *living, std::string *error) {
+  std::vector<std::string> names = working->ls("fiver");
+  std::vector<ShardName> found;
+  for (auto &name : names) {
+    ShardName shard;
+    shard.name = name;
+    if (!parse_shard_name(name, "fiver", &shard.start, &shard.end)) {
+      cottontail::safe_error(error) = "Bad fiver shard name: " + name;
+      return false;
+    }
+    found.push_back(shard);
+  }
+  std::sort(found.begin(), found.end(), [](const ShardName &a,
+                                           const ShardName &b) {
+    return a.start < b.start || (a.start == b.start && a.end > b.end);
+  });
+
+  living->clear();
+  for (auto &shard : found) {
+    if (living->empty() || living->back().end < shard.start) {
+      living->push_back(shard);
+    } else if (living->back().end >= shard.end) {
+      continue;
+    } else {
+      cottontail::safe_error(error) =
+          "Overlapping fiver shard ranges around: " + shard.name;
+      return false;
+    }
+  }
+  return true;
+}
+
+bool existing_hazels(std::shared_ptr<cottontail::Working> working,
+                     std::vector<std::string> *hazels, std::string *error) {
+  hazels->clear();
+  for (auto &name : working->ls("hazel")) {
+    cottontail::addr start, end;
+    if (!parse_shard_name(name, "hazel", &start, &end)) {
+      cottontail::safe_error(error) = "Bad Hazel shard name: " + name;
+      return false;
+    }
+    hazels->push_back(name);
+  }
+  return true;
 }
 
 bool package(const std::string &dna, const std::string &key,
              std::string *name, std::string *recipe, std::string *error) {
-  if (!cottontail::name_and_recipe(dna, key, error, name, recipe))
-    return false;
-  return true;
+  return cottontail::name_and_recipe(dna, key, error, name, recipe);
 }
 
 bool compressor_from_recipe(const std::string &recipe,
@@ -61,6 +142,58 @@ bool compressor_from_recipe(const std::string &recipe,
   return *compressor != nullptr;
 }
 
+bool make_components(
+    std::shared_ptr<cottontail::Working> working,
+    std::shared_ptr<cottontail::Featurizer> *featurizer,
+    std::shared_ptr<cottontail::Tokenizer> *tokenizer,
+    std::shared_ptr<cottontail::Compressor> *posting_compressor,
+    std::shared_ptr<cottontail::Compressor> *fvalue_compressor,
+    std::shared_ptr<cottontail::Compressor> *text_compressor,
+    std::string *warren_parameters, std::string *error) {
+  std::string dna;
+  if (!cottontail::read_dna(working, &dna, error))
+    return false;
+
+  std::map<std::string, std::string> source_parameters;
+  if (!cottontail::cook(dna, &source_parameters, error))
+    return false;
+  auto parameters = source_parameters.find("parameters");
+  if (parameters == source_parameters.end())
+    *warren_parameters = "";
+  else
+    *warren_parameters = parameters->second;
+
+  std::string featurizer_name, featurizer_recipe;
+  std::string tokenizer_name, tokenizer_recipe;
+  std::string idx_name, idx_recipe;
+  std::string txt_name, txt_recipe;
+  if (!package(dna, "featurizer", &featurizer_name, &featurizer_recipe,
+               error) ||
+      !package(dna, "tokenizer", &tokenizer_name, &tokenizer_recipe, error) ||
+      !package(dna, "idx", &idx_name, &idx_recipe, error) ||
+      !package(dna, "txt", &txt_name, &txt_recipe, error))
+    return false;
+
+  *featurizer =
+      cottontail::Featurizer::make(featurizer_name, featurizer_recipe, error,
+                                   working);
+  if (*featurizer == nullptr)
+    return false;
+  *tokenizer =
+      cottontail::Tokenizer::make(tokenizer_name, tokenizer_recipe, error);
+  if (*tokenizer == nullptr)
+    return false;
+
+  return compressor_from_recipe(idx_recipe, "posting_compressor",
+                                "posting_compressor_recipe",
+                                posting_compressor, error) &&
+         compressor_from_recipe(idx_recipe, "fvalue_compressor",
+                                "fvalue_compressor_recipe", fvalue_compressor,
+                                error) &&
+         compressor_from_recipe(txt_recipe, "compressor", "compressor_recipe",
+                                text_compressor, error);
+}
+
 } // namespace
 
 int main(int argc, char **argv) {
@@ -69,128 +202,118 @@ int main(int argc, char **argv) {
     usage(program_name);
     return 0;
   }
-  if (argc < 2) {
-    usage(program_name);
-    return 1;
-  }
 
   cottontail::addr text_chunk_size = 64 * 1024;
-  int first_fiver = 1;
-  if (argc >= 4 && argv[1] == std::string("--chunk-size")) {
-    try {
-      text_chunk_size = std::stoll(argv[2]);
-    } catch (const std::invalid_argument &e) {
-      usage(program_name);
-      return 1;
-    } catch (const std::out_of_range &e) {
-      usage(program_name);
-      return 1;
+  bool force = false;
+  int arg = 1;
+  while (arg < argc) {
+    std::string option = argv[arg];
+    if (option == "--chunk-size" && arg + 1 < argc) {
+      try {
+        text_chunk_size = std::stoll(argv[arg + 1]);
+      } catch (const std::exception &) {
+        usage(program_name);
+        return 1;
+      }
+      if (text_chunk_size <= 0) {
+        usage(program_name);
+        return 1;
+      }
+      arg += 2;
+    } else if (option == "--force") {
+      force = true;
+      arg++;
+    } else {
+      break;
     }
-    if (text_chunk_size <= 0) {
-      usage(program_name);
-      return 1;
-    }
-    first_fiver = 3;
   }
-  if (first_fiver >= argc) {
+
+  if (arg + 1 != argc) {
     usage(program_name);
     return 1;
   }
+  std::string burrow = argv[arg];
 
-  int status = 0;
-  for (int i = first_fiver; i < argc; i++) {
-    std::string fiver_path = argv[i];
-    std::string dir = dirname(fiver_path);
-    std::string file = basename(fiver_path);
-    std::string error;
-    std::shared_ptr<cottontail::Working> working =
-        cottontail::Working::make(dir, &error);
-    if (working == nullptr) {
-      std::cerr << program_name << ": " << error << "\n";
-      status = 1;
-      continue;
-    }
+  std::string error;
+  std::shared_ptr<cottontail::Working> working =
+      cottontail::Working::make(burrow, &error);
+  if (working == nullptr) {
+    std::cerr << program_name << ": " << error << "\n";
+    return 1;
+  }
 
-    std::string dna;
-    if (!cottontail::read_dna(working, &dna, &error)) {
-      std::cerr << program_name << ": " << error << "\n";
-      status = 1;
-      continue;
-    }
-    std::map<std::string, std::string> source_parameters;
-    if (!cottontail::cook(dna, &source_parameters, &error)) {
-      std::cerr << program_name << ": " << error << "\n";
-      status = 1;
-      continue;
-    }
-    std::string warren_parameters;
-    auto parameters = source_parameters.find("parameters");
-    if (parameters != source_parameters.end())
-      warren_parameters = parameters->second;
+  std::vector<ShardName> fivers;
+  if (!living_fivers(working, &fivers, &error)) {
+    std::cerr << program_name << ": " << error << "\n";
+    return 1;
+  }
+  if (fivers.empty()) {
+    std::cerr << program_name << ": no fiver shards found in: " << burrow
+              << "\n";
+    return 1;
+  }
 
-    std::string featurizer_name, featurizer_recipe;
-    std::string tokenizer_name, tokenizer_recipe;
-    std::string idx_name, idx_recipe;
-    std::string txt_name, txt_recipe;
-    if (!package(dna, "featurizer", &featurizer_name, &featurizer_recipe,
-                 &error) ||
-        !package(dna, "tokenizer", &tokenizer_name, &tokenizer_recipe,
-                 &error) ||
-        !package(dna, "idx", &idx_name, &idx_recipe, &error) ||
-        !package(dna, "txt", &txt_name, &txt_recipe, &error)) {
-      std::cerr << program_name << ": " << error << "\n";
-      status = 1;
-      continue;
-    }
+  std::vector<std::string> old_hazels;
+  if (!existing_hazels(working, &old_hazels, &error)) {
+    std::cerr << program_name << ": " << error << "\n";
+    return 1;
+  }
+  if (!old_hazels.empty() && !force) {
+    std::cerr << program_name << ": Hazel shards already exist in " << burrow
+              << " (use --force to replace them)\n";
+    return 1;
+  }
+  if (force) {
+    for (auto &hazel : old_hazels)
+      std::remove(working->make_name(hazel).c_str());
+  }
 
-    std::shared_ptr<cottontail::Featurizer> featurizer =
-        cottontail::Featurizer::make(featurizer_name, featurizer_recipe,
-                                     &error, working);
-    if (featurizer == nullptr) {
-      std::cerr << program_name << ": " << error << "\n";
-      status = 1;
-      continue;
-    }
-    std::shared_ptr<cottontail::Tokenizer> tokenizer =
-        cottontail::Tokenizer::make(tokenizer_name, tokenizer_recipe, &error);
-    if (tokenizer == nullptr) {
-      std::cerr << program_name << ": " << error << "\n";
-      status = 1;
-      continue;
-    }
+  std::shared_ptr<cottontail::Featurizer> featurizer;
+  std::shared_ptr<cottontail::Tokenizer> tokenizer;
+  std::shared_ptr<cottontail::Compressor> posting_compressor;
+  std::shared_ptr<cottontail::Compressor> fvalue_compressor;
+  std::shared_ptr<cottontail::Compressor> text_compressor;
+  std::string warren_parameters;
+  if (!make_components(working, &featurizer, &tokenizer, &posting_compressor,
+                       &fvalue_compressor, &text_compressor,
+                       &warren_parameters, &error)) {
+    std::cerr << program_name << ": " << error << "\n";
+    return 1;
+  }
 
-    std::shared_ptr<cottontail::Compressor> posting_compressor;
-    std::shared_ptr<cottontail::Compressor> fvalue_compressor;
-    std::shared_ptr<cottontail::Compressor> text_compressor;
-    if (!compressor_from_recipe(idx_recipe, "posting_compressor",
-                                "posting_compressor_recipe",
-                                &posting_compressor, &error) ||
-        !compressor_from_recipe(idx_recipe, "fvalue_compressor",
-                                "fvalue_compressor_recipe",
-                                &fvalue_compressor, &error) ||
-        !compressor_from_recipe(txt_recipe, "compressor", "compressor_recipe",
-                                &text_compressor, &error)) {
-      std::cerr << program_name << ": " << error << "\n";
-      status = 1;
-      continue;
-    }
-
+  std::vector<std::string> hazels;
+  for (auto &fiver_name : fivers) {
     std::shared_ptr<cottontail::Fiver> fiver = cottontail::Fiver::unpickle(
-        file, working, featurizer, tokenizer, &error, posting_compressor,
-        fvalue_compressor, text_compressor);
+        fiver_name.name, working, featurizer, tokenizer, &error,
+        posting_compressor, fvalue_compressor, text_compressor);
     if (fiver == nullptr) {
       std::cerr << program_name << ": " << error << "\n";
-      status = 1;
-      continue;
+      return 1;
     }
     fiver->start();
     if (!fiver->hazel(&error, false, text_chunk_size, warren_parameters)) {
       std::cerr << program_name << ": " << error << "\n";
       fiver->end();
-      status = 1;
-      continue;
+      return 1;
     }
     fiver->end();
+    hazels.push_back(shard_name("hazel", fiver_name.start, fiver_name.end));
   }
-  return status;
+
+  std::string final_hazel = hazels.front();
+  if (hazels.size() > 1) {
+    if (!cottontail::Hazel::merge(working, hazels, warren_parameters, &error)) {
+      std::cerr << program_name << ": " << error << "\n";
+      return 1;
+    }
+    final_hazel =
+        shard_name("hazel", fivers.front().start, fivers.back().end);
+    for (auto &hazel : hazels)
+      std::remove(working->make_name(hazel).c_str());
+  }
+
+  std::cerr << program_name << ": wrote " << hazels.size()
+            << " Hazel shard(s); final Hazel is " << burrow << "/"
+            << final_hazel << "\n";
+  return 0;
 }
