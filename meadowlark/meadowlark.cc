@@ -37,7 +37,7 @@ std::shared_ptr<Warren> create_meadow(const std::string &meadow,
       "tokenizer:name:utf8 featurizer@json idx:fvalue_compressor:zlib "
       "idx:posting_compressor:post txt:compressor:zlib ";
   std::shared_ptr<Warren> bigwig = Bigwig::make(meadow, options, error);
-  if (bigwig == nullptr || !bigwig->set_default_container(":", error) ||
+  if (bigwig == nullptr ||
       !bigwig->set_parameter("format", "meadowlark", error))
     return nullptr;
   else
@@ -62,7 +62,7 @@ std::shared_ptr<Warren> open_meadow(const std::string &meadow,
 }
 
 std::shared_ptr<Warren> open_meadow(std::string *error) {
-  return Warren::make(DEFAULT_MEADOW, error);
+  return open_meadow(DEFAULT_MEADOW, error);
 }
 
 bool append_path(std::shared_ptr<Warren> warren, const std::string &filename,

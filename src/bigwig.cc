@@ -392,10 +392,8 @@ std::shared_ptr<Bigwig> Bigwig::make(const std::string &burrow,
       container_query = container_element->second;
     std::string stemmer_name, stemmer_recipe;
     auto stemmer_element = extra_parameters.find("stemmer");
-    if (stemmer_element != extra_parameters.end()) {
-      std::string stemmer_name, stemmer_recipe;
+    if (stemmer_element != extra_parameters.end())
       stemmer_name = stemmer_element->second;
-    }
     if (stemmer_name != "") {
       stemmer = Stemmer::make(stemmer_name, stemmer_recipe, error);
       if (stemmer == nullptr)

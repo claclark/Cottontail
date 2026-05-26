@@ -1,53 +1,53 @@
-# Goal: Meadowlark Ranking Stemmer Bug
+# Goal: Plan Hazel Merge Testing
 
-Investigate and fix the Meadowlark ranking path that still depends on a
-Warren-global `stemmer` DNA parameter.
+Plan behavioral and regression testing for the existing Hazel-to-Hazel merge
+implementation, then implement tests only after the user explicitly approves
+the plan.
 
-Meadowlark ranking-view settings should come from database metadata records
-(`@` / `@tf-idf:`), not from the Warren DNA. Older non-Meadowlark formats may
-still use DNA parameters for backward compatibility, but Meadowlark should not
-require `stemmer:"porter"` in `a.meadow/dna`.
+## Current Status
 
-## Observed Behavior
+- A first Working-based `Hazel::merge(...)` implementation exists in
+  `src/hazel.*`.
+- The implementation is documented in `ai/hazel.md`.
+- It has been compile-checked, including:
+  - `bazel build //apps:fiver2hazel //apps:working`
+  - `bazel build //...`
+- Behavioral/regression testing has not yet been designed or implemented.
 
-- New `a.meadow` fails ranking unless `stemmer:"porter"` is hacked into DNA.
-- Removing that DNA stemmer reproduces the failure.
-- Old `b.meadow` has `stemmer:"porter"` in DNA and works.
-- The `@` metadata query in `a.meadow` shows tf-idf metadata does contain
-  `"stemmer": "porter"`.
-- The pipeline under discussion includes an explicit stem stage:
+## Important Constraint
 
-```
-bm25:b=0.68 bm25:k1=0.82 bm25:depth=10 stop stem bm25
-```
+Do not write test code or implementation code without explicit user approval.
+The next step is planning and review only.
+
+Also follow the top-level verification rule: run compile/build checks only
+unless the user explicitly asks for runtime experiments, ranking runs, evals,
+or benchmarks.
+
+## Planning Targets
+
+A test plan might include these ideas, but talk to the user first:
+
+- merging two small Hazel files with disjoint text/address ranges;
+- preserving DNA and owner Warren `parameters` semantics where intended;
+- validating idx posting lookup after merge for inline and non-inline postings;
+- validating txt translation across chunk boundaries and across input files;
+- confirming feature counts/vocabulary behavior after merge;
+- handling deletion/null-feature semantics if already supported by the merge;
+- rejecting incompatible Hazel inputs with clear errors;
+- checking separator-newline handling from `Fiver::hazel(...)`;
+- identifying which checks belong in automated unit tests versus user-guided
+  local scripts.
 
 ## Starting Points
 
-Review these first:
+Review these before planning:
 
-- `apps/rank.cc`: threaded ranking path creates per-thread `larren` clones and
-  calls `Ranker::from_pipeline(pipeline, larren, &error)`.
-- `src/ranker.cc`: `StemTransformer` should use `context->stats_->stemmer()`.
-- `src/stats.cc`: Meadowlark should route through
-  `meadowlark::TfIdfStats::make(...)`; generic Warren stemmer fallback should
-  not override Meadowlark metadata semantics.
-- `meadowlark/tf-idf_stats.cc`: reads `@tf-idf:` metadata and constructs the
-  ranking-view stemmer/tokenizer.
-- `src/bigwig.cc`: there is a separate old shadowing bug in DNA stemmer loading;
-  fix if relevant, but do not make Meadowlark depend on DNA stemmers.
+- `ai/architecture.md`
+- `ai/hazel.md`
+- `ai/hazel-testing.md` if relevant
+- `src/hazel.h`
+- `src/hazel.cc`
+- `src/fiver.cc`
+- existing tests under `test/`
 
-## Likely Shape
-
-Find the path where `stem` / BM25 is getting a null or Warren-global stemmer
-instead of the metadata stemmer. 
-
-Keep the fix scoped. Do not reintroduce writing Meadowlark ranking-view stemmer
-settings into DNA.
-
-Do not edit code without instruction from the user. This is an investigation.
-
-## Hazel Note
-
-The Hazel merge implementation has already been written and documented in
-`ai/hazel.md`. It is compile-checked only; behavioral tests remain user-guided
-pending this bug fix.
+After review, talk to the user.

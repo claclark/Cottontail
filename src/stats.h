@@ -58,11 +58,15 @@ public:
 protected:
   Stats() = delete;
   Stats(std::shared_ptr<Warren> warren) : warren_(warren){};
+  Stats(std::shared_ptr<Warren> warren, std::shared_ptr<Stemmer> stemmer,
+        std::shared_ptr<Tokenizer> tokenizer)
+      : warren_(warren), stemmer_(stemmer), tokenizer_(tokenizer){};
   std::shared_ptr<Warren> warren_;
+
+private:
   std::shared_ptr<Stemmer> stemmer_;
   std::shared_ptr<Tokenizer> tokenizer_;
 
-private:
   virtual std::shared_ptr<Stats> clone_(std::string *error);
   virtual std::string recipe_() { return ""; }
   virtual bool have_(const std::string &name) { return false; };

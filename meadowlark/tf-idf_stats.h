@@ -27,6 +27,10 @@ public:
 
 protected:
   TfIdfStats(std::shared_ptr<Warren> warren) : Stats(warren){};
+  TfIdfStats(std::shared_ptr<Warren> warren,
+             std::shared_ptr<Stemmer> stemmer,
+             std::shared_ptr<Tokenizer> tokenizer)
+      : Stats(warren, stemmer, tokenizer){};
 
 private:
   std::string recipe_() final;
@@ -42,8 +46,6 @@ private:
   std::string id_query_;
   std::string content_query_;
   std::string container_query_;
-  std::shared_ptr<Stemmer> stemmer_;
-  std::shared_ptr<Tokenizer> tokenizer_;
   fval items_;
   fval average_length_;
   std::shared_ptr<Featurizer> tf_featurizer_;

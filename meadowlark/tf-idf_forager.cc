@@ -42,7 +42,7 @@ TfIdfForager::make(std::shared_ptr<Warren> warren, const std::string &tag,
     return nullptr;
   forager->total_featurizer_ =
       TaggingFeaturizer::make(warren->featurizer(), tag + "total", error);
-  if (forager->tf_featurizer_ == nullptr)
+  if (forager->total_featurizer_ == nullptr)
     return nullptr;
   return forager;
 }

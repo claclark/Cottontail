@@ -81,7 +81,9 @@
 - `fiver2hazel` is currently a pragmatic conversion path from a Fiver pickle plus its enclosing burrow DNA; it now preserves the owner Warren `parameters` block in generated Hazel DNA.
 - Hazel idx activation now has the first CacheRecord-backed decoded posting cache: non-inline posting hoppers share cache lines, async fills use a 16-reader `ReadGate`, and `HazelIdx::cache(feature)` fills synchronously when it creates the line.
 - Hazel txt activation loads the txt map, uses a 16-reader `ReadGate`, keeps a persistent mutex-protected `text_chunk_tag` hopper, and caches decompressed text chunks without eviction.
-- Ranking transition note: `TfIdfStats::make(...)` owns its ranking-view stemmer/tokenizer through `Stats`; the old Warren-global `stemmer` write has been disabled as a transitional artifact. Continue tracking parameter/metadata scoping in `ai/plan.md`.
+- Ranking transition note: `TfIdfStats::make(...)` owns its ranking-view stemmer/tokenizer through private base `Stats` state initialized by constructor. Meadowlark ranking should use `@tf-idf:` metadata/defaults (`stemmer=porter`, `tokenizer=ascii`) rather than Warren-global DNA stemmer settings.
+- New Meadowlark creation no longer writes a Warren-global `container` parameter; `container` remains valid for non-Meadowlark/older Warren-style uses and for ranking-view metadata.
+- Bigwig direct DNA activation now honors `parameters:[ stemmer:"..." ]`; the older local variable shadowing bug in `src/bigwig.cc` is fixed.
 - Current HazelIdx cache implementation has a clean `bazel build //apps:working`; rank.sh checks remain correct with `MRR @10: 0.18923028380406587` and `QueriesRanked: 6980`.
 - Latest Hazel rank.sh measurements are about 12 seconds internal for 6,980 queries, or roughly 1.7 ms/query: HazelIdx 16-reader gate alone measured `11850` ms internally, while the noisy 16/16 HazelIdx/HazelTxt run measured `12111` ms.
 - Record Hazel performance milestones and before/after measurements in `ai/hazel-progress.md`.
@@ -89,14 +91,30 @@
 
 ## Restart Notes
 
-- Do not change files unless explicitly asked; recent conversation included a
-  diff/design review mode.
-- Current uncommitted code changes include `src/hazel.h`, `src/hazel.cc`, and
-  the small `src/fiver.cc` trailing separator prerequisite.
+- Do not change code unless explicitly asked. The next Hazel task is planning
+  and user-guided testing; future agents should not implement tests or merge
+  changes without the user's say-so.
+- Verification rule from top-level `AGENTS.md`: run compile/build checks only
+  unless the user explicitly asks for runtime experiments, ranking runs, evals,
+  or benchmarks.
+- Current uncommitted Meadowlark/ranking cleanup changes include
+  `AGENTS.md`, `meadowlark/meadowlark.cc`,
+  `meadowlark/tf-idf_forager.cc`, `meadowlark/tf-idf_stats.*`,
+  `src/bigwig.cc`, `src/stats.h`, and `ai/log.md`.
+- The Meadowlark stemmer bug plan is done: metadata/default tf-idf stemmer and
+  tokenizer now initialize base `Stats`, Warren-global Meadowlark DNA stemmer
+  is no longer required, new Meadowlark DNA no longer writes global container,
+  and the small follow-up cleanup bugs were fixed.
+- User reported removing `container` from `a.meadow/dna` still worked.
+- User reported a post-fix ranking result of `MRR @10:
+  0.18975923272843034` and `QueriesRanked: 6980`; previous Hazel progress
+  baseline records `MRR @10: 0.18923028380406587` and `QueriesRanked: 6980`.
+  Likely explanation discussed: query and tf-idf annotation tokenizers now
+  agree on the tf-idf default `ascii`.
+- Current uncommitted Hazel merge code changes may still include
+  `src/hazel.h`, `src/hazel.cc`, and the small `src/fiver.cc` trailing
+  separator prerequisite if present in the worktree.
 - Compile verification already run for Hazel merge: `bazel build
   //apps:fiver2hazel //apps:working` and `bazel build //...`.
-- Open investigation: Meadowlark ranking with pipeline `bm25:b=0.68
-  bm25:k1=0.82 bm25:depth=10 stop stem bm25` only works when
-  `stemmer:"porter"` is hacked back into meadow DNA, even though Meadowlark is
-  supposed to source the stemmer from `@` tf-idf metadata. The user confirmed
-  removing the DNA stemmer reproduces the failure. No fix has been made.
+- Next desired direction: plan Hazel merge behavioral/regression testing, then
+  implement only after the user explicitly approves the testing plan.

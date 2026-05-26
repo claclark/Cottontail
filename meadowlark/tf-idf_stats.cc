@@ -47,24 +47,20 @@ std::shared_ptr<Stats> TfIdfStats::make(const std::string &recipe,
     safe_error(error) = "Metadata inconsistency";
     return nullptr;
   }
-  std::shared_ptr<TfIdfStats> stats =
-      std::shared_ptr<TfIdfStats>(new TfIdfStats(warren));
-  stats->tag_ = recipe;
-  stats->label_ = label + ":";
+  std::string id_query;
   if (parameters.find("id") == parameters.end())
-    stats->id_query_ = ":0:";
+    id_query = ":0:";
   else
-    stats->id_query_ = parameters["id"];
-  stats->content_query_ = parameters["gcl"];
-  if ((hopper = warren->hopper_from_gcl(stats->content_query_, error)) ==
-      nullptr)
+    id_query = parameters["id"];
+  std::string content_query = parameters["gcl"];
+  if ((hopper = warren->hopper_from_gcl(content_query, error)) == nullptr)
     return nullptr;
+  std::string container_query;
   if (parameters.find("container") == parameters.end())
-    stats->container_query_ = ":";
+    container_query = ":";
   else
-    stats->container_query_ = parameters["container"];
-  if ((hopper = warren->hopper_from_gcl(stats->container_query_, error)) ==
-      nullptr)
+    container_query = parameters["container"];
+  if ((hopper = warren->hopper_from_gcl(container_query, error)) == nullptr)
     return nullptr;
   std::string stemmer_name;
   if (parameters.find("stemmer") == parameters.end())
@@ -78,15 +74,23 @@ std::shared_ptr<Stats> TfIdfStats::make(const std::string &recipe,
   if (!warren->set_parameter("stemmer", stemmer_name, error))
     return nullptr;
 #endif
-  stats->stemmer_ = Stemmer::make(stemmer_name, "", error);
-  if (stats->stemmer_ == nullptr)
+  std::shared_ptr<Stemmer> stemmer = Stemmer::make(stemmer_name, "", error);
+  if (stemmer == nullptr)
     return nullptr;
+  std::shared_ptr<Tokenizer> tokenizer;
   if (parameters.find("tokenizer") == parameters.end())
-    stats->tokenizer_ = Tokenizer::make("ascii", "", error);
+    tokenizer = Tokenizer::make("ascii", "", error);
   else
-    stats->tokenizer_ = Tokenizer::make(parameters["tokenizer"], "", error);
-  if (stats->tokenizer_ == nullptr)
+    tokenizer = Tokenizer::make(parameters["tokenizer"], "", error);
+  if (tokenizer == nullptr)
     return nullptr;
+  std::shared_ptr<TfIdfStats> stats =
+      std::shared_ptr<TfIdfStats>(new TfIdfStats(warren, stemmer, tokenizer));
+  stats->tag_ = recipe;
+  stats->label_ = label + ":";
+  stats->id_query_ = id_query;
+  stats->content_query_ = content_query;
+  stats->container_query_ = container_query;
   stats->tf_featurizer_ =
       TaggingFeaturizer::make(warren->featurizer(), label + "tf", error);
   if (stats->tf_featurizer_ == nullptr)

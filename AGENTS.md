@@ -13,6 +13,11 @@ If it exists, also read:
 
 This file records the current planned next coding step.
 
+Verification rule:
+
+- Unless the user explicitly asks for runtime experiments, ranking runs, evals,
+  or benchmarks, only run compile/build checks.
+
 Files in ai/:
 
 ai/architecture.md

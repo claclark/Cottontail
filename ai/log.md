@@ -77,3 +77,8 @@
 2026-05-26T01:18:54+00:00 - Replaced the completed Hazel merge plan with a focused Meadowlark ranking stemmer bug plan.
 2026-05-26T01:31:12+00:00 - Corrected stale `ai/hazel.md` language that said Hazel/Hazel merge was deferred; Bigwig integration remains future work.
 2026-05-26T01:31:50+00:00 - Sanity-checked `ai/hazel.md` and refreshed stale activation/cache wording.
+2026-05-26T03:09:24Z - Fixed Meadowlark tf-idf stats stemmer/tokenizer ownership so metadata-created processors initialize the base `Stats` state; added a top-level agent rule to run only compile/build checks unless runtime experiments are explicitly requested.
+2026-05-26T03:50:00Z - Fixed the old Bigwig DNA stemmer loading shadowing bug so direct `Bigwig::make(...)` activation honors the `stemmer` parameter; verified `bazel build //apps:rank`.
+2026-05-26T03:59:46Z - Removed the Meadowlark creation-time write of the Warren-global `container` parameter; verified `bazel build //apps:meadowlark //apps:forage //apps:rank`.
+2026-05-26T05:19:23Z - Fixed a `TfIdfForager` null-check typo for `total_featurizer_` and made default `open_meadow(...)` delegate through the format-validating overload; verified `bazel build //apps:meadowlark //apps:forage //apps:rank`.
+2026-05-26T05:24:13Z - Refreshed restart notes for the completed Meadowlark stemmer/container work and replaced `ai/plan.md` with a planning-only Hazel merge testing plan that requires explicit user approval before coding.

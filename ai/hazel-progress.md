@@ -3,6 +3,19 @@
 This file tracks Hazel activation and performance milestones so changes can be
 compared against concrete outcomes.
 
+## 2026-05-26: Meadowlark Stemmer/Tokenizer Fix Observation
+
+After fixing Meadowlark tf-idf stats so ranking-view metadata/defaults initialize
+the base `Stats` stemmer/tokenizer, the user reported:
+
+- `MRR @10: 0.18975923272843034`.
+- `QueriesRanked: 6980`.
+
+This differs slightly from the earlier recorded `0.18923028380406587` baseline
+with the same query count. Likely explanation discussed: tf-idf annotations and
+query processing now agree on the tf-idf default tokenizer (`ascii`) and
+metadata/default stemmer (`porter`).
+
 ## 2026-05-18: Correctness Baseline Under `rank.sh`
 
 Test:
