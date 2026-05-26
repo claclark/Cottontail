@@ -4,9 +4,11 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "src/core.h"
 #include "src/warren.h"
+#include "src/working.h"
 
 namespace cottontail {
 
@@ -15,6 +17,10 @@ public:
   static std::shared_ptr<Warren> make(const std::string &filename,
                                       const std::string &dna,
                                       std::string *error = nullptr);
+  static bool merge(std::shared_ptr<Working> working,
+                    const std::vector<std::string> &hazels,
+                    const std::string &parameters,
+                    std::string *error = nullptr);
 
   virtual ~Hazel(){};
   Hazel(const Hazel &) = delete;

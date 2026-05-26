@@ -68,3 +68,12 @@
 2026-05-24T08:18:10+00:00 - Rewrote `ai/plan.md` with the agreed on-disk Hazel merge design and validation rules.
 2026-05-24T08:26:59+00:00 - Updated `ai/plan.md` with a Hazel merge implementation reading guide and clarified separator-newline handling.
 2026-05-24T08:30:26+00:00 - Added the `Fiver::hazel(...)` trailing-separator prerequisite to the Hazel merge plan.
+2026-05-25T00:54:49+00:00 - Implemented the first Working-based Hazel-to-Hazel merge primitive in `src/hazel.*`, added the `Fiver::hazel(...)` trailing separator write prerequisite, and verified `bazel build //...`.
+2026-05-25T01:33:16+00:00 - Reworked the Hazel merge implementation around input/output merge state structs with each input Hazel opened once; verified `bazel build //apps:fiver2hazel //apps:working` and `bazel build //...`.
+2026-05-25T21:51:32+00:00 - Added a Hazel text deletion improvement note covering logical translation semantics and future physical txt chunk reclamation.
+2026-05-25T21:52:17+00:00 - Broadened the text deletion improvement note from Hazel-only to Fiver/Hazel/Bigwig merge semantics.
+2026-05-25T21:54:57+00:00 - Added an exclusion merge semantics improvement note for possible outer interval merging of `null_feature` postings.
+2026-05-26T01:16:04+00:00 - Documented the struct-based Hazel merge implementation in `ai/hazel.md` and added restart notes for the active Hazel/stemmer investigations.
+2026-05-26T01:18:54+00:00 - Replaced the completed Hazel merge plan with a focused Meadowlark ranking stemmer bug plan.
+2026-05-26T01:31:12+00:00 - Corrected stale `ai/hazel.md` language that said Hazel/Hazel merge was deferred; Bigwig integration remains future work.
+2026-05-26T01:31:50+00:00 - Sanity-checked `ai/hazel.md` and refreshed stale activation/cache wording.

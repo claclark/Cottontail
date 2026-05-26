@@ -85,4 +85,18 @@
 - Current HazelIdx cache implementation has a clean `bazel build //apps:working`; rank.sh checks remain correct with `MRR @10: 0.18923028380406587` and `QueriesRanked: 6980`.
 - Latest Hazel rank.sh measurements are about 12 seconds internal for 6,980 queries, or roughly 1.7 ms/query: HazelIdx 16-reader gate alone measured `11850` ms internally, while the noisy 16/16 HazelIdx/HazelTxt run measured `12111` ms.
 - Record Hazel performance milestones and before/after measurements in `ai/hazel-progress.md`.
-- Next planned step is a Hazel regression test; discuss and confirm the exact test shape with the user before implementing it.
+- A first `Hazel::merge(...)` implementation exists for Working-based Hazel compaction, using input/output merge state structs and one open stream per input Hazel; it has only been compile-checked. User wants to guide behavioral/regression testing.
+
+## Restart Notes
+
+- Do not change files unless explicitly asked; recent conversation included a
+  diff/design review mode.
+- Current uncommitted code changes include `src/hazel.h`, `src/hazel.cc`, and
+  the small `src/fiver.cc` trailing separator prerequisite.
+- Compile verification already run for Hazel merge: `bazel build
+  //apps:fiver2hazel //apps:working` and `bazel build //...`.
+- Open investigation: Meadowlark ranking with pipeline `bm25:b=0.68
+  bm25:k1=0.82 bm25:depth=10 stop stem bm25` only works when
+  `stemmer:"porter"` is hacked back into meadow DNA, even though Meadowlark is
+  supposed to source the stemmer from `@` tf-idf metadata. The user confirmed
+  removing the DNA stemmer reproduces the failure. No fix has been made.

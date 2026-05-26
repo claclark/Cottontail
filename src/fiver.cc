@@ -1164,6 +1164,8 @@ bool Fiver::hazel(const std::string &filename, std::string *error,
     safe_error(error) = "Hazel text chunk size must be positive";
     return false;
   }
+  if (text_->size() > 0 && !separator(text_->back()))
+    *text_ += "\n";
   std::string dna =
       hazel_dna(featurizer_, tokenizer_, posting_compressor_,
                 fvalue_compressor_, text_compressor_, sequence_start_,

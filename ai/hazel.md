@@ -1,17 +1,16 @@
 # Hazel File Format
 
-This note describes the current Hazel v1 file produced by `Fiver::hazel(...)`.
-It is intended as a guide for implementing Hazel activation.
+This note describes the current Hazel v1 file produced by `Fiver::hazel(...)`,
+the activation path, and the first Hazel-to-Hazel merge implementation.
 
 Hazel is a single immutable shard file. The first producer is a live, built
 Fiver under Bigwig control, but the file should be activated as a standalone
 Hazel component pair: `hazel_idx` plus `hazel_txt`.
 
-The current activation code is no longer just a stub. `Warren::make(...)` can
-recognize a Hazel file as a single-file burrow, parse its DNA and blob
-dictionary, and construct working Hazel idx/txt components. The first reader is
-intentionally simple and correctness-oriented. It is now being improved for
-efficiency under threaded ranking workloads.
+`Warren::make(...)` can recognize a Hazel file as a single-file burrow, parse
+its DNA and blob dictionary, and construct working Hazel idx/txt components.
+Hazel activation now includes idx and txt caching work for threaded ranking
+workloads.
 
 ## Single-File Burrow Envelope
 
@@ -230,6 +229,84 @@ Hoppers are stateful. Activation should not share a single hopper across
 threads without synchronization. Prefer creating private hoppers for readers
 when practical, or protect shared hopper state with a mutex as `FiverTxt` does.
 
+## Hazel Merge Status
+
+`Hazel::merge(...)` now has a first Working-based implementation in
+`src/hazel.cc`, declared in `src/hazel.h`:
+
+```
+Hazel::merge(working, hazels, parameters, error)
+```
+
+The merge writes a complete temp file from `working->make_temp("hazel")`,
+publishes it with a hard link to the canonical final shard name, then removes
+the temp file. The canonical output name is:
+
+```
+hazel.<first_sequence_start>.<last_sequence_end>
+```
+
+The implementation is structured around two local state structs:
+
+- `HazelMergeInput`: one validated input Hazel, opened once, with parsed DNA,
+  blob dictionary, idx/txt directories, sequence range, txt chunk metadata, and
+  a `front` cursor over the sorted idx directory.
+- `HazelMergeOutput`: the output stream plus blob dictionary state and helper
+  methods for writing/patching txt and idx blobs.
+
+Input validation currently checks:
+
+- each input name matches `hazel.<sequence_start>.<sequence_end>`;
+- input ranges are contiguous in the user-supplied order;
+- the internal `hazel.sequence_start` / `hazel.sequence_end` DNA values exactly
+  match the filename values;
+- all input DNA is compatible after ignoring only
+  `hazel.sequence_start`, `hazel.sequence_end`, `parameters`, and txt
+  `chunk_size`;
+- idx/txt blob headers and directories are internally consistent.
+
+The txt merge copies compressed chunks without decompressing or recompressing.
+Each input chunk is read once from its already-open source file and written
+unchanged into the output txt chunk space. Output txt directory entries use new
+cumulative raw and compressed byte ends. Output `raw_text_length` is the sum of
+input raw text lengths, and output `target_chunk_size` is the minimum input
+chunk size.
+
+The idx merge treats each input idx directory as a sorted feature stream. The
+stream front is a directory cursor, not an eagerly decoded posting. The sweep
+finds the next feature by inspecting front feature ids, decodes only
+participating postings, writes the merged output posting, and advances those
+inputs. Inline singleton entries are decoded into one-record `SimplePosting`s
+before merge and are written back inline only when the final posting is exactly
+one `<p, p, 0>` record.
+
+Special postings are synthesized before the ordinary sweep and then slipped
+into the output stream at their natural feature positions:
+
+- `null_feature` is merged into `exclude` and used as the exclusion list for
+  ordinary feature merges.
+- `text_chunk_tag` is synthesized by copying input token intervals and adding
+  cumulative prior raw text length to each value.
+
+When the sweep reaches `null_feature` or `text_chunk_tag`, raw input entries
+for those features are consumed and skipped because their contributions were
+already folded into the synthesized posting.
+
+`Fiver::hazel(...)` also has the prerequisite separator change: before writing
+a non-empty Fiver to Hazel, it appends a trailing newline if the Fiver text does
+not already end in a separator. Hazel merge itself does not invent separator
+bytes.
+
+Current verification is compile-only:
+
+```
+bazel build //apps:fiver2hazel //apps:working
+bazel build //...
+```
+
+Behavioral/regression testing has not been run. The user wants to guide the
+test shape and supply/choose small Hazel test inputs.
+
 ## Activation Status
 
 Opening a Hazel shard currently:
@@ -247,9 +324,11 @@ The idx directory is small enough to load into memory for binary search. The
 txt directory is also expected to be much smaller than the compressed text and
 can be loaded into memory initially.
 
-The current `hazel_idx` implementation is intentionally minimal: it reads and
-decodes posting data on demand and does not yet provide the caching needed for
-Fiver-like ranking performance.
+The current `hazel_idx` implementation loads the idx directory at activation
+and uses a CacheRecord-backed decoded posting cache for non-inline posting
+blobs. Inline singletons are served directly from the directory. Cache fills use
+a 16-reader `ReadGate`; `HazelIdx::cache(feature)` fills synchronously, while
+normal hopper construction can trigger asynchronous fills.
 
 The current `hazel_txt` implementation:
 
@@ -285,7 +364,9 @@ exist for the same sequence range. This allows a conservative transition:
 materialize a Hazel, keep the Fiver pickle until the Hazel is known good, then
 eventually discard the Fiver pickle.
 
-Hazel/Hazel merge is deferred. The v1 format is intended to make that later
-step straightforward: merge posting directories/lists for idx, and concatenate
-or rechunk compressed text blobs while preserving the `text_chunk_tag`
-relationship.
+Hazel/Hazel merge now has a first standalone implementation as
+`Hazel::merge(...)`; see `Hazel Merge Status` above. Bigwig/Fluffle does not
+yet call it for background compaction. That integration remains future work:
+Bigwig should eventually choose Hazel shard names for compatible ranges, invoke
+the Working-based merge primitive, and publish merged Hazel shards without
+disturbing existing inputs on failure.
