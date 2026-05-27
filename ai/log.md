@@ -90,3 +90,10 @@
 2026-05-26T07:44:03Z - Finalized Hazel documentation around current format, activation, merge, and regression coverage; removed stale Hazel testing plan state and replaced `ai/plan.md` with the next-step Bigwig integration discussion plan.
 2026-05-26T07:53:51Z - Rewrote `ai/notes.md` to remove stale restart/test-planning notes and summarize the current repo map, Hazel state, verification rule, and Bigwig integration next step.
 2026-05-26T07:55:09Z - Added an `ai/improvements.md` note to split aggregate tests into focused Bazel targets, using `//test:hazel_test` as the pattern.
+2026-05-27T00:07:50+00:00 - Re-read the architecture, active Bigwig/Hazel integration plan, Hazel notes, Bigwig/Fluffle/Fiver/Hazel surfaces, build targets, and confirmed the worktree was clean before changing only this log entry.
+2026-05-27T00:58:23+00:00 - Added `--convert` and `--merge` modes plus conversion/merge/total timing output to `apps/fiver2hazel`; `--convert` removes existing Hazels, `--merge` prunes sequence-covered merged Hazels before merging; verified `bazel build //apps:fiver2hazel`.
+2026-05-27T01:54:05+00:00 - Recorded the 2026-05-27 `fiver2hazel a.meadow` conversion/merge timings and follow-up merged-Hazel `rank.sh` result in `ai/hazel-progress.md`.
+2026-05-27T02:11:00+00:00 - Restored deleted `apps/working.cc` and its `//apps:working` Bazel target from the parent of commit `0f31f41`; verified `bazel build //apps:working`.
+2026-05-27T02:21:43+00:00 - Rewrote `trec_docno(...)` to avoid per-call regex construction/replacement in the ranking output hot path; verified `bazel build //apps:working //apps:rank`.
+2026-05-27T02:40:47+00:00 - Adjusted `apps/working.cc` thread handling to default to twice hardware concurrency, accept positive requested thread counts, cap them at twice hardware concurrency, and warn on stderr when an explicit request is capped; verified `bazel build //apps:working`.
+2026-05-27T03:08:51+00:00 - Replaced `apps/rank.cc` with the `working`/`cottontail::trec(...)` driver, removed the temporary `apps/working.cc` source and `//apps:working` target, and verified `bazel build //apps:rank`.

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cctype>
 #include <cmath>
 #include <cstdlib>
 #include <fstream>
@@ -13,16 +14,31 @@
 namespace cottontail {
 
 std::string trec_docno(const std::string &text) {
-  std::regex docno_start("<DOCNO>");
-  std::regex docno_end("</DOCNO>");
-  std::regex leading("^\\s*");
-  std::regex trailing("\\s.*\\s*$");
-  std::regex quote("\"");
-  std::string docno = std::regex_replace(text, docno_start, "");
-  docno = std::regex_replace(docno, docno_end, "");
-  docno = std::regex_replace(docno, leading, "");
-  docno = std::regex_replace(docno, trailing, "");
-  docno = std::regex_replace(docno, quote, "");
+  const std::string start_tag = "<DOCNO>";
+  const std::string end_tag = "</DOCNO>";
+  std::string docno;
+  bool started = false;
+  for (size_t i = 0; i < text.size();) {
+    if (text.compare(i, start_tag.size(), start_tag) == 0) {
+      i += start_tag.size();
+      continue;
+    }
+    if (text.compare(i, end_tag.size(), end_tag) == 0) {
+      i += end_tag.size();
+      continue;
+    }
+    unsigned char c = text[i];
+    if (std::isspace(c)) {
+      if (started)
+        break;
+      i++;
+      continue;
+    }
+    started = true;
+    if (c != '"')
+      docno.push_back(text[i]);
+    i++;
+  }
   return docno;
 }
 

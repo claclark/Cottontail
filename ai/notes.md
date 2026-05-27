@@ -64,7 +64,8 @@
 - `apps/rank.cc`: ranking CLI.
 - `apps/simple.cc`: build a simple burrow from TREC/MARCO-style corpora.
 - `apps/fiver2hazel.cc`: convert live Fiver shards in a burrow to Hazel shards
-  and merge them into a final Hazel.
+  with `--convert`, merge available Hazel shards with `--merge`, and time the
+  conversion/merge phases. With no mode flags it does both phases.
 - `apps/scratch.cc`: scratch utility for creating no-merge Bigwig/Fiver shards
   from small text files with `line:` and `file:` annotations.
 

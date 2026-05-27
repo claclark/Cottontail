@@ -1,32 +1,30 @@
 #include <algorithm>
+#include <exception>
+#include <fstream>
 #include <iostream>
 #include <map>
-#include <mutex>
-#include <regex>
-#include <set>
 #include <string>
 #include <thread>
 #include <vector>
 
 #include "src/cottontail.h"
 
-void usage(std::string program_name) {
+namespace {
+
+void usage(const std::string &program_name) {
   std::cerr
       << "usage: " << program_name
       << " [--verbose] [--threads n] [--burrow burrow] queries pipeline...\n";
 }
 
-bool try_docnos(std::shared_ptr<cottontail::Warren> warren,
-                std::string docnos) {
-  std::unique_ptr<cottontail::Hopper> hopper = warren->hopper_from_gcl(docnos);
-  if (hopper == nullptr)
-    return false;
-  cottontail::addr p, q;
-  hopper->tau(cottontail::minfinity + 1, &p, &q);
-  return p != cottontail::maxfinity;
+size_t thread_limit() {
+  size_t hardware_threads = std::thread::hardware_concurrency();
+  if (hardware_threads == 0)
+    return 2;
+  return std::max((size_t)2, 2 * hardware_threads);
 }
 
-constexpr int THREADS = 50;
+} // namespace
 
 int main(int argc, char **argv) {
   std::string program_name = argv[0];
@@ -34,9 +32,12 @@ int main(int argc, char **argv) {
     usage(program_name);
     return 0;
   }
+
   bool verbose = false;
   std::string burrow = "";
-  size_t threads = THREADS;
+  size_t max_threads = thread_limit();
+  size_t threads = max_threads;
+  bool requested_threads = false;
   while (argc > 1) {
     if (argv[1] == std::string("-v") || argv[1] == std::string("--verbose")) {
       verbose = true;
@@ -47,9 +48,11 @@ int main(int argc, char **argv) {
     if (argc > 2 &&
         (argv[1] == std::string("-t") || argv[1] == std::string("--threads"))) {
       try {
-        int t = std::stoi(argv[2]);
-        if (t > 0 && t < THREADS)
-          threads = t;
+        int parsed_threads = std::stoi(argv[2]);
+        if (parsed_threads > 0) {
+          threads = parsed_threads;
+          requested_threads = true;
+        }
       } catch (std::exception &e) {
       }
       argc -= 2;
@@ -65,10 +68,18 @@ int main(int argc, char **argv) {
     }
     break;
   }
+  if (threads > max_threads) {
+    if (requested_threads)
+      std::cerr << program_name << ": limiting threads to " << max_threads
+                << "\n";
+    threads = max_threads;
+  }
+
   if (argc < 3) {
     usage(program_name);
     return 1;
   }
+
   std::string queries_filename = argv[1];
   std::string pipeline;
   for (int i = 2; i < argc; i++) {
@@ -76,6 +87,7 @@ int main(int argc, char **argv) {
       pipeline += " ";
     pipeline += argv[i];
   }
+
   std::string error;
   std::shared_ptr<cottontail::Warren> warren =
       cottontail::Warren::make(burrow, &error);
@@ -83,32 +95,24 @@ int main(int argc, char **argv) {
     std::cerr << program_name << ": " << error << "\n";
     return 1;
   }
+
   warren->start();
-  bool docnos_found = false;
-  std::string docnos;
-  if (warren->get_parameter("id", &docnos))
-    docnos_found = try_docnos(warren, docnos);
-  if (!docnos_found)
-    docnos_found = try_docnos(warren, docnos = "(... <DOCNO> </DOCNO>)");
-  if (!docnos_found)
-    docnos_found = try_docnos(warren, docnos = ":0:");
-  if (!docnos_found) {
-    std::cerr << program_name << ": " << error << " can't find docnos\n";
-    return 1;
-  }
-  std::shared_ptr<cottontail::Ranker> rank =
-      cottontail::Ranker::from_pipeline(pipeline, warren, &error);
-  if (rank == nullptr) {
+  std::shared_ptr<cottontail::Stats> stats =
+      cottontail::Stats::make(warren, &error);
+  if (stats == nullptr) {
     std::cerr << program_name << ": " << error << "\n";
+    warren->end();
     return 1;
   }
-  warren->end();
+
   std::ifstream queriesf(queries_filename);
   if (queriesf.fail()) {
     std::cerr << program_name << ": can't open file: " + queries_filename
               << "\n";
+    warren->end();
     return 1;
   }
+
   std::string line;
   std::map<std::string, std::string> queries;
   std::vector<std::string> topics;
@@ -118,97 +122,55 @@ int main(int argc, char **argv) {
       separator = " ";
     if (line.find(separator) == std::string::npos) {
       std::cerr << program_name << ": weird query input: " << line;
+      warren->end();
       return 1;
     }
     std::string topic = line.substr(0, line.find(separator));
     std::string query = line.substr(line.find(separator));
     if (topic == "" || query == "") {
       std::cerr << program_name << ": weird query input: " << line;
+      warren->end();
       return 1;
     }
     queries[topic] = query;
     topics.push_back(topic);
   }
-  std::mutex output_lock;
-  std::string runid = "cottontail";
-  auto solver = [&](size_t i) {
-    std::string error;
-    std::shared_ptr<cottontail::Warren> larren = warren->clone(&error);
-    if (larren == nullptr) {
-      output_lock.lock();
-      std::cerr << program_name << ": " << error << "\n" << std::flush;
-      output_lock.unlock();
-      return;
-    }
-    larren->start();
-    std::string id_key = "id";
-    std::unique_ptr<cottontail::Hopper> hopper =
-        larren->hopper_from_gcl(docnos, &error);
-    if (hopper == nullptr) {
-      output_lock.lock();
-      std::cerr << program_name << ": " << error << " can't find identifiers\n"
-                << std::flush;
-      output_lock.unlock();
-      larren->end();
-      return;
-    }
-    std::shared_ptr<cottontail::Ranker> rank =
-        cottontail::Ranker::from_pipeline(pipeline, larren, &error);
-    if (rank == nullptr) {
-      output_lock.lock();
-      std::cerr << program_name << ": " << error << "\n" << std::flush;
-      output_lock.unlock();
-      larren->end();
-      return;
-    }
-    for (size_t j = i; j < topics.size(); j += threads) {
-      std::string topic = topics[j];
-      std::string query = queries[topic];
-      std::vector<cottontail::RankingResult> ranking = (*rank)(query);
-      if (ranking.size() == 0) {
-        output_lock.lock();
-        if (verbose)
-          std::cerr << program_name << ": no results for topic \"" << topic
-                    << "\" (creating a fake one)\n"
-                    << std::flush;
-        std::cout << topic << " Q0 FAKE 1 1 cottontail\n";
-        output_lock.unlock();
-      } else {
-        for (size_t i = 0; i < ranking.size(); i++) {
-          cottontail::addr p, q;
-          hopper->tau(ranking[i].container_p(), &p, &q);
-          if (q <= ranking[i].container_q()) {
-            std::string docno =
-                cottontail::trec_docno(larren->txt()->translate(p, q));
-            output_lock.lock();
-            std::cout << topic << " Q0 " << docno << " " << i + 1 << " "
-                      << ranking[i].score() << " cottontail\n";
-            output_lock.unlock();
-          } else if (verbose) {
-            std::cerr << program_name << ": missing docno in container: "
-                      << " (" << p << ", " << q << ")\n"
-                      << std::flush;
-          }
-        }
-      }
-    }
-    larren->end();
-  };
+
+  std::map<std::string, std::vector<std::string>> results;
   cottontail::addr t0 = 0;
   if (verbose) {
     std::cerr << "Release the rankers...\n" << std::flush;
     t0 = cottontail::now();
   }
-  std::vector<std::thread> workers;
-  for (size_t i = 0; i < threads; i++)
-    workers.emplace_back(std::thread(solver, i));
-  for (auto &worker : workers)
-    worker.join();
-  std::flush(std::cout);
+  if (!cottontail::trec(stats, pipeline, queries, &results, &error, threads)) {
+    std::cerr << program_name << ": " << error << "\n";
+    warren->end();
+    return 1;
+  }
+  warren->end();
   if (verbose) {
     time_t t1 = cottontail::now();
     std::cerr << "Ranking took: " << (t1 - t0) << " millisecond(s) \n"
               << std::flush;
   }
+
+  std::string runid = "cottontail";
+  for (const auto &topic : topics) {
+    const std::vector<std::string> &docnos = results[topic];
+    if (docnos.size() == 0) {
+      if (verbose)
+        std::cerr << program_name << ": no results for topic \"" << topic
+                  << "\" (creating a fake one)\n";
+      std::cout << topic << " Q0 FAKE 1 1 " << runid << "\n";
+      continue;
+    }
+    for (size_t i = 0; i < docnos.size(); i++) {
+      size_t rank = i + 1;
+      size_t score = docnos.size() + 1 - rank;
+      std::cout << topic << " Q0 " << cottontail::trec_docno(docnos[i]) << " "
+                << rank << " " << score << " " << runid << "\n";
+    }
+  }
+
   return 0;
 }

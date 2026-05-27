@@ -16,6 +16,87 @@ with the same query count. Likely explanation discussed: tf-idf annotations and
 query processing now agree on the tf-idf default tokenizer (`ascii`) and
 metadata/default stemmer (`porter`).
 
+## 2026-05-27: Fiver-To-Hazel And Hazel Merge Timing
+
+Test:
+
+```
+./bazel-bin/apps/fiver2hazel a.meadow
+```
+
+Input burrow:
+
+- `a.meadow` with three living Fivers covering sequence ranges `0..11`,
+  `12..37`, and `38..58`.
+- Default `fiver2hazel` behavior after adding `--convert` / `--merge`: remove
+  existing Hazels, convert all living Fivers to per-Fiver Hazels, then merge the
+  available Hazels into `hazel.00000000000000000000.00000000000000000058`.
+- Conversion timing wraps only `fiver->hazel(...)`, after Fiver activation.
+- Merge timing wraps `Hazel::merge(...)`, including input Hazel metadata and
+  directory loading.
+
+Reported timings:
+
+- Converted `hazel.00000000000000000000.00000000000000000011` in `93179` ms.
+- Converted `hazel.00000000000000000012.00000000000000000037` in `284439` ms.
+- Converted `hazel.00000000000000000038.00000000000000000058` in `373654` ms.
+- Total conversion time: `751272` ms.
+- Hazel merge time: `611399` ms.
+- Total end-to-end time: `1426308` ms.
+
+Interpretation:
+
+- These conversion timings are a stress case because future Bigwig integration
+  should normally convert bounded-size active Fivers rather than multi-hundred
+  MiB or GiB Fiver pickles.
+- Hazel-to-Hazel merge is the more important long-term maintenance workload.
+- Current Hazel merge is usable but still has clear optimization room: normal
+  features present in only one input Hazel can be copied as raw compressed
+  posting bytes, with inline singleton entries copied as directory-only
+  entries, avoiding decompression and posting merge semantics.
+
+Follow-up rank check:
+
+```
+./rank.sh a.meadow/hazel.00000000000000000000.00000000000000000058
+```
+
+Pipeline:
+
+```
+bm25:b=0.68 bm25:k1=0.82 bm25:depth=10 stop stem bm25
+```
+
+Workload:
+
+- MARCO dev small queries.
+- `--threads 54`.
+- Fresh merged Hazel produced by the `fiver2hazel` run above.
+- Rank binary was `bazel-bin/apps/working`.
+
+Result:
+
+- Ranking completed successfully.
+- `MRR @10: 0.18975923272843034`.
+- `QueriesRanked: 6980`.
+- Fake result topics reported by the ranker: `645252` and `970152`.
+
+Timing/resource output:
+
+- Internal ranking timer: `11804` ms.
+- Wall time: `0:43.04`.
+- User time: `237.47`.
+- System time: `8.49`.
+- CPU: `571%`.
+- Max RSS: `5655856` KB.
+- Minor page faults: `1504232`.
+
+Interpretation:
+
+- The freshly rebuilt merged Hazel retains the post-cache fast query profile.
+- The MRR matches the current Meadowlark stemmer/tokenizer-fix observation, so
+  this run does not indicate a Hazel merge regression.
+
 ## 2026-05-18: Correctness Baseline Under `rank.sh`
 
 Test:

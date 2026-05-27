@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "src/compressor.h"
+#include "src/core.h"
 #include "src/dna.h"
 #include "src/featurizer.h"
 #include "src/fiver.h"
@@ -27,7 +28,7 @@ struct ShardName {
 
 void usage(const std::string &program_name) {
   std::cerr << "usage: " << program_name
-            << " [--chunk-size bytes] [--force] burrow\n";
+            << " [--chunk-size bytes] [--convert] [--merge] burrow\n";
 }
 
 bool parse_shard_name(const std::string &name, const std::string &prefix,
@@ -103,16 +104,94 @@ bool living_fivers(std::shared_ptr<cottontail::Working> working,
   return true;
 }
 
-bool existing_hazels(std::shared_ptr<cottontail::Working> working,
-                     std::vector<std::string> *hazels, std::string *error) {
+bool hazel_files(std::shared_ptr<cottontail::Working> working,
+                 std::vector<ShardName> *hazels, std::string *error) {
   hazels->clear();
   for (auto &name : working->ls("hazel")) {
-    cottontail::addr start, end;
-    if (!parse_shard_name(name, "hazel", &start, &end)) {
+    ShardName shard;
+    shard.name = name;
+    if (!parse_shard_name(name, "hazel", &shard.start, &shard.end)) {
       cottontail::safe_error(error) = "Bad Hazel shard name: " + name;
       return false;
     }
-    hazels->push_back(name);
+    hazels->push_back(shard);
+  }
+  std::sort(hazels->begin(), hazels->end(), [](const ShardName &a,
+                                               const ShardName &b) {
+    return a.start < b.start || (a.start == b.start && a.end < b.end);
+  });
+  return true;
+}
+
+bool remove_hazels(std::shared_ptr<cottontail::Working> working,
+                   const std::vector<ShardName> &hazels, std::string *error) {
+  for (auto &hazel : hazels) {
+    if (std::remove(working->make_name(hazel.name).c_str()) != 0) {
+      cottontail::safe_error(error) =
+          "Could not remove Hazel shard: " + hazel.name;
+      return false;
+    }
+  }
+  return true;
+}
+
+bool covered_by_other_hazels(const std::vector<ShardName> &hazels,
+                             size_t candidate) {
+  cottontail::addr next = hazels[candidate].start;
+  size_t pieces = 0;
+  while (next <= hazels[candidate].end) {
+    bool found = false;
+    cottontail::addr best_end = -1;
+    for (size_t i = 0; i < hazels.size(); i++) {
+      if (i == candidate || hazels[i].start != next ||
+          hazels[i].end > hazels[candidate].end)
+        continue;
+      if (!found || hazels[i].end > best_end) {
+        found = true;
+        best_end = hazels[i].end;
+      }
+    }
+    if (!found)
+      return false;
+    pieces++;
+    if (best_end == hazels[candidate].end)
+      return pieces >= 2;
+    next = best_end + 1;
+  }
+  return false;
+}
+
+bool remove_merged_hazels(std::shared_ptr<cottontail::Working> working,
+                          std::vector<ShardName> *hazels, size_t *removed,
+                          std::string *error) {
+  std::vector<bool> discard(hazels->size(), false);
+  for (size_t i = 0; i < hazels->size(); i++)
+    discard[i] = covered_by_other_hazels(*hazels, i);
+
+  std::vector<ShardName> survivors;
+  std::vector<ShardName> doomed;
+  for (size_t i = 0; i < hazels->size(); i++) {
+    if (discard[i])
+      doomed.push_back((*hazels)[i]);
+    else
+      survivors.push_back((*hazels)[i]);
+  }
+  if (!remove_hazels(working, doomed, error))
+    return false;
+  *hazels = survivors;
+  if (removed != nullptr)
+    *removed = doomed.size();
+  return true;
+}
+
+bool contiguous_hazels(const std::vector<ShardName> &hazels,
+                       std::string *error) {
+  for (size_t i = 1; i < hazels.size(); i++) {
+    if (hazels[i - 1].end + 1 != hazels[i].start) {
+      cottontail::safe_error(error) =
+          "Hazel merge got non-contiguous shards around: " + hazels[i].name;
+      return false;
+    }
   }
   return true;
 }
@@ -204,7 +283,9 @@ int main(int argc, char **argv) {
   }
 
   cottontail::addr text_chunk_size = 64 * 1024;
-  bool force = false;
+  bool convert = false;
+  bool merge = false;
+  bool got_mode = false;
   int arg = 1;
   while (arg < argc) {
     std::string option = argv[arg];
@@ -220,8 +301,13 @@ int main(int argc, char **argv) {
         return 1;
       }
       arg += 2;
-    } else if (option == "--force") {
-      force = true;
+    } else if (option == "--convert") {
+      convert = true;
+      got_mode = true;
+      arg++;
+    } else if (option == "--merge") {
+      merge = true;
+      got_mode = true;
       arg++;
     } else {
       break;
@@ -232,6 +318,10 @@ int main(int argc, char **argv) {
     usage(program_name);
     return 1;
   }
+  if (!got_mode) {
+    convert = true;
+    merge = true;
+  }
   std::string burrow = argv[arg];
 
   std::string error;
@@ -240,32 +330,6 @@ int main(int argc, char **argv) {
   if (working == nullptr) {
     std::cerr << program_name << ": " << error << "\n";
     return 1;
-  }
-
-  std::vector<ShardName> fivers;
-  if (!living_fivers(working, &fivers, &error)) {
-    std::cerr << program_name << ": " << error << "\n";
-    return 1;
-  }
-  if (fivers.empty()) {
-    std::cerr << program_name << ": no fiver shards found in: " << burrow
-              << "\n";
-    return 1;
-  }
-
-  std::vector<std::string> old_hazels;
-  if (!existing_hazels(working, &old_hazels, &error)) {
-    std::cerr << program_name << ": " << error << "\n";
-    return 1;
-  }
-  if (!old_hazels.empty() && !force) {
-    std::cerr << program_name << ": Hazel shards already exist in " << burrow
-              << " (use --force to replace them)\n";
-    return 1;
-  }
-  if (force) {
-    for (auto &hazel : old_hazels)
-      std::remove(working->make_name(hazel).c_str());
   }
 
   std::shared_ptr<cottontail::Featurizer> featurizer;
@@ -281,39 +345,98 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  std::vector<std::string> hazels;
-  for (auto &fiver_name : fivers) {
-    std::shared_ptr<cottontail::Fiver> fiver = cottontail::Fiver::unpickle(
-        fiver_name.name, working, featurizer, tokenizer, &error,
-        posting_compressor, fvalue_compressor, text_compressor);
-    if (fiver == nullptr) {
+  cottontail::addr total_start = cottontail::now();
+  cottontail::addr convert_milliseconds = 0;
+  if (convert) {
+    std::vector<ShardName> old_hazels;
+    if (!hazel_files(working, &old_hazels, &error) ||
+        !remove_hazels(working, old_hazels, &error)) {
       std::cerr << program_name << ": " << error << "\n";
       return 1;
     }
-    fiver->start();
-    if (!fiver->hazel(&error, false, text_chunk_size, warren_parameters)) {
+
+    std::vector<ShardName> fivers;
+    if (!living_fivers(working, &fivers, &error)) {
       std::cerr << program_name << ": " << error << "\n";
+      return 1;
+    }
+    if (fivers.empty()) {
+      std::cerr << program_name << ": no fiver shards found in: " << burrow
+                << "\n";
+      return 1;
+    }
+
+    for (auto &fiver_name : fivers) {
+      std::shared_ptr<cottontail::Fiver> fiver = cottontail::Fiver::unpickle(
+          fiver_name.name, working, featurizer, tokenizer, &error,
+          posting_compressor, fvalue_compressor, text_compressor);
+      if (fiver == nullptr) {
+        std::cerr << program_name << ": " << error << "\n";
+        return 1;
+      }
+      fiver->start();
+      cottontail::addr t0 = cottontail::now();
+      if (!fiver->hazel(&error, false, text_chunk_size, warren_parameters)) {
+        std::cerr << program_name << ": " << error << "\n";
+        fiver->end();
+        return 1;
+      }
+      cottontail::addr t1 = cottontail::now();
       fiver->end();
-      return 1;
+      convert_milliseconds += t1 - t0;
+      std::cerr << program_name << ": converted "
+                << shard_name("hazel", fiver_name.start, fiver_name.end)
+                << " in " << (t1 - t0) << " millisecond(s)\n";
     }
-    fiver->end();
-    hazels.push_back(shard_name("hazel", fiver_name.start, fiver_name.end));
+    std::cerr << program_name << ": Conversion took: " << convert_milliseconds
+              << " millisecond(s)\n";
   }
 
-  std::string final_hazel = hazels.front();
-  if (hazels.size() > 1) {
-    if (!cottontail::Hazel::merge(working, hazels, warren_parameters, &error)) {
+  cottontail::addr merge_milliseconds = 0;
+  if (merge) {
+    std::vector<ShardName> hazels;
+    size_t removed = 0;
+    if (!hazel_files(working, &hazels, &error) ||
+        !remove_merged_hazels(working, &hazels, &removed, &error) ||
+        !contiguous_hazels(hazels, &error)) {
       std::cerr << program_name << ": " << error << "\n";
       return 1;
     }
-    final_hazel =
-        shard_name("hazel", fivers.front().start, fivers.back().end);
-    for (auto &hazel : hazels)
-      std::remove(working->make_name(hazel).c_str());
+    if (removed > 0)
+      std::cerr << program_name << ": removed " << removed
+                << " merged Hazel shard(s)\n";
+    if (hazels.empty()) {
+      std::cerr << program_name << ": no Hazel shards found in: " << burrow
+                << "\n";
+      return 1;
+    } else if (hazels.size() == 1) {
+      std::cerr << program_name << ": one Hazel shard available; nothing to "
+                << "merge\n";
+    } else {
+      std::vector<std::string> names;
+      for (auto &hazel : hazels)
+        names.push_back(hazel.name);
+      cottontail::addr t0 = cottontail::now();
+      if (!cottontail::Hazel::merge(working, names, warren_parameters, &error)) {
+        std::cerr << program_name << ": " << error << "\n";
+        return 1;
+      }
+      cottontail::addr t1 = cottontail::now();
+      merge_milliseconds = t1 - t0;
+      std::string final_hazel =
+          shard_name("hazel", hazels.front().start, hazels.back().end);
+      for (auto &hazel : hazels)
+        if (hazel.name != final_hazel)
+          std::remove(working->make_name(hazel.name).c_str());
+      std::cerr << program_name << ": Merge took: " << merge_milliseconds
+                << " millisecond(s)\n";
+      std::cerr << program_name << ": final Hazel is " << burrow << "/"
+                << final_hazel << "\n";
+    }
   }
 
-  std::cerr << program_name << ": wrote " << hazels.size()
-            << " Hazel shard(s); final Hazel is " << burrow << "/"
-            << final_hazel << "\n";
+  cottontail::addr total_end = cottontail::now();
+  std::cerr << program_name << ": Total took: " << (total_end - total_start)
+            << " millisecond(s)\n";
   return 0;
 }
