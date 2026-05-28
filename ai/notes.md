@@ -65,7 +65,9 @@
 - `apps/simple.cc`: build a simple burrow from TREC/MARCO-style corpora.
 - `apps/fiver2hazel.cc`: convert live Fiver shards in a burrow to Hazel shards
   with `--convert`, merge available Hazel shards with `--merge`, and time the
-  conversion/merge phases. With no mode flags it does both phases.
+  conversion/merge phases. Existing exact per-Fiver Hazels are reused, and
+  intermediate Hazels are preserved after merge. With no mode flags it does
+  both phases.
 - `apps/scratch.cc`: scratch utility for creating no-merge Bigwig/Fiver shards
   from small text files with `line:` and `file:` annotations.
 
@@ -96,6 +98,9 @@
   without eviction.
 - `Hazel::merge(...)` merges compatible Hazel shards into a canonical
   `hazel.<start>.<end>` shard.
+- Hazel merge async read-ahead was tried and measured on HDD, but the gain was
+  only about 1%; details and the recommendation not to carry that complexity
+  forward are recorded in `ai/hazel-progress.md`.
 - `test/hazel.cc` is the completed Hazel regression test. It builds a no-merge
   Bigwig from small text files, converts each Fiver to Hazel, compares
   Fiver-vs-Hazel shard behavior, merges Hazels, and compares the merged Hazel

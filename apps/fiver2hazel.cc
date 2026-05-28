@@ -348,9 +348,8 @@ int main(int argc, char **argv) {
   cottontail::addr total_start = cottontail::now();
   cottontail::addr convert_milliseconds = 0;
   if (convert) {
-    std::vector<ShardName> old_hazels;
-    if (!hazel_files(working, &old_hazels, &error) ||
-        !remove_hazels(working, old_hazels, &error)) {
+    std::vector<ShardName> hazels;
+    if (!hazel_files(working, &hazels, &error)) {
       std::cerr << program_name << ": " << error << "\n";
       return 1;
     }
@@ -367,6 +366,19 @@ int main(int argc, char **argv) {
     }
 
     for (auto &fiver_name : fivers) {
+      std::string hazel_name =
+          shard_name("hazel", fiver_name.start, fiver_name.end);
+      if (std::binary_search(
+              hazels.begin(), hazels.end(),
+              ShardName{fiver_name.start, fiver_name.end, hazel_name},
+              [](const ShardName &a, const ShardName &b) {
+                return a.start < b.start ||
+                       (a.start == b.start && a.end < b.end);
+              })) {
+        std::cerr << program_name << ": keeping existing " << hazel_name
+                  << "\n";
+        continue;
+      }
       std::shared_ptr<cottontail::Fiver> fiver = cottontail::Fiver::unpickle(
           fiver_name.name, working, featurizer, tokenizer, &error,
           posting_compressor, fvalue_compressor, text_compressor);
@@ -384,9 +396,8 @@ int main(int argc, char **argv) {
       cottontail::addr t1 = cottontail::now();
       fiver->end();
       convert_milliseconds += t1 - t0;
-      std::cerr << program_name << ": converted "
-                << shard_name("hazel", fiver_name.start, fiver_name.end)
-                << " in " << (t1 - t0) << " millisecond(s)\n";
+      std::cerr << program_name << ": converted " << hazel_name << " in "
+                << (t1 - t0) << " millisecond(s)\n";
     }
     std::cerr << program_name << ": Conversion took: " << convert_milliseconds
               << " millisecond(s)\n";
@@ -425,9 +436,6 @@ int main(int argc, char **argv) {
       merge_milliseconds = t1 - t0;
       std::string final_hazel =
           shard_name("hazel", hazels.front().start, hazels.back().end);
-      for (auto &hazel : hazels)
-        if (hazel.name != final_hazel)
-          std::remove(working->make_name(hazel.name).c_str());
       std::cerr << program_name << ": Merge took: " << merge_milliseconds
                 << " millisecond(s)\n";
       std::cerr << program_name << ": final Hazel is " << burrow << "/"

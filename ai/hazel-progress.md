@@ -143,6 +143,56 @@ Interpretation:
   read-ahead for Hazel merge input ranges, especially for the common case of
   merging two Hazels.
 
+## 2026-05-28: Hazel Merge Async I/O Experiment
+
+Experiment:
+
+- Added temporary double-buffered async I/O helpers and wired `AsyncReader` into
+  Hazel merge for sequential txt chunk copying and idx posting reads.
+- This preserved the existing Hazel merge semantics:
+  - txt chunks were already copied as compressed bytes without decompression;
+  - unique ordinary postings still used the raw-copy fast path;
+  - `null_feature`, `text_chunk_tag`, and multi-input postings remained on the
+    decoded semantic path.
+- The test was intentionally run from HDD storage, where I/O effects should be
+  easier to see than on SSD.
+
+Reported timing:
+
+```
+./bazel-bin/apps/fiver2hazel a.meadow
+```
+
+- Converted `hazel.00000000000000000000.00000000000000000011` in `93101` ms.
+- Converted `hazel.00000000000000000012.00000000000000000037` in `284477` ms.
+- Converted `hazel.00000000000000000038.00000000000000000058` in `373987` ms.
+- Total conversion time: `751565` ms.
+- Removed `1` previously merged Hazel shard.
+- Hazel merge time with async read-ahead: `588807` ms.
+- Total end-to-end time: `1403275` ms.
+
+Comparison:
+
+- Previous post-raw-copy Hazel merge time: `594594` ms.
+- Async read-ahead Hazel merge time: `588807` ms.
+- Merge improvement: `5787` ms, about `1.0%`.
+
+Conclusion:
+
+- This experiment did not justify the added complexity in `hazel.cc`.
+- Even on HDD, read-ahead produced only a small improvement; on SSD it is likely
+  to be noise.
+- Hazel merge is not primarily I/O-bound after compressed txt chunk streaming
+  and the unique-posting raw-copy path. Remaining cost is more likely in
+  multi-input posting decode/merge/recompression and special posting handling.
+- The useful part of the surrounding work was the `apps/fiver2hazel` behavior
+  change that preserves intermediate per-Fiver Hazels so conversion does not
+  need to be repeated just to remeasure merge.
+- Recommendation: keep the clean unique-posting raw-copy fast path and the
+  `fiver2hazel` intermediate-Hazel preservation, but do not pursue async
+  read-ahead in Hazel merge unless future measurements show a much larger I/O
+  bottleneck.
+
 ## 2026-05-18: Correctness Baseline Under `rank.sh`
 
 Test:
