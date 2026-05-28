@@ -13,6 +13,7 @@
 #include <sstream>
 #include <string>
 #include <thread>
+#include <utility>
 #include <unistd.h>
 #include <vector>
 
@@ -1234,6 +1235,35 @@ struct HazelMergeOutput {
     return true;
   }
 
+  bool copy_posting(std::shared_ptr<HazelMergeInput> input, size_t index,
+                    std::vector<HazelPostingEntry> *directory, addr blob_start,
+                    std::string *error) {
+    const HazelPostingEntry &source = input->idx_directory[index];
+    addr start = input->posting_start(index);
+    if (start > source.end) {
+      safe_error(error) = "Hazel got bad idx posting boundary";
+      return false;
+    }
+    HazelPostingEntry entry;
+    entry.feature = source.feature;
+    entry.end = (addr)out.tellp() - blob_start;
+    entry.count_or_p = source.count_or_p;
+    if (start < source.end) {
+      std::string bytes;
+      if (!input->read_at(input->idx_blob.offset + start, source.end - start,
+                          &bytes, error))
+        return false;
+      out.write(bytes.data(), bytes.size());
+      entry.end = (addr)out.tellp() - blob_start;
+      if (out.fail()) {
+        safe_error(error) = "Hazel merge failed to copy idx postings";
+        return false;
+      }
+    }
+    directory->push_back(entry);
+    return true;
+  }
+
   bool write_txt(const std::vector<std::shared_ptr<HazelMergeInput>> &inputs,
                  addr target_chunk_size, std::string *error) {
     HazelBlob &blob = blobs[1];
@@ -1325,15 +1355,10 @@ struct HazelMergeOutput {
       if (next == maxfinity)
         break;
 
-      std::vector<std::shared_ptr<SimplePosting>> postings;
+      std::vector<std::pair<std::shared_ptr<HazelMergeInput>, size_t>> sources;
       for (auto &input : *inputs) {
         if (input->front_feature() == next) {
-          if (next != null_feature && next != text_chunk_feature) {
-            auto posting = input->front_posting(factory, error);
-            if (posting == nullptr)
-              return false;
-            postings.push_back(posting);
-          }
+          sources.emplace_back(input, input->front);
           input->skip_front();
         }
       }
@@ -1346,10 +1371,18 @@ struct HazelMergeOutput {
         if (!write_posting(text_chunk, &directory, blob_start, error))
           return false;
         wrote_text_chunk = true;
-      } else if (postings.size() == 1 && exclude == nullptr) {
-        if (!write_posting(postings[0], &directory, blob_start, error))
+      } else if (sources.size() == 1 && exclude == nullptr) {
+        if (!copy_posting(sources[0].first, sources[0].second, &directory,
+                          blob_start, error))
           return false;
-      } else if (!postings.empty()) {
+      } else if (!sources.empty()) {
+        std::vector<std::shared_ptr<SimplePosting>> postings;
+        for (auto &source : sources) {
+          auto posting = source.first->posting_at(source.second, factory, error);
+          if (posting == nullptr)
+            return false;
+          postings.push_back(posting);
+        }
         auto posting = factory->posting_from_merge(postings, exclude);
         if (!write_posting(posting, &directory, blob_start, error))
           return false;

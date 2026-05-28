@@ -97,6 +97,52 @@ Interpretation:
 - The MRR matches the current Meadowlark stemmer/tokenizer-fix observation, so
   this run does not indicate a Hazel merge regression.
 
+## 2026-05-28: Hazel Merge Unique-Posting Raw-Copy Check
+
+Change:
+
+- Added a Hazel merge idx fast path for normal features that appear in exactly
+  one input Hazel when no `null_feature` exclusion posting is present.
+- The fast path preserves inline singleton entries as directory-only output
+  entries and raw-copies non-empty compressed posting byte ranges without
+  decode/re-encode.
+- `null_feature`, `text_chunk_tag`, excluded/deleted ordinary features, and
+  multi-input ordinary features remain on the decoded semantic merge path.
+
+Test:
+
+```
+./bazel-bin/apps/fiver2hazel a.meadow
+```
+
+Reported timings:
+
+- Converted `hazel.00000000000000000000.00000000000000000011` in `93057` ms.
+- Converted `hazel.00000000000000000012.00000000000000000037` in `284861` ms.
+- Converted `hazel.00000000000000000038.00000000000000000058` in `373878` ms.
+- Total conversion time: `751796` ms.
+- Hazel merge time: `594594` ms.
+- Total end-to-end time: `1409963` ms.
+
+Comparison to the 2026-05-27 baseline:
+
+- Previous Hazel merge time: `611399` ms.
+- New Hazel merge time: `594594` ms.
+- Merge improvement: `16805` ms, about `2.75%`.
+- Previous end-to-end time: `1426308` ms.
+- New end-to-end time: `1409963` ms.
+- End-to-end improvement: `16345` ms, about `1.15%`.
+
+Interpretation:
+
+- The fast path is correct-looking and measurable, but modest.
+- It likely reduces decode/re-encode work for unique features, while leaving
+  the main I/O pattern largely unchanged: copied postings are still read one
+  byte range at a time through `HazelMergeInput::read_at(...)`.
+- The next likely optimization direction is sequential/buffered or asynchronous
+  read-ahead for Hazel merge input ranges, especially for the common case of
+  merging two Hazels.
+
 ## 2026-05-18: Correctness Baseline Under `rank.sh`
 
 Test:

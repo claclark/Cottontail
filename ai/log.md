@@ -97,3 +97,5 @@
 2026-05-27T02:21:43+00:00 - Rewrote `trec_docno(...)` to avoid per-call regex construction/replacement in the ranking output hot path; verified `bazel build //apps:working //apps:rank`.
 2026-05-27T02:40:47+00:00 - Adjusted `apps/working.cc` thread handling to default to twice hardware concurrency, accept positive requested thread counts, cap them at twice hardware concurrency, and warn on stderr when an explicit request is capped; verified `bazel build //apps:working`.
 2026-05-27T03:08:51+00:00 - Replaced `apps/rank.cc` with the `working`/`cottontail::trec(...)` driver, removed the temporary `apps/working.cc` source and `//apps:working` target, and verified `bazel build //apps:rank`.
+2026-05-27T07:35:00+00:00 - Added a Hazel merge idx fast path that raw-copies unique, non-excluded posting byte ranges and preserves inline singleton directory entries without decode/re-encode; verified `bazel build //apps:fiver2hazel //test:hazel_test`.
+2026-05-28T03:29:55+00:00 - Recorded the post-fast-path `fiver2hazel a.meadow` timing in `ai/hazel-progress.md`: Hazel merge improved from `611399` ms to `594594` ms.
