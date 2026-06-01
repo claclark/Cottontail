@@ -185,8 +185,12 @@ target is 64 KiB, but `Fiver::hazel(...)` accepts an explicit value and
 `apps/fiver2hazel` exposes it for all live Fivers in a burrow as:
 
 ```
-fiver2hazel [--chunk-size bytes] [--force] burrow
+fiver2hazel [--chunk-size bytes] [--convert] [--merge] burrow
 ```
+
+With no mode flags, `fiver2hazel` performs both conversion and merge. Existing
+exact per-Fiver Hazels are reused during conversion, and intermediate Hazels
+are preserved after merge.
 
 The final chunk extends to `raw_text_length`.
 
@@ -281,6 +285,11 @@ inputs. Inline singleton entries are decoded into one-record `SimplePosting`s
 before merge and are written back inline only when the final posting is exactly
 one `<p, p, 0>` record.
 
+For an ordinary feature present in exactly one input Hazel when there is no
+`null_feature` exclusion posting, the merge raw-copies the compressed posting
+byte range instead of decoding and re-encoding it. Inline singleton entries on
+this path remain directory-only entries.
+
 Special postings are synthesized before the ordinary sweep and then slipped
 into the output stream at their natural feature positions:
 
@@ -356,8 +365,8 @@ Opening a Hazel shard currently:
 4. Read the top-level blob dictionary.
 5. Locate `idx` and `txt` blob ranges.
 6. Build `hazel_idx` from the idx blob header and directory.
-7. Build `hazel_txt` from the txt blob header and directory, plus a reference
-   to the activated `hazel_idx`.
+7. Ask the activated `hazel_idx` for a private `text_chunk_tag` hopper, then
+   build `hazel_txt` from the txt blob header, directory, and that hopper.
 
 The idx directory is small enough to load into memory for binary search. The
 txt directory is also expected to be much smaller than the compressed text and
@@ -395,30 +404,28 @@ kept in mind during Bigwig integration.
 
 ## Bigwig Integration Notes
 
-Hazels produced from Fivers are expected to be materialized under Bigwig
-control. The source Fiver should already be built, immutable, and started.
+The next agreed design discussion is narrower than full background lifecycle
+integration: let a started Bigwig query across a mixed set of Fiver and Hazel
+shards. The concrete idx cache/hopper direction is recorded in `ai/plan.md`.
+That plan must be reviewed with the user before implementation.
 
-Later Bigwig activation can prefer `hazel.n.m` over `fiver.n.m` when both
-exist for the same sequence range. This allows a conservative transition:
-materialize a Hazel, keep the Fiver pickle until the Hazel is known good, then
-eventually discard the Fiver pickle.
+The key query-path direction is:
 
-Hazel/Hazel merge now has a standalone implementation as `Hazel::merge(...)`;
-see `Hazel Merge` above. Bigwig/Fluffle does not yet call it for background
-compaction. That integration is the next design step: Bigwig should eventually
-choose Hazel shard names for compatible ranges, invoke the Working-based merge
-primitive, and publish merged Hazel shards without disturbing existing inputs on
-failure.
+- preserve Hazel's shard-local decoded posting cache;
+- let Bigwig asynchronously cache raw posting-list merges when multiple
+  sub-indexes contribute to a feature;
+- delegate directly to a sub-index hopper when only one sub-index contributes;
+- retain the existing `NotContainedIn(feature, null_feature)` hopper
+  composition for deletion semantics;
+- avoid a feature-by-sequence Fluffle cache unless future usage demonstrates a
+  clear need.
 
-Open integration questions include:
+Background lifecycle policy remains a separate discussion. Open questions
+still include:
 
 - when Bigwig should create Hazel shards from newly committed Fivers;
-- how long Fiver pickle shards should be retained while Hazel is proving itself;
+- how long Fiver pickle shards should be retained after Hazel materialization;
 - whether activation should prefer Hazel over Fiver when both cover the same
   live range;
-- how background merge selection should represent live Hazel ranges;
-- whether merged Hazel publication should rename/move the final shard out of a
-  staging location or leave `Hazel::merge(...)` responsible for canonical
-  publication;
-- how Bigwig should handle mixed Fiver/Hazel states during an incremental
-  transition.
+- how Fluffle should represent and compact live mixed Hazel/Fiver ranges;
+- how background Hazel materialization and merge should publish or fail safely.

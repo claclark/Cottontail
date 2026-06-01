@@ -109,6 +109,16 @@
 - Hazel performance milestones and rank.sh measurements live in
   `ai/hazel-progress.md`.
 
+## Current Bigwig Cache Status
+
+- A started `BigwigIdx` owns a `SafeMap<feature, SimplePosting>` cache for
+  posting lists merged across its Fiver view. `Fiver::merge(...)` consults this
+  caller-supplied cache.
+- The cache is currently discarded with the started `BigwigIdx`; Fluffle does
+  not own an idx cache.
+- When deletions exist, `BigwigIdx` caches raw feature and `null_feature`
+  merges separately and composes their hoppers with `NotContainedIn`.
+
 ## Current Meadowlark/Ranking Notes
 
 - `TfIdfStats::make(...)` owns its ranking-view stemmer/tokenizer through
@@ -126,12 +136,20 @@
 
 ## Current Plan
 
-- Next Hazel milestone: discuss integration into Bigwig/Fluffle before coding.
-- Main design questions: when Bigwig creates Hazels, whether activation prefers
-  Hazels over Fivers, how Fluffle tracks mixed shard states, how long Fivers
-  are retained, and how background Hazel materialization/merge publishes or
-  fails safely.
-- See `ai/plan.md` for the active discussion plan and `ai/hazel.md` for the
+- Next Hazel milestone: review the concrete mixed Fiver/Hazel Bigwig query-path
+  plan with the user before coding.
+- The planned idx direction keeps Hazel's shard-local cache, adds asynchronous
+  Bigwig raw posting-list merge caching when multiple sub-indexes contribute,
+  delegates one-source features directly to the source idx hopper, and retains
+  the existing `NotContainedIn(feature, null_feature)` deletion composition.
+- A separate cache-lifetime question remains open: whether a Bigwig
+  merged-posting cache should survive `end()` -> `start()` while the logical
+  sequence remains unchanged. This is intentionally simpler than maintaining
+  feature-by-sequence cache versions in Fluffle.
+- Background lifecycle policy remains separate: creation timing, Fiver
+  retention, activation preference, Fluffle mixed-range representation, and
+  safe background publication still require discussion.
+- See `ai/plan.md` for the concrete review checkpoint and `ai/hazel.md` for the
   Hazel format/activation/merge reference.
 
 ## Current Local Worktree Notes

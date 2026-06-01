@@ -3,6 +3,11 @@
 This file tracks Hazel activation and performance milestones so changes can be
 compared against concrete outcomes.
 
+Entries are historical snapshots. Some sections intentionally describe states,
+commands, binaries, and next steps that were later superseded. For current
+behavior and the active design checkpoint, see `ai/hazel.md`, `ai/notes.md`,
+and `ai/plan.md`.
+
 ## 2026-05-26: Meadowlark Stemmer/Tokenizer Fix Observation
 
 After fixing Meadowlark tf-idf stats so ranking-view metadata/defaults initialize
