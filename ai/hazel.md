@@ -68,7 +68,7 @@ created from a Fiver by `apps/fiver2hazel`.
 After the blank line comes the top-level blob dictionary:
 
 ```
-"COTTONTAIL_HAZEL_BLOBS_V1\n"
+"COTTONTAIL_HAZEL_BLOBS\n"
 addr blob_count
 repeat blob_count:
   addr name_length
@@ -98,7 +98,7 @@ start of that blob.
 Header:
 
 ```
-"COTTONTAIL_HAZEL_IDX_V1\n"
+"COTTONTAIL_HAZEL_IDX\n"
 addr directory_offset
 addr directory_length
 addr directory_count
@@ -149,7 +149,7 @@ relative to the start of chunk space, immediately after the txt header.
 Header:
 
 ```
-"COTTONTAIL_HAZEL_TXT_V1\n"
+"COTTONTAIL_HAZEL_TXT\n"
 addr directory_offset
 addr directory_length
 addr directory_count

@@ -129,7 +129,7 @@ bool read_blob_dictionary(const std::string &filename,
   }
   if (!skip_hazel_dna(&in, error))
     return false;
-  const std::string magic = "COTTONTAIL_HAZEL_BLOBS_V1\n";
+  const std::string magic = hazel_blob_dictionary_magic;
   std::string actual(magic.size(), '\0');
   in.read(&actual[0], actual.size());
   if (actual != magic) {
@@ -369,7 +369,7 @@ private:
   }
 
   bool load(std::string *error) {
-    const std::string magic = "COTTONTAIL_HAZEL_IDX_V1\n";
+    const std::string magic = hazel_idx_magic;
     postings_start_ = magic.size() + 3 * sizeof(addr);
     if (blob_length_ < postings_start_) {
       safe_error(error) = "Hazel idx blob is too short";
@@ -569,7 +569,7 @@ private:
   }
 
   bool load(addr blob_offset, addr blob_length, std::string *error) {
-    const std::string magic = "COTTONTAIL_HAZEL_TXT_V1\n";
+    const std::string magic = hazel_txt_magic;
     addr header_length = magic.size() + 5 * sizeof(addr);
     if (blob_length < header_length) {
       safe_error(error) = "Hazel txt blob is too short";
@@ -871,7 +871,7 @@ struct HazelMergeInput {
   }
 
   bool read_blob_dictionary(std::string *error) {
-    const std::string magic = "COTTONTAIL_HAZEL_BLOBS_V1\n";
+    const std::string magic = hazel_blob_dictionary_magic;
     std::string actual(magic.size(), '\0');
     in.read(&actual[0], actual.size());
     if (actual != magic) {
@@ -913,7 +913,7 @@ struct HazelMergeInput {
   }
 
   bool read_idx_directory(std::string *error) {
-    const std::string magic = "COTTONTAIL_HAZEL_IDX_V1\n";
+    const std::string magic = hazel_idx_magic;
     addr header_length = magic.size() + 3 * sizeof(addr);
     idx_postings_start = header_length;
     if (idx_blob.length < header_length) {
@@ -968,7 +968,7 @@ struct HazelMergeInput {
   }
 
   bool read_txt_directory(std::string *error) {
-    const std::string magic = "COTTONTAIL_HAZEL_TXT_V1\n";
+    const std::string magic = hazel_txt_magic;
     addr header_length = magic.size() + 5 * sizeof(addr);
     if (txt_blob.length < header_length) {
       safe_error(error) = "Hazel txt blob is too short";
@@ -1143,7 +1143,7 @@ struct HazelMergeInput {
 
 std::string hazel_blob_dictionary(const std::vector<HazelBlob> &blobs) {
   std::ostringstream out(std::ios::out | std::ios::binary);
-  const std::string magic = "COTTONTAIL_HAZEL_BLOBS_V1\n";
+  const std::string magic = hazel_blob_dictionary_magic;
   out.write(magic.data(), magic.size());
   addr n = blobs.size();
   write_pod(&out, n);
@@ -1268,7 +1268,7 @@ struct HazelMergeOutput {
                  addr target_chunk_size, std::string *error) {
     HazelBlob &blob = blobs[1];
     blob.offset = out.tellp();
-    const std::string magic = "COTTONTAIL_HAZEL_TXT_V1\n";
+    const std::string magic = hazel_txt_magic;
     out.write(magic.data(), magic.size());
     write_pod<addr>(&out, 0);
     write_pod<addr>(&out, 0);
@@ -1334,7 +1334,7 @@ struct HazelMergeOutput {
       std::shared_ptr<SimplePostingFactory> factory, std::string *error) {
     HazelBlob &blob = blobs[0];
     blob.offset = out.tellp();
-    const std::string magic = "COTTONTAIL_HAZEL_IDX_V1\n";
+    const std::string magic = hazel_idx_magic;
     out.write(magic.data(), magic.size());
     write_pod<addr>(&out, 0);
     write_pod<addr>(&out, 0);

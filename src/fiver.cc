@@ -19,6 +19,7 @@
 #include "src/core.h"
 #include "src/fastid_txt.h"
 #include "src/featurizer.h"
+#include "src/hazel.h"
 #include "src/hopper.h"
 #include "src/null_idx.h"
 #include "src/null_txt.h"
@@ -929,7 +930,7 @@ bool hazel_write_idx_blob(
     const std::map<addr, std::shared_ptr<SimplePosting>> &index,
     addr *blob_start, addr *blob_length, std::string *error) {
   *blob_start = hazel_tellp(out);
-  const std::string magic = "COTTONTAIL_HAZEL_IDX_V1\n";
+  const std::string magic = hazel_idx_magic;
   out->write(magic.data(), magic.size());
   addr directory_offset = 0;
   addr directory_length = 0;
@@ -1033,7 +1034,7 @@ bool hazel_write_txt_blob(std::fstream *out, std::shared_ptr<Idx> idx,
                           addr *blob_start, addr *blob_length,
                           std::string *error) {
   *blob_start = hazel_tellp(out);
-  const std::string magic = "COTTONTAIL_HAZEL_TXT_V1\n";
+  const std::string magic = hazel_txt_magic;
   out->write(magic.data(), magic.size());
   addr directory_offset = 0;
   addr directory_length = 0;
@@ -1106,7 +1107,7 @@ bool hazel_write_txt_blob(std::fstream *out, std::shared_ptr<Idx> idx,
 
 std::string hazel_blob_dictionary(const std::vector<HazelBlob> &blobs) {
   std::ostringstream out(std::ios::out | std::ios::binary);
-  const std::string magic = "COTTONTAIL_HAZEL_BLOBS_V1\n";
+  const std::string magic = hazel_blob_dictionary_magic;
   out.write(magic.data(), magic.size());
   addr n = blobs.size();
   hazel_write_pod(&out, n);

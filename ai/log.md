@@ -109,3 +109,5 @@
 2026-06-01T14:58:27Z - Audited Hazel-facing documentation and refreshed stale current-state notes: `fiver2hazel` CLI modes, intermediate-Hazel preservation, Hazel txt activation wiring, Hazel merge raw-copy fast path, and the concrete mixed-shard Bigwig query-path review checkpoint.
 2026-06-01T15:03:32Z - Re-audited the Hazel/Bigwig discussion record, added the open sequence-stable `end()` -> `start()` Bigwig cache-lifetime question, and clarified that direct one-source hopper delegation does not bypass `NotContainedIn` deletion semantics.
 2026-06-01T15:04:25Z - Added durable notes for the current started-`BigwigIdx` merged-posting cache, its Fluffle-independent lifetime, and the existing raw feature/null-feature `NotContainedIn` deletion composition.
+2026-06-01T20:38:06Z - Removed `_V1` suffixes from Hazel section magic strings, centralized the stable strings in `src/hazel.h`, and updated the Hazel format note.
+2026-06-02T02:50:10Z - User regenerated and merged the `a.meadow` Hazel shards, verified the Hazel regression tests, and confirmed ranking correctness with `MRR @10: 0.18975923272843034` across `6980` queries.
