@@ -44,6 +44,7 @@ private:
   std::shared_ptr<Compressor> posting_compressor_;
   std::shared_ptr<Compressor> fvalue_compressor_;
 
+  friend class ArrayHopper;
   friend class SimplePostingFactory;
 };
 

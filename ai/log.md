@@ -111,3 +111,4 @@
 2026-06-01T15:04:25Z - Added durable notes for the current started-`BigwigIdx` merged-posting cache, its Fluffle-independent lifetime, and the existing raw feature/null-feature `NotContainedIn` deletion composition.
 2026-06-01T20:38:06Z - Removed `_V1` suffixes from Hazel section magic strings, centralized the stable strings in `src/hazel.h`, and updated the Hazel format note.
 2026-06-02T02:50:10Z - User regenerated and merged the `a.meadow` Hazel shards, verified the Hazel regression tests, and confirmed ranking correctness with `MRR @10: 0.18975923272843034` across `6980` queries.
+2026-06-02T17:12:18Z - Prepared ArrayHopper for deferred merged postings: added SimplePosting-backed binding, a CacheRecord-plus-SimplePosting completion path, private factory-backed construction, and verified `bazel build //...`.
