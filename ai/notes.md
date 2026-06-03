@@ -133,6 +133,17 @@
 - User reported removing `container` from `a.meadow/dna` still worked.
 - User reported post-fix ranking: `MRR @10: 0.18975923272843034`,
   `QueriesRanked: 6980`.
+- Batch TREC ranking now builds per-thread local Warren/Stats/Ranker views from
+  an unstarted source Warren plus explicit statistics name/recipe; `Stats` no
+  longer owns a clone operation.
+- `apps/rank` accepts `--statistics`, `--stats`, and `-s` with `name[:recipe]`.
+  It leaves Warren start/clone/statistics lifecycle to `trec(...)`.
+- `trec(..., threads=0)` selects the internal thread cap. Explicit thread
+  counts are still capped by `2 * hardware_concurrency()` and query count.
+- The refactor removes the old serialized `Stats::clone()` setup bottleneck,
+  but it does not yet guarantee all per-thread Warren clones bind to the same
+  read epoch. Clone-under-start or an explicit read snapshot remains a separate
+  system-level design question.
 
 ## Current Plan
 
@@ -154,12 +165,10 @@
 
 ## Current Local Worktree Notes
 
-- Recent local Hazel-related work includes `.gitignore`, `apps/BUILD`,
-  `apps/fiver2hazel.cc`, new `apps/scratch.cc`, deletion of old
-  `apps/working.cc`, `test/BUILD`, new `test/hazel.cc`, and updates under
-  `ai/`.
-- Recent compile checks already run by agents include:
-  `bazel build //apps:fiver2hazel`,
-  `bazel build //apps:scratch //apps:fiver2hazel`,
-  `bazel build //...`, and `bazel build //test:hazel_test`.
-- The user, not the agent, ran the Hazel regression test successfully.
+- Current uncommitted work is the ranking/TREC lifecycle refactor in
+  `src/stats.*`, `src/ranker.*`, and `apps/rank.cc`, plus matching `ai/`
+  documentation updates.
+- Agent verification for this work: `bazel build //apps:rank`,
+  `bazel build //...`, and `git diff --check`.
+- The user reported that the three ranking checks behaved as expected and that
+  regression tests passed.

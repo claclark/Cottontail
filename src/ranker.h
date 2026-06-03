@@ -1,8 +1,10 @@
 #ifndef COTTONTAIL_SRC_RANKER_H_
 #define COTTONTAIL_SRC_RANKER_H_
 
+#include <map>
 #include <memory>
 #include <random>
+#include <string>
 #include <vector>
 
 #include "src/core.h"
@@ -41,7 +43,8 @@ private:
   rank_(const std::string &query, std::map<std::string, fval> *parameters) = 0;
 };
 
-bool trec(std::shared_ptr<Stats> stats, const std::string &pipeline,
+bool trec(std::shared_ptr<Warren> warren, const std::string &stats_name,
+          const std::string &stats_recipe, const std::string &pipeline,
           std::map<std::string, std::string> queries,
           std::map<std::string, std::vector<std::string>> *results,
           std::string *error, size_t threads);

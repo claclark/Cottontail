@@ -2,9 +2,9 @@
 #include <exception>
 #include <fstream>
 #include <iostream>
+#include <limits>
 #include <map>
 #include <string>
-#include <thread>
 #include <vector>
 
 #include "src/cottontail.h"
@@ -14,14 +14,8 @@ namespace {
 void usage(const std::string &program_name) {
   std::cerr
       << "usage: " << program_name
-      << " [--verbose] [--threads n] [--burrow burrow] queries pipeline...\n";
-}
-
-size_t thread_limit() {
-  size_t hardware_threads = std::thread::hardware_concurrency();
-  if (hardware_threads == 0)
-    return 2;
-  return std::max((size_t)2, 2 * hardware_threads);
+      << " [--verbose] [--threads n] [--burrow burrow]"
+      << " [--statistics name[:recipe]] queries pipeline...\n";
 }
 
 } // namespace
@@ -35,9 +29,9 @@ int main(int argc, char **argv) {
 
   bool verbose = false;
   std::string burrow = "";
-  size_t max_threads = thread_limit();
-  size_t threads = max_threads;
-  bool requested_threads = false;
+  std::string stats_name = "tf-idf";
+  std::string stats_recipe = "";
+  size_t threads = 0;
   while (argc > 1) {
     if (argv[1] == std::string("-v") || argv[1] == std::string("--verbose")) {
       verbose = true;
@@ -48,12 +42,18 @@ int main(int argc, char **argv) {
     if (argc > 2 &&
         (argv[1] == std::string("-t") || argv[1] == std::string("--threads"))) {
       try {
-        int parsed_threads = std::stoi(argv[2]);
-        if (parsed_threads > 0) {
-          threads = parsed_threads;
-          requested_threads = true;
-        }
+        std::string argument = argv[2];
+        if (argument.size() == 0 || argument[0] == '-')
+          throw std::exception();
+        size_t end = 0;
+        unsigned long long parsed_threads = std::stoull(argument, &end);
+        if (end != argument.size() ||
+            parsed_threads > std::numeric_limits<size_t>::max())
+          throw std::exception();
+        threads = parsed_threads;
       } catch (std::exception &e) {
+        std::cerr << program_name << ": bad thread count: " << argv[2] << "\n";
+        return 1;
       }
       argc -= 2;
       argv += 2;
@@ -66,15 +66,24 @@ int main(int argc, char **argv) {
       argv += 2;
       continue;
     }
+    if (argc > 2 &&
+        (argv[1] == std::string("-s") || argv[1] == std::string("--stats") ||
+         argv[1] == std::string("--statistics"))) {
+      std::string statistics = argv[2];
+      size_t colon = statistics.find(":");
+      if (colon == std::string::npos) {
+        stats_name = statistics;
+        stats_recipe = "";
+      } else {
+        stats_name = statistics.substr(0, colon);
+        stats_recipe = statistics.substr(colon + 1);
+      }
+      argc -= 2;
+      argv += 2;
+      continue;
+    }
     break;
   }
-  if (threads > max_threads) {
-    if (requested_threads)
-      std::cerr << program_name << ": limiting threads to " << max_threads
-                << "\n";
-    threads = max_threads;
-  }
-
   if (argc < 3) {
     usage(program_name);
     return 1;
@@ -96,20 +105,10 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  warren->start();
-  std::shared_ptr<cottontail::Stats> stats =
-      cottontail::Stats::make(warren, &error);
-  if (stats == nullptr) {
-    std::cerr << program_name << ": " << error << "\n";
-    warren->end();
-    return 1;
-  }
-
   std::ifstream queriesf(queries_filename);
   if (queriesf.fail()) {
     std::cerr << program_name << ": can't open file: " + queries_filename
               << "\n";
-    warren->end();
     return 1;
   }
 
@@ -122,14 +121,12 @@ int main(int argc, char **argv) {
       separator = " ";
     if (line.find(separator) == std::string::npos) {
       std::cerr << program_name << ": weird query input: " << line;
-      warren->end();
       return 1;
     }
     std::string topic = line.substr(0, line.find(separator));
     std::string query = line.substr(line.find(separator));
     if (topic == "" || query == "") {
       std::cerr << program_name << ": weird query input: " << line;
-      warren->end();
       return 1;
     }
     queries[topic] = query;
@@ -142,12 +139,11 @@ int main(int argc, char **argv) {
     std::cerr << "Release the rankers...\n" << std::flush;
     t0 = cottontail::now();
   }
-  if (!cottontail::trec(stats, pipeline, queries, &results, &error, threads)) {
+  if (!cottontail::trec(warren, stats_name, stats_recipe, pipeline, queries,
+                        &results, &error, threads)) {
     std::cerr << program_name << ": " << error << "\n";
-    warren->end();
     return 1;
   }
-  warren->end();
   if (verbose) {
     time_t t1 = cottontail::now();
     std::cerr << "Ranking took: " << (t1 - t0) << " millisecond(s) \n"

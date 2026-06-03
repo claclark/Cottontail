@@ -22,9 +22,6 @@ public:
   static bool check(const std::string &name, const std::string &recipe,
                     std::string *error = nullptr);
 
-  inline std::shared_ptr<Stats> clone(std::string *error = nullptr) {
-    return clone_(error);
-  };
   inline std::string name() { return name_; }
   inline std::string recipe() { return recipe_(); }
   inline void end() { warren_->end(); }
@@ -67,7 +64,6 @@ private:
   std::shared_ptr<Stemmer> stemmer_;
   std::shared_ptr<Tokenizer> tokenizer_;
 
-  virtual std::shared_ptr<Stats> clone_(std::string *error);
   virtual std::string recipe_() { return ""; }
   virtual bool have_(const std::string &name) { return false; };
   virtual fval avgl_() { return 1; };

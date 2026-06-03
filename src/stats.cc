@@ -78,19 +78,6 @@ std::shared_ptr<Stats> Stats::make(const std::string &name,
   return stats;
 }
 
-std::shared_ptr<Stats> Stats::clone_(std::string *error) {
-  bool restart = warren()->started();
-  if (restart)
-    warren()->end();
-  std::shared_ptr<cottontail::Warren> w = warren()->clone(error);
-  if (restart)
-    warren()->start();
-  if (w == nullptr)
-    return nullptr;
-  w->start();
-  return Stats::make(name(), recipe(), w, error);
-}
-
 bool Stats::check(const std::string &name, const std::string &recipe,
                   std::string *error) {
   if (name == "") {

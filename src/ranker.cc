@@ -362,7 +362,8 @@ std::shared_ptr<Ranker> Ranker::from_pipeline(const std::string &pipeline,
   return Ranker::from_pipeline(pipeline, stats, error);
 }
 
-bool trec(std::shared_ptr<Stats> stats, const std::string &pipeline,
+bool trec(std::shared_ptr<Warren> warren, const std::string &stats_name,
+          const std::string &stats_recipe, const std::string &pipeline,
           std::map<std::string, std::string> queries,
           std::map<std::string, std::vector<std::string>> *results,
           std::string *error, size_t threads) {
@@ -370,75 +371,72 @@ bool trec(std::shared_ptr<Stats> stats, const std::string &pipeline,
     return true;
   assert(results != nullptr);
   results->clear();
-  {
-    std::shared_ptr<cottontail::Ranker> rank =
-        cottontail::Ranker::from_pipeline(pipeline, stats, error);
-    if (rank == nullptr)
-      return false;
-    addr p, q;
-    std::unique_ptr<cottontail::Hopper> id_hopper = stats->id_hopper();
-    if (id_hopper == nullptr) {
-      safe_error(error) = "Can't find identifiers";
-      return false;
-    }
-    id_hopper->tau(minfinity + 1, &p, &q);
-    if (p == maxfinity) {
-      safe_error(error) = "Can't find identifiers";
-      return false;
-    }
-  }
-  std::vector<std::string> topics;
+  std::vector<std::pair<std::string, std::string>> work;
   for (auto &q : queries)
-    topics.push_back(q.first);
+    work.push_back(q);
+  size_t hardware_threads = std::thread::hardware_concurrency();
+  size_t thread_cap = hardware_threads == 0 ? work.size() : 2 * hardware_threads;
   if (threads == 0)
-    threads = std::thread::hardware_concurrency() + 1;
-  threads = std::min(threads, topics.size());
-  std::mutex sync;
+    threads = thread_cap;
+  threads = std::min(threads, thread_cap);
+  threads = std::min(threads, work.size());
+  std::mutex clone_lock;
+  std::mutex state_lock;
   bool stop = false;
+
+  auto stopping = [&]() {
+    std::lock_guard<std::mutex> _(state_lock);
+    return stop;
+  };
+
+  auto fail = [&](const std::string &local_error) {
+    std::lock_guard<std::mutex> _(state_lock);
+    if (!stop) {
+      safe_set(error) = local_error;
+      stop = true;
+    }
+  };
+
   auto solver = [&](size_t i) {
     std::string local_error;
-    std::shared_ptr<Stats> local_stats;
+    std::shared_ptr<Warren> local_warren;
     {
-      std::lock_guard<std::mutex> _(sync);
-      if (stop)
+      std::lock_guard<std::mutex> _(clone_lock);
+      if (stopping())
         return;
-      local_stats = stats->clone(&local_error);
-      if (local_stats == nullptr) {
-        safe_set(error) = local_error;
-        stop = true;
-        return;
-      }
+      local_warren = warren->clone(&local_error);
+    }
+    if (local_warren == nullptr) {
+      fail(local_error);
+      return;
+    }
+    local_warren->start();
+    std::shared_ptr<Stats> local_stats;
+    local_stats =
+        Stats::make(stats_name, stats_recipe, local_warren, &local_error);
+    if (local_stats == nullptr) {
+      local_warren->end();
+      fail(local_error);
+      return;
     }
     std::shared_ptr<cottontail::Ranker> rank =
         cottontail::Ranker::from_pipeline(pipeline, local_stats, &local_error);
     if (rank == nullptr) {
       local_stats->end();
-      std::lock_guard<std::mutex> _(sync);
-      if (stop)
-        return;
-      safe_set(error) = local_error;
-      stop = true;
+      fail(local_error);
       return;
     }
     std::unique_ptr<cottontail::Hopper> id_hopper = local_stats->id_hopper();
     if (id_hopper == nullptr) {
       local_stats->end();
-      std::lock_guard<std::mutex> _(sync);
-      if (stop)
-        return;
-      safe_set(error) = "Can't find identifiers";
-      stop = true;
+      fail("Can't find identifiers");
       return;
     }
-    for (size_t j = i; j < topics.size(); j += threads) {
-      std::string topic, query;
-      {
-        std::lock_guard<std::mutex> _(sync);
-        if (stop)
-          return;
-        topic = topics[j];
-        query = queries[topic];
-      }
+    for (size_t j = i; j < work.size(); j += threads) {
+      if (stopping())
+        break;
+      const std::string &topic = work[j].first;
+      const std::string &query = work[j].second;
       std::vector<cottontail::RankingResult> ranking = (*rank)(query);
       std::vector<std::string> topic_results;
       topic_results.reserve(ranking.size());
@@ -449,9 +447,9 @@ bool trec(std::shared_ptr<Stats> stats, const std::string &pipeline,
           topic_results.push_back(local_stats->translate(p, q));
       }
       {
-        std::lock_guard<std::mutex> _(sync);
+        std::lock_guard<std::mutex> _(state_lock);
         if (stop)
-          return;
+          break;
         (*results)[topic] = std::move(topic_results);
       }
     }
