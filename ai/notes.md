@@ -112,12 +112,16 @@
 ## Current Bigwig Cache Status
 
 - A started `BigwigIdx` owns a `SafeMap<feature, SimplePosting>` cache for
-  posting lists merged across its Fiver view. `Fiver::merge(...)` consults this
-  caller-supplied cache.
+  posting lists merged across its current Fiver-only view. `Fiver::merge(...)`
+  consults this caller-supplied cache.
 - The cache is currently discarded with the started `BigwigIdx`; Fluffle does
   not own an idx cache.
 - When deletions exist, `BigwigIdx` caches raw feature and `null_feature`
   merges separately and composes their hoppers with `NotContainedIn`.
+- `ArrayHopper` already supports `SimplePosting`-backed construction and a
+  deferred `CacheRecord` plus `SimplePosting` construction path for future
+  Bigwig merged posting cache entries. Bigwig has not yet switched to that
+  cache representation.
 
 ## Current Meadowlark/Ranking Notes
 
@@ -145,14 +149,29 @@
   read epoch. Clone-under-start or an explicit read snapshot remains a separate
   system-level design question.
 
-## Current Plan
+## Active Mid-Flight Plan
 
-- Next Hazel milestone: review the concrete mixed Fiver/Hazel Bigwig query-path
-  plan with the user before coding.
-- The planned idx direction keeps Hazel's shard-local cache, adds asynchronous
-  Bigwig raw posting-list merge caching when multiple sub-indexes contribute,
-  delegates one-source features directly to the source idx hopper, and retains
-  the existing `NotContainedIn(feature, null_feature)` deletion composition.
+- `ai/plan.md` may describe Hazel integration work that is intentionally in
+  progress across multiple coding steps. Do not assume every item in the plan
+  is unimplemented; compare the plan with `ai/log.md`, current code, and this
+  notes file.
+- The current Hazel/Bigwig integration direction is to let started Bigwig query
+  across mixed Fiver and Hazel shards while preserving lazy loading, caching,
+  and query-level parallelism.
+- Some prerequisites may already be complete while later steps remain gated for
+  discussion or approval.
+- Before implementing from `ai/plan.md`, honor any explicit discussion gate in
+  the plan and confirm the intended next step with the user.
+
+## Current Hazel/Bigwig Integration Status
+
+- Hazel writer, standalone activation, Hazel-to-Hazel merge, conversion tools,
+  and dedicated Hazel regression coverage are in place.
+- Bigwig's started view still narrows live shards to `Fiver`; mixed Fiver/Hazel
+  started views are not complete.
+- The planned internal Idx posting-list hook, generic posting iterator, mixed
+  shard merge path, and generic-Warren Bigwig txt/idx view remain the next
+  integration area unless the user redirects.
 - A separate cache-lifetime question remains open: whether a Bigwig
   merged-posting cache should survive `end()` -> `start()` while the logical
   sequence remains unchanged. This is intentionally simpler than maintaining
@@ -165,10 +184,7 @@
 
 ## Current Local Worktree Notes
 
-- Current uncommitted work is the ranking/TREC lifecycle refactor in
-  `src/stats.*`, `src/ranker.*`, and `apps/rank.cc`, plus matching `ai/`
-  documentation updates.
-- Agent verification for this work: `bazel build //apps:rank`,
-  `bazel build //...`, and `git diff --check`.
-- The user reported that the three ranking checks behaved as expected and that
-  regression tests passed.
+- Do not rely on this section as durable truth without checking `git status`.
+- As of the latest reconnaissance, the worktree was clean.
+- If future agents record active uncommitted work here, include the date and
+  keep the note short enough to remove once the work lands or is abandoned.
