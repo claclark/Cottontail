@@ -215,9 +215,6 @@ cc_binary(
     srcs = [
       "parameters.cc",
     ],
-    copts = [
-      "'-std=c++14'",
-    ],
     deps = [
       "//src:cottontail",
    ],
@@ -234,9 +231,6 @@ cc_binary(
     deps = [
       "//src:cottontail",
     ],
-    copts = [
-      "'-std=c++14'",
-    ],
     linkopts = [
       "-lreadline -pthread"
     ],
@@ -251,9 +245,6 @@ cc_binary(
       "//src:cottontail",
       "collection",
     ],
-    copts = [
-      "'-std=c++14'",
-    ],
     linkopts = [
       "-pthread",
     ],
@@ -267,9 +258,6 @@ cc_binary(
     deps = [
       "//src:cottontail",
     ],
-    copts = [
-      "'-std=c++14'",
-    ],
     linkopts = [
       "-pthread",
     ],
@@ -282,9 +270,6 @@ cc_binary(
     ],
     deps = [
       "//src:cottontail",
-    ],
-    copts = [
-      "'-std=c++14'",
     ],
     linkopts = [
       "-pthread",
@@ -343,9 +328,6 @@ cc_binary(
     deps = [
       "//src:cottontail",
     ],
-    copts = [
-      "'-std=c++14'",
-    ],
     linkopts = [
       "-pthread",
     ],
@@ -359,9 +341,6 @@ cc_binary(
     deps = [
       "//src:cottontail",
     ] ,
-    copts = [
-      "'-std=c++14'",
-    ],
     linkopts = [
       "-pthread",
     ],
@@ -389,9 +368,6 @@ cc_binary(
       "//src:cottontail",
       "walk",
     ],
-    copts = [
-      "'-std=c++20'",
-    ],
     linkopts = [
       "-L/usr/local/lib -lboost_system -lboost_filesystem -pthread",
     ],
@@ -405,9 +381,6 @@ cc_binary(
     deps = [
       "//src:cottontail",
       "collection",
-    ],
-    copts = [
-      "'-std=c++14'",
     ],
     linkopts = [
       "-pthread",
@@ -437,9 +410,6 @@ cc_binary(
       "//src:cottontail",
       "collection",
     ],
-    copts = [
-      "'-std=c++14'",
-    ],
     linkopts = [
       "-pthread",
     ],
@@ -468,9 +438,6 @@ cc_binary(
       "//src:cottontail",
       "collection",
     ],
-    copts = [
-      "'-std=c++14'",
-    ],
     linkopts = [
       "-pthread",
     ],
@@ -498,9 +465,6 @@ cc_binary(
     deps = [
       "//src:cottontail",
       "collection",
-    ],
-    copts = [
-      "'-std=c++14'",
     ],
     linkopts = [
       "-pthread",

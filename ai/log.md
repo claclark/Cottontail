@@ -115,3 +115,4 @@
 2026-06-03T16:01:24Z - Refactored batch TREC ranking so worker threads clone/start local Warrens and build explicit statistics views independently, removed `Stats::clone`, added `rank --statistics/--stats/-s name[:recipe]`, and verified `bazel build //apps:rank` plus `bazel build //...`.
 2026-06-03T18:04:47Z - Moved TREC thread-count policy fully into `trec`: `rank` now only validates `--threads` as a `size_t`, while `trec` caps worker threads by `2 * hardware_concurrency()` and query count, with `threads=0` selecting the cap; verified `bazel build //apps:rank`.
 2026-06-04T11:31:26Z - Clarified `ai/notes.md` so mid-flight Hazel integration plans are normal, recorded the already-landed ArrayHopper deferred-posting preparation, and replaced stale local-worktree notes with a git-status reminder.
+2026-06-05T19:11:27Z - Switched Bazel builds to C++20 via `.bazelrc`, removed obsolete per-target standard copts from app targets, and verified `bazel build //...`.
