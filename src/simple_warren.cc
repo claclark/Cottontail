@@ -128,6 +128,14 @@ std::shared_ptr<Warren> SimpleWarren::clone_(std::string *error) {
       return nullptr;
     warren->stemmer_ = the_stemmer;
   }
+  warren->annotator_ = Annotator::make("null", "", error);
+  if (warren->annotator_ == nullptr)
+    return nullptr;
+  warren->appender_ = Appender::make("null", "", error);
+  if (warren->appender_ == nullptr)
+    return nullptr;
+  if (started())
+    warren->start();
   return warren;
 }
 

@@ -105,10 +105,6 @@ public:
     return get_parameter_(key, value, error);
   }
   inline std::shared_ptr<Warren> clone(std::string *error = nullptr) {
-    if (started_) {
-      safe_error(error) = "Can't clone warren after start of query processing";
-      return nullptr;
-    }
     return clone_(error);
   }
   virtual ~Warren(){};

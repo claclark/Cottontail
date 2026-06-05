@@ -1761,6 +1761,8 @@ std::shared_ptr<Warren> Hazel::clone_(std::string *error) {
   hazel->stemmer_ = stemmer_;
   hazel->annotator_ = annotator_;
   hazel->appender_ = appender_;
+  if (started())
+    hazel->start();
   return hazel;
 }
 

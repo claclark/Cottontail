@@ -380,6 +380,11 @@ bool trec(std::shared_ptr<Warren> warren, const std::string &stats_name,
     threads = thread_cap;
   threads = std::min(threads, thread_cap);
   threads = std::min(threads, work.size());
+  bool end_warren = false;
+  if (!warren->started()) {
+    warren->start();
+    end_warren = true;
+  }
   std::mutex clone_lock;
   std::mutex state_lock;
   bool stop = false;
@@ -410,7 +415,6 @@ bool trec(std::shared_ptr<Warren> warren, const std::string &stats_name,
       fail(local_error);
       return;
     }
-    local_warren->start();
     std::shared_ptr<Stats> local_stats;
     local_stats =
         Stats::make(stats_name, stats_recipe, local_warren, &local_error);
@@ -422,13 +426,13 @@ bool trec(std::shared_ptr<Warren> warren, const std::string &stats_name,
     std::shared_ptr<cottontail::Ranker> rank =
         cottontail::Ranker::from_pipeline(pipeline, local_stats, &local_error);
     if (rank == nullptr) {
-      local_stats->end();
+      local_warren->end();
       fail(local_error);
       return;
     }
     std::unique_ptr<cottontail::Hopper> id_hopper = local_stats->id_hopper();
     if (id_hopper == nullptr) {
-      local_stats->end();
+      local_warren->end();
       fail("Can't find identifiers");
       return;
     }
@@ -453,13 +457,15 @@ bool trec(std::shared_ptr<Warren> warren, const std::string &stats_name,
         (*results)[topic] = std::move(topic_results);
       }
     }
-    local_stats->end();
+    local_warren->end();
   };
   std::vector<std::thread> workers;
   for (size_t i = 0; i < threads; i++)
     workers.emplace_back(std::thread(solver, i));
   for (auto &worker : workers)
     worker.join();
+  if (end_warren)
+    warren->end();
   return !stop;
 }
 

@@ -46,6 +46,8 @@ std::shared_ptr<Stats> Stats::make(const std::string &name,
                                    const std::string &recipe,
                                    std::shared_ptr<Warren> warren,
                                    std::string *error) {
+  if (name == "")
+    return Stats::make(warren, error);
   std::shared_ptr<Stats> stats;
   if (meadowlark::is_meadow(warren)) {
     if (name == "tf-idf") {
@@ -54,8 +56,6 @@ std::shared_ptr<Stats> Stats::make(const std::string &name,
       safe_error(error) = "No meadowlark stats called: " + name;
       return nullptr;
     }
-  } else if (name == "") {
-    stats = std::shared_ptr<Stats>(new Stats(warren));
   } else if (name == "idf") {
     stats = IdfStats::make(recipe, warren, error);
   } else if (name == "df" || name == "tf") {

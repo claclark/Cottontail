@@ -23,6 +23,7 @@ Especially don't do these things without discussion and approval from the user.
   should be visible even when assertions are disabled.
 - Hazel cache loading should eventually use this for corrupted posting reads or
   decode failures before returning structured bogus fallback data.
+- Replace failsafe NullAppender/NullAnnotator with error logging equivalents.
 
 ## Text Deletions
 

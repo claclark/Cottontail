@@ -528,15 +528,31 @@ std::shared_ptr<Warren> Bigwig::clone_(std::string *error) {
       return nullptr;
     bigwig->stemmer_ = the_stemmer;
   }
+  warrens_lock_.lock();
+  if (warrens_valid_) {
+    for (auto &warren : warrens_)
+      bigwig->warrens_.push_back(warren);
+    bigwig->warrens_valid_ = true;
+    warrens_lock_.unlock();
+    bigwig->start();
+  } else {
+    warrens_lock_.unlock();
+  }
   return bigwig;
 }
 
 void Bigwig::start_() {
-  fluffle_->lock.lock();
-  for (auto &warren : fluffle_->warrens)
-    if (warren != nullptr && warren->name() == "fiver")
-      warrens_.push_back(std::static_pointer_cast<Fiver>(warren));
-  fluffle_->lock.unlock();
+  {
+    std::lock_guard<std::mutex> _(warrens_lock_);
+    if (!warrens_valid_) {
+      fluffle_->lock.lock();
+      for (auto &warren : fluffle_->warrens)
+        if (warren != nullptr && warren->name() == "fiver")
+          warrens_.push_back(std::static_pointer_cast<Fiver>(warren));
+      fluffle_->lock.unlock();
+      warrens_valid_ = true;
+    }
+  }
   idx_ = BigwigIdx::make(warrens_);
   assert(idx_ != nullptr);
   txt_ = Txt::wrap(txt_recipe_, BigwigTxt::make(warrens_));
@@ -544,7 +560,11 @@ void Bigwig::start_() {
 }
 
 void Bigwig::end_() {
-  warrens_.clear();
+  {
+    std::lock_guard<std::mutex> _(warrens_lock_);
+    warrens_valid_ = false;
+    warrens_.clear();
+  }
   idx_ = nullptr;
   txt_ = nullptr;
 }

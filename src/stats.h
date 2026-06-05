@@ -24,7 +24,6 @@ public:
 
   inline std::string name() { return name_; }
   inline std::string recipe() { return recipe_(); }
-  inline void end() { warren_->end(); }
   inline std::string translate(addr p, addr q) {
     return warren_->txt()->translate(p, q);
   }

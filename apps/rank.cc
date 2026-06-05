@@ -29,7 +29,7 @@ int main(int argc, char **argv) {
 
   bool verbose = false;
   std::string burrow = "";
-  std::string stats_name = "tf-idf";
+  std::string stats_name = "";
   std::string stats_recipe = "";
   size_t threads = 0;
   while (argc > 1) {
