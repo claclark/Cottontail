@@ -116,3 +116,7 @@
 2026-06-03T18:04:47Z - Moved TREC thread-count policy fully into `trec`: `rank` now only validates `--threads` as a `size_t`, while `trec` caps worker threads by `2 * hardware_concurrency()` and query count, with `threads=0` selecting the cap; verified `bazel build //apps:rank`.
 2026-06-04T11:31:26Z - Clarified `ai/notes.md` so mid-flight Hazel integration plans are normal, recorded the already-landed ArrayHopper deferred-posting preparation, and replaced stale local-worktree notes with a git-status reminder.
 2026-06-05T19:11:27Z - Switched Bazel builds to C++20 via `.bazelrc`, removed obsolete per-target standard copts from app targets, and verified `bazel build //...`.
+2026-06-06T12:20:11Z - Added an unhooked `src/cache_gate.h` one-way `CacheGate` abstraction with default-open construction and separate atomic-wait and mutex/CV implementations; verified with a direct header compile and `bazel build //...`.
+2026-06-06T15:50:31Z - Fixed the in-progress `ArrayHopper` cache/posting wait-and-bind sketch: corrected member references, repaired vector-size assertions, made `CacheRecord` gates start closed, and verified `src/array_hopper.h` with a direct header compile.
+2026-06-06T17:30:12Z - Converted existing `CacheRecord` publication sites in SimpleIdx, SimplePosting compressed-blob decoding, and Hazel cache fills to call `release()` on the new cache gate; verified `bazel build //...`.
+2026-06-06T21:39:19Z - Updated `ai/notes.md` to reflect the final CacheGate, CacheRecord release, and ArrayHopper wait/bind shape before committing the side quest.

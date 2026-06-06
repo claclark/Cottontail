@@ -297,10 +297,7 @@ void decompress_cache(std::unique_ptr<char[]> storage,
     qthread.join();
   if (pstp->fst > 0)
     fthread.join();
-  c->lock.lock();
-  c->ready = true;
-  c->lock.unlock();
-  c->condition.notify_all();
+  c->release();
 }
 } // namespace
 
@@ -333,7 +330,6 @@ std::shared_ptr<CacheRecord> SimpleIdx::load_cache(addr feature) {
   pst_->read(buffer, where, amount);
   PstRecord *pstp = reinterpret_cast<PstRecord *>(buffer);
   c->n = pstp->n;
-  c->ready = false;
   std::thread t(decompress_cache, std::move(storage), posting_compressor_,
                 fvalue_compressor_, c);
   t.detach();

@@ -90,9 +90,9 @@
 - Standalone Hazel files can be opened by `Warren::make(...)`, parse idx/txt
   blobs, construct hoppers from posting blobs, translate text through cached
   decompressed text chunks, and shallow-clone the Hazel Warren.
-- Hazel idx activation uses a CacheRecord-backed decoded posting cache.
+- Hazel idx activation uses a `CacheRecord`-backed decoded posting cache.
   Non-inline posting hoppers share cache lines; cache fills use a 16-reader
-  `ReadGate`.
+  `ReadGate` and publish completion through `CacheGate`.
 - Hazel txt activation loads the text map, uses a 16-reader `ReadGate`, keeps a
   mutex-protected `text_chunk_tag` hopper, and caches decompressed chunks
   without eviction.
@@ -118,10 +118,16 @@
   not own an idx cache.
 - When deletions exist, `BigwigIdx` caches raw feature and `null_feature`
   merges separately and composes their hoppers with `NotContainedIn`.
-- `ArrayHopper` already supports `SimplePosting`-backed construction and a
-  deferred `CacheRecord` plus `SimplePosting` construction path for future
-  Bigwig merged posting cache entries. Bigwig has not yet switched to that
-  cache representation.
+- `CacheGate` is a one-way completion gate. `CacheRecord` starts closed and
+  existing cache-fill paths call `release()` after storage is filled;
+  `SimplePosting` carries a default-open gate for future deferred posting
+  construction.
+- `ArrayHopper` supports raw-array, `CacheRecord`-backed, and
+  `SimplePosting`-backed construction. Deferred backings are waited on and
+  bound in out-of-line `ArrayHopper::bind()`; hopper-local `ready_` is plain
+  because hoppers are thread-local cursors.
+- Bigwig has not yet switched to a deferred merged-posting cache
+  representation.
 
 ## Current Meadowlark/Ranking Notes
 

@@ -199,11 +199,7 @@ bool locate_posting(const std::vector<HazelPostingEntry> &directory,
 }
 
 void mark_cache_ready(std::shared_ptr<CacheRecord> entry) {
-  {
-    std::lock_guard<std::mutex> lock(entry->lock);
-    entry->ready = true;
-  }
-  entry->condition.notify_all();
+  entry->release();
 }
 
 void fill_bogus_cache_entry(std::shared_ptr<CacheRecord> entry) {
@@ -347,7 +343,7 @@ private:
     entry->qostings = entry->postings;
     entry->fostings = nullptr;
     *entry->postings = p;
-    entry->ready = true;
+    entry->release();
     return entry;
   }
 
@@ -362,7 +358,6 @@ private:
     std::shared_ptr<CacheRecord> entry =
         std::shared_ptr<CacheRecord>(new CacheRecord);
     entry->n = directory_[index].count_or_p;
-    entry->ready = false;
     cache_[feature] = entry;
     *created = true;
     return entry;

@@ -197,9 +197,7 @@ bool SimplePostingFactory::cache_entry_from_compressed_blob(
     cache_line->postings = nullptr;
     cache_line->qostings = nullptr;
     cache_line->fostings = nullptr;
-    std::lock_guard<std::mutex> lock(cache_line->lock);
-    cache_line->ready = true;
-    cache_line->condition.notify_all();
+    cache_line->release();
     return true;
   }
 
@@ -252,11 +250,7 @@ bool SimplePostingFactory::cache_entry_from_compressed_blob(
     }
   }
 
-  {
-    std::lock_guard<std::mutex> lock(cache_line->lock);
-    cache_line->ready = true;
-  }
-  cache_line->condition.notify_all();
+  cache_line->release();
   return true;
 }
 

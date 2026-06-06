@@ -186,4 +186,37 @@ void ArrayHopper::ohr_(addr k, addr *p, addr *q, fval *v) {
   }
 }
 
+void ArrayHopper::bind() {
+  if (posting_storage_) {
+    posting_storage_->wait();
+    n_ = posting_storage_->postings_.size();
+    assert(n_ > 0);
+    postings_ = posting_storage_->postings_.data();
+    if (posting_storage_->qostings_.size() == 0) {
+      qostings_ = postings_;
+    } else {
+      assert(posting_storage_->qostings_.size() == n_);
+      qostings_ = posting_storage_->qostings_.data();
+    }
+    if (posting_storage_->fostings_.size() == 0) {
+      fostings_ = nullptr;
+    } else {
+      assert(posting_storage_->fostings_.size() == n_);
+      fostings_ = posting_storage_->fostings_.data();
+    }
+  } else if (cache_line_) {
+    cache_line_->wait();
+    n_ = cache_line_->n;
+    assert(n_ > 0);
+    postings_ = cache_line_->postings.get();
+    assert(postings_ != nullptr);
+    qostings_ = cache_line_->qostings.get();
+    assert(qostings_ != nullptr);
+    if (cache_line_->fostings == nullptr)
+      fostings_ = nullptr;
+    else
+      fostings_ = cache_line_->fostings.get();
+  }
+};
+
 } // namespace cottontail

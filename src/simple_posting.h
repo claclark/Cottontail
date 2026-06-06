@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 
+#include "src/cache_gate.h"
 #include "src/compressor.h"
 #include "src/core.h"
 #include "src/hopper.h"
@@ -31,13 +32,20 @@ public:
   SimplePosting &operator=(const SimplePosting &) = delete;
   SimplePosting(SimplePosting &&) = delete;
   SimplePosting &operator=(SimplePosting &&) = delete;
+  inline void wait() { gate_.wait(); };
+  inline void release() { gate_.open(); }
 
 private:
   SimplePosting(std::shared_ptr<Compressor> posting_compressor,
                 std::shared_ptr<Compressor> fvalue_compressor)
-      : posting_compressor_(posting_compressor),
+      : gate_(true), posting_compressor_(posting_compressor),
+        fvalue_compressor_(fvalue_compressor){};
+  SimplePosting(std::shared_ptr<Compressor> posting_compressor,
+                std::shared_ptr<Compressor> fvalue_compressor, bool open)
+      : gate_(open), posting_compressor_(posting_compressor),
         fvalue_compressor_(fvalue_compressor){};
   addr feature_;
+  CacheGate gate_;
   std::vector<addr> postings_;
   std::vector<addr> qostings_;
   std::vector<fval> fostings_;
