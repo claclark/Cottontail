@@ -366,7 +366,9 @@ bool trec(std::shared_ptr<Warren> warren, const std::string &stats_name,
           const std::string &stats_recipe, const std::string &pipeline,
           std::map<std::string, std::string> queries,
           std::map<std::string, std::vector<std::string>> *results,
-          std::string *error, size_t threads) {
+          std::string *error, size_t threads, addr *time) {
+  if (time != nullptr)
+    *time = 0;
   if (queries.size() == 0)
     return true;
   assert(results != nullptr);
@@ -387,6 +389,7 @@ bool trec(std::shared_ptr<Warren> warren, const std::string &stats_name,
   }
   std::mutex clone_lock;
   std::mutex state_lock;
+  std::vector<addr> worker_times(threads, 0);
   bool stop = false;
 
   auto stopping = [&]() {
@@ -436,6 +439,7 @@ bool trec(std::shared_ptr<Warren> warren, const std::string &stats_name,
       fail("Can't find identifiers");
       return;
     }
+    addr start = now();
     for (size_t j = i; j < work.size(); j += threads) {
       if (stopping())
         break;
@@ -457,6 +461,7 @@ bool trec(std::shared_ptr<Warren> warren, const std::string &stats_name,
         (*results)[topic] = std::move(topic_results);
       }
     }
+    worker_times[i] = now() - start;
     local_warren->end();
   };
   std::vector<std::thread> workers;
@@ -466,6 +471,8 @@ bool trec(std::shared_ptr<Warren> warren, const std::string &stats_name,
     worker.join();
   if (end_warren)
     warren->end();
+  if (!stop && time != nullptr)
+    *time = *std::max_element(worker_times.begin(), worker_times.end());
   return !stop;
 }
 

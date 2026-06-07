@@ -8,6 +8,100 @@ commands, binaries, and next steps that were later superseded. For current
 behavior and the active design checkpoint, see `ai/hazel.md`, `ai/notes.md`,
 and `ai/plan.md`.
 
+## 2026-06-07: Fiver/Hazel Blend Motivation Under New TREC Timer
+
+After adding `trec(..., addr *time = nullptr)`, `apps/rank --verbose` reports
+the maximum per-worker ranking-loop time. This is different from older
+`Ranking took:` entries in this file, which measured the outer `trec(...)`
+call. External `/usr/bin/time` wall/user/system/RSS values remain the best
+cross-era comparison.
+
+Common workload:
+
+```
+./rank.sh <burrow>
+```
+
+Pipeline:
+
+```
+bm25:b=0.68 bm25:k1=0.82 bm25:depth=10 stop stem bm25
+```
+
+Workload:
+
+- MARCO dev small queries.
+- Requested `--threads 2000` (`trec` still caps internally by hardware and
+  query count).
+- Rank binary was `bazel-bin/apps/rank`.
+
+Merged Hazel from `a.meadow`:
+
+```
+./rank.sh a.meadow/hazel.00000000000000000000.00000000000000000058
+```
+
+- Max worker ranking-loop time: `12583` ms.
+- Wall time: `0:14.08`.
+- User time: `204.41`.
+- System time: `10.15`.
+- CPU: `1523%`.
+- Max RSS: `5659140` KB.
+- Major page faults: `1`.
+- Minor page faults: `1505372`.
+- `MRR @10: 0.18975923272843034`.
+- `QueriesRanked: 6980`.
+- Fake result topics: `645252`, `970152`.
+
+Three-Fiver `a.meadow`:
+
+```
+./rank.sh a.meadow
+```
+
+- Max worker ranking-loop time: `25891` ms.
+- Wall time: `1:46.29`.
+- User time: `584.06`.
+- System time: `96.51`.
+- CPU: `640%`.
+- Max RSS: `67673128` KB.
+- Major page faults: `0`.
+- Minor page faults: `25829605`.
+- `MRR @10: 0.18975923272843034`.
+- `QueriesRanked: 6980`.
+- Fake result topics: `645252`, `970152`.
+
+Single-Fiver `b.meadow`:
+
+```
+./rank.sh b.meadow
+```
+
+- Max worker ranking-loop time: `6980` ms.
+- Wall time: `1:22.42`.
+- User time: `234.15`.
+- System time: `14.37`.
+- CPU: `301%`.
+- Max RSS: `21804204` KB.
+- Major page faults: `0`.
+- Minor page faults: `6313859`.
+- `MRR @10: 0.1896242666120888`.
+- `QueriesRanked: 6980`.
+- Fake result topics: `645252`, `970152`.
+
+Interpretation:
+
+- The large Fiver path can be very fast once hot (`b.meadow` loop around
+  `7` seconds), but opening/loading large Fivers dominates wall time and memory
+  (`82` seconds wall and about `21.8` GB RSS for `b.meadow`; `106` seconds wall
+  and about `67.7` GB RSS for three-Fiver `a.meadow`).
+- The merged Hazel path has a slower ranking loop than hot `b.meadow` on this
+  workload, but its end-to-end wall time and memory footprint are much better
+  (`14` seconds wall and about `5.7` GB RSS).
+- These measurements motivate a carefully blended Fiver/Hazel Bigwig path:
+  keep Fiver-like hot query behavior where it matters, while using Hazel to
+  avoid the startup and memory cost of very large static Fivers.
+
 ## 2026-05-26: Meadowlark Stemmer/Tokenizer Fix Observation
 
 After fixing Meadowlark tf-idf stats so ranking-view metadata/defaults initialize

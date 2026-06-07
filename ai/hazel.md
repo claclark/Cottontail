@@ -396,18 +396,22 @@ The current `hazel_txt` implementation:
 `translate(...)` is forgiving: impossible, inverted, out-of-range, or failed
 read/decompression requests return the empty string because the `Txt` API has
 no error channel. `HazelTxt::clone_()` is unsupported; Hazel Warren cloning is
-currently a shallow compatibility shim over shared components.
+a shallow Warren-level operation over shared immutable components.
 
-Hazel supports shallow Warren cloning. This is sufficient for current
-activation, ranking, and regression use, but the clone/caching model should be
-kept in mind during Bigwig integration.
+A clone of a started Hazel Warren starts the clone as well. Focused regression
+coverage checks that the clone remains readable after the source Hazel is
+ended.
 
 ## Bigwig Integration Notes
 
 The next agreed design discussion is narrower than full background lifecycle
-integration: let a started Bigwig query across a mixed set of Fiver and Hazel
-shards. The concrete idx cache/hopper direction is recorded in `ai/plan.md`.
-That plan must be reviewed with the user before implementation.
+integration. The larger destination is to let a started Bigwig query across a
+carefully blended set of Fiver and Hazel shards. The immediate next step is
+Fiver-only: introduce a `PostingIterator`-style raw posting-list path usable
+with both `SimplePosting` and `CacheRecord`, then integrate it into Bigwig for
+Fiver shards before Hazel participates in the live query path. The concrete idx
+cache/hopper direction is recorded in `ai/plan.md`. That plan must be reviewed
+with the user before implementation.
 
 The key query-path direction is:
 

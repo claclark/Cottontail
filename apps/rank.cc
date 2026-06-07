@@ -134,19 +134,16 @@ int main(int argc, char **argv) {
   }
 
   std::map<std::string, std::vector<std::string>> results;
-  cottontail::addr t0 = 0;
-  if (verbose) {
+  cottontail::addr ranking_time = 0;
+  if (verbose)
     std::cerr << "Release the rankers...\n" << std::flush;
-    t0 = cottontail::now();
-  }
   if (!cottontail::trec(warren, stats_name, stats_recipe, pipeline, queries,
-                        &results, &error, threads)) {
+                        &results, &error, threads, &ranking_time)) {
     std::cerr << program_name << ": " << error << "\n";
     return 1;
   }
   if (verbose) {
-    time_t t1 = cottontail::now();
-    std::cerr << "Ranking took: " << (t1 - t0) << " millisecond(s) \n"
+    std::cerr << "Ranking took: " << ranking_time << " millisecond(s) \n"
               << std::flush;
   }
 

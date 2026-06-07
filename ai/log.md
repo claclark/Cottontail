@@ -121,3 +121,5 @@
 2026-06-06T17:30:12Z - Converted existing `CacheRecord` publication sites in SimpleIdx, SimplePosting compressed-blob decoding, and Hazel cache fills to call `release()` on the new cache gate; verified `bazel build //...`.
 2026-06-06T21:39:19Z - Updated `ai/notes.md` to reflect the final CacheGate, CacheRecord release, and ArrayHopper wait/bind shape before committing the side quest.
 2026-06-07T12:28:32Z - Added Hazel and Bigwig regression coverage for started Warren clones preserving a readable snapshot; verified `bazel build //test:hazel_test //test:tests`.
+2026-06-07T12:44:50Z - Added optional max-worker ranking-loop timing output to `trec` and wired `apps/rank` verbose timing through it; verified `bazel build //apps:rank`.
+2026-06-07T13:05:35Z - Refreshed restart notes for the Fiver/Hazel blend: recorded June 7 ranking measurements, updated clone/timer status, and narrowed the next Bigwig plan to a Fiver-only `PostingIterator` step before Hazel integration.

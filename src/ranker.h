@@ -47,7 +47,7 @@ bool trec(std::shared_ptr<Warren> warren, const std::string &stats_name,
           const std::string &stats_recipe, const std::string &pipeline,
           std::map<std::string, std::string> queries,
           std::map<std::string, std::vector<std::string>> *results,
-          std::string *error, size_t threads);
+          std::string *error, size_t threads, addr *time = nullptr);
 
 } // namespace cottontail
 

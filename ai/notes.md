@@ -17,6 +17,9 @@
 - `Warren` (`src/warren.h`) is the central query/mutation interface. It owns or
   exposes `Working`, `Featurizer`, `Tokenizer`, `Idx`, `Txt`, `Annotator`, and
   `Appender`. Query access to `idx()` and `txt()` requires `start()`/`end()`.
+- A clone of a started Warren should preserve the same read snapshot and come
+  back started. Cloning does not clone an active write transaction; writers must
+  call `transaction()` on their own clone.
 - `Working` (`src/working.h`) abstracts filesystem storage, naming, temp files,
   readers/writers, and preload hints.
 - `SimpleWarren` is the flat-file Warren implementation reconstructed from DNA
@@ -104,7 +107,9 @@
 - `test/hazel.cc` is the completed Hazel regression test. It builds a no-merge
   Bigwig from small text files, converts each Fiver to Hazel, compares
   Fiver-vs-Hazel shard behavior, merges Hazels, and compares the merged Hazel
-  against the source Bigwig with null, real, and bad compressor profiles.
+  against the source Bigwig with null, real, and bad compressor profiles. It
+  also checks that started Hazel clones stay started and remain readable after
+  the source Hazel is ended.
 - User ran `bazel test //test:hazel_test` successfully on 2026-05-26.
 - Hazel performance milestones and rank.sh measurements live in
   `ai/hazel-progress.md`.
@@ -128,6 +133,10 @@
   because hoppers are thread-local cursors.
 - Bigwig has not yet switched to a deferred merged-posting cache
   representation.
+- Started Bigwig clones preserve the source read view without cloning an active
+  write transaction; a clone that wants to write must call `transaction()`
+  itself. Focused regression coverage checks that a started Bigwig clone stays
+  readable after the parent ends and after the parent commits new content.
 
 ## Current Meadowlark/Ranking Notes
 
@@ -150,10 +159,37 @@
   It leaves Warren start/clone/statistics lifecycle to `trec(...)`.
 - `trec(..., threads=0)` selects the internal thread cap. Explicit thread
   counts are still capped by `2 * hardware_concurrency()` and query count.
-- The refactor removes the old serialized `Stats::clone()` setup bottleneck,
-  but it does not yet guarantee all per-thread Warren clones bind to the same
-  read epoch. Clone-under-start or an explicit read snapshot remains a separate
-  system-level design question.
+- `trec(..., addr *time = nullptr)` reports the maximum per-worker ranking-loop
+  time in milliseconds when provided. On failure, the output time remains `0`.
+  `apps/rank --verbose` reports this timing, not outer wall time around setup
+  and result printing.
+- The refactor removes the old serialized `Stats::clone()` setup bottleneck.
+  With the started-Warren clone invariant, per-thread Warren clones are expected
+  to bind to the same read snapshot when cloned from an already-started source
+  Warren.
+
+## Current Ranking Measurements
+
+- `rank.sh` measurements live in `ai/hazel-progress.md`. After 2026-06-07,
+  `Ranking took:` from `apps/rank --verbose` is the max per-worker ranking-loop
+  time, not outer `trec(...)` wall time.
+- `a.meadow/` in the repo root currently contains three large Fivers
+  (`0..11`, `12..37`, `38..58`) plus matching per-Fiver Hazels and merged Hazel
+  `hazel.00000000000000000000.00000000000000000058`.
+- `b.meadow/` currently contains one large Fiver covering `0..58`.
+- User-reported 2026-06-07 MARCO dev small runs with requested `--threads
+  2000`:
+  - merged Hazel from `a.meadow`: max worker ranking loop `12583` ms, wall
+    `0:14.08`, CPU `1523%`, max RSS `5659140` KB, `MRR @10:
+    0.18975923272843034`.
+  - `a.meadow`: max worker ranking loop `25891` ms, wall `1:46.29`, CPU
+    `640%`, max RSS `67673128` KB, same `MRR @10`.
+  - `b.meadow`: max worker ranking loop `6980` ms, wall `1:22.42`, CPU
+    `301%`, max RSS `21804204` KB, `MRR @10: 0.1896242666120888`.
+- These measurements support the Fiver/Hazel blend direction: large Fivers can
+  be very fast once hot but expensive to open and hold in memory; merged Hazel
+  has a slightly slower hot loop on this workload but much lower wall time and
+  memory use.
 
 ## Active Mid-Flight Plan
 
@@ -161,9 +197,11 @@
   progress across multiple coding steps. Do not assume every item in the plan
   is unimplemented; compare the plan with `ai/log.md`, current code, and this
   notes file.
-- The current Hazel/Bigwig integration direction is to let started Bigwig query
-  across mixed Fiver and Hazel shards while preserving lazy loading, caching,
-  and query-level parallelism.
+- The current Hazel/Bigwig integration direction is still a finely crafted
+  Fiver/Hazel blend, but the next implementation step is narrower: introduce a
+  `PostingIterator`-style raw posting-list path usable with both
+  `SimplePosting` and `CacheRecord`, then integrate it into Bigwig for Fivers
+  only before adding Hazel to the live mixed-shard query path.
 - Some prerequisites may already be complete while later steps remain gated for
   discussion or approval.
 - Before implementing from `ai/plan.md`, honor any explicit discussion gate in
@@ -173,11 +211,12 @@
 
 - Hazel writer, standalone activation, Hazel-to-Hazel merge, conversion tools,
   and dedicated Hazel regression coverage are in place.
-- Bigwig's started view still narrows live shards to `Fiver`; mixed Fiver/Hazel
-  started views are not complete.
-- The planned internal Idx posting-list hook, generic posting iterator, mixed
-  shard merge path, and generic-Warren Bigwig txt/idx view remain the next
-  integration area unless the user redirects.
+- Bigwig's started view still narrows live shards to `Fiver`; this is
+  intentional for the next Fiver-only iterator step.
+- The planned internal Idx posting-list hook and `PostingIterator` abstraction
+  are the next integration area. The generic-Warren Bigwig txt/idx view and
+  mixed Fiver/Hazel merge path come after the Fiver-only iterator path is
+  validated.
 - A separate cache-lifetime question remains open: whether a Bigwig
   merged-posting cache should survive `end()` -> `start()` while the logical
   sequence remains unchanged. This is intentionally simpler than maintaining
@@ -191,6 +230,5 @@
 ## Current Local Worktree Notes
 
 - Do not rely on this section as durable truth without checking `git status`.
-- As of the latest reconnaissance, the worktree was clean.
-- If future agents record active uncommitted work here, include the date and
-  keep the note short enough to remove once the work lands or is abandoned.
+- No durable local worktree state is recorded here. Check `git status` after
+  every restart.
