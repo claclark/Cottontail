@@ -168,6 +168,27 @@ void basic(bool merge, std::shared_ptr<cottontail::Working> working = nullptr) {
   EXPECT_EQ(i, 11);
 }
 
+namespace {
+
+cottontail::addr count_gcl(std::shared_ptr<cottontail::Warren> warren,
+                           const std::string &gcl) {
+  std::string error;
+  std::unique_ptr<cottontail::Hopper> hopper =
+      warren->hopper_from_gcl(gcl, &error);
+  EXPECT_EQ(error, "") << error;
+  EXPECT_NE(hopper, nullptr);
+  if (hopper == nullptr)
+    return -1;
+  cottontail::addr p, q;
+  cottontail::addr count = 0;
+  for (hopper->tau(0, &p, &q); p < cottontail::maxfinity;
+       hopper->tau(p + 1, &p, &q))
+    count++;
+  return count;
+}
+
+} // namespace
+
 TEST(Bigwig, Basic) {
   basic(false);
   basic(true);
@@ -276,6 +297,47 @@ TEST(Bigwig, Two) {
   EXPECT_EQ(q, cottontail::maxfinity);
   wig->end();
   big->end();
+}
+
+TEST(Bigwig, StartedClonePreservesReadView) {
+  std::shared_ptr<cottontail::Featurizer> featurizer =
+      cottontail::Featurizer::make("hashing", "");
+  ASSERT_NE(featurizer, nullptr);
+  std::shared_ptr<cottontail::Tokenizer> tokenizer =
+      cottontail::Tokenizer::make("ascii", "");
+  ASSERT_NE(tokenizer, nullptr);
+  std::shared_ptr<cottontail::Bigwig> bigwig =
+      cottontail::Bigwig::make(nullptr, featurizer, tokenizer);
+  ASSERT_NE(bigwig, nullptr);
+
+  cottontail::addr p, q;
+  ASSERT_TRUE(bigwig->transaction());
+  ASSERT_TRUE(bigwig->appender()->append("alpha beta", &p, &q));
+  ASSERT_TRUE(bigwig->ready());
+  bigwig->commit();
+
+  bigwig->start();
+  EXPECT_EQ(count_gcl(bigwig, "alpha"), 1);
+  std::string error;
+  std::shared_ptr<cottontail::Warren> clone = bigwig->clone(&error);
+  ASSERT_NE(clone, nullptr) << error;
+  ASSERT_TRUE(clone->started());
+  EXPECT_EQ(count_gcl(clone, "alpha"), 1);
+
+  bigwig->end();
+  ASSERT_TRUE(clone->started());
+  EXPECT_EQ(count_gcl(clone, "alpha"), 1);
+
+  ASSERT_TRUE(bigwig->transaction());
+  ASSERT_TRUE(bigwig->appender()->append("alpha gamma", &p, &q));
+  ASSERT_TRUE(bigwig->ready());
+  bigwig->commit();
+  EXPECT_EQ(count_gcl(clone, "alpha"), 1);
+
+  clone->end();
+  bigwig->start();
+  EXPECT_EQ(count_gcl(bigwig, "alpha"), 2);
+  bigwig->end();
 }
 
 void tiger(cottontail::addr n) {

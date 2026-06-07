@@ -47,7 +47,7 @@ Especially don't do these things without discussion and approval from the user.
 - Consider adding a dedicated exclusion/null merge helper instead of relying on
   ordinary posting-list merge behavior.
 
-## Split Test Targets
+## Split Test Targets and improve regression testing generally
 
 - The old aggregate `//test:tests` target makes it awkward to run or reason
   about one focused regression at a time.
@@ -59,3 +59,4 @@ Especially don't do these things without discussion and approval from the user.
   regressions declare their own size/resources.
 - When splitting, keep shared fixtures explicit and avoid hiding runtime-heavy
   tests inside broad default targets.
+- Review regression test suite for deficiencies.

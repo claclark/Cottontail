@@ -386,6 +386,20 @@ void expect_warrens_eq(std::shared_ptr<cottontail::Warren> left,
   expect_gcl_eq(left, right, "love", true);
 }
 
+void expect_started_clone_eq(std::shared_ptr<cottontail::Warren> source,
+                             std::shared_ptr<cottontail::Warren> warren) {
+  ASSERT_TRUE(warren->started());
+  std::string error;
+  std::shared_ptr<cottontail::Warren> clone = warren->clone(&error);
+  ASSERT_NE(clone, nullptr) << error;
+  ASSERT_TRUE(clone->started());
+  expect_warrens_eq(warren, clone);
+  warren->end();
+  ASSERT_TRUE(clone->started());
+  expect_warrens_eq(source, clone);
+  clone->end();
+}
+
 std::shared_ptr<cottontail::Warren> open_started(const std::string &burrow) {
   std::string error;
   std::shared_ptr<cottontail::Warren> warren =
@@ -448,7 +462,7 @@ void run_hazel_merge_regression(cottontail::addr chunk_size,
   ASSERT_NE(merged, nullptr);
   expect_warrens_eq(source, merged);
   expect_gcl_eq(source, merged, "\"Let me count the ways\"", true);
-  merged->end();
+  expect_started_clone_eq(source, merged);
   source->end();
 }
 
