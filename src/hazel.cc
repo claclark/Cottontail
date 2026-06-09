@@ -36,23 +36,6 @@ namespace cottontail {
 
 namespace {
 
-const std::string text_chunk_tag = "\035"; // ASCII group separator
-
-template <typename T> T read_pod(const char *data) {
-  T value;
-  memcpy(&value, data, sizeof(T));
-  return value;
-}
-
-template <typename T> bool read_pod(std::fstream *in, T *value) {
-  in->read(reinterpret_cast<char *>(value), sizeof(T));
-  return !in->fail();
-}
-
-template <typename T> void write_pod(std::ostream *out, T value) {
-  out->write(reinterpret_cast<char *>(&value), sizeof(T));
-}
-
 class HazelFile final {
 public:
   static std::shared_ptr<HazelFile> make(const std::string &filename,
@@ -97,14 +80,8 @@ private:
   std::mutex mutex_;
 };
 
-struct HazelBlob {
-  std::string name;
-  addr offset;
-  addr length;
-};
-
 bool skip_hazel_dna(std::fstream *in, std::string *error) {
-  const std::string magic = "#COTTONTAIL\n";
+  const std::string magic = cottontail_file_magic;
   std::string actual(magic.size(), '\0');
   in->read(&actual[0], actual.size());
   if (actual != magic) {
@@ -178,12 +155,6 @@ bool compressor_from_recipe(const std::string &recipe,
   *compressor = Compressor::make(name->second, subrecipe->second, error);
   return *compressor != nullptr;
 }
-
-struct HazelPostingEntry {
-  addr feature;
-  addr end;
-  addr count_or_p;
-};
 
 bool locate_posting(const std::vector<HazelPostingEntry> &directory,
                     addr feature, size_t *index) {
@@ -424,11 +395,6 @@ private:
   std::map<addr, std::shared_ptr<CacheRecord>> cache_;
   std::mutex cache_lock_;
   std::shared_ptr<SimplePostingFactory> posting_factory_;
-};
-
-struct HazelTextEntry {
-  addr raw_byte_end;
-  addr compressed_byte_end;
 };
 
 struct HazelTextCacheEntry {
@@ -744,18 +710,6 @@ private:
   addr token_end_ = maxfinity;
 };
 
-std::string seq2str(addr sequence) {
-  std::stringstream ss;
-  ss.fill('0');
-  ss.width(20);
-  ss << sequence;
-  return ss.str();
-}
-
-std::string hazel_default_name(addr sequence_start, addr sequence_end) {
-  return "hazel." + seq2str(sequence_start) + "." + seq2str(sequence_end);
-}
-
 bool parse_hazel_name(const std::string &name, addr *sequence_start,
                       addr *sequence_end) {
   const std::string prefix = "hazel.";
@@ -845,7 +799,7 @@ struct HazelMergeInput {
   }
 
   bool read_file_header(std::string *error) {
-    const std::string magic = "#COTTONTAIL\n";
+    const std::string magic = cottontail_file_magic;
     std::string actual(magic.size(), '\0');
     in.read(&actual[0], actual.size());
     if (actual != magic) {
@@ -1136,22 +1090,6 @@ struct HazelMergeInput {
   }
 };
 
-std::string hazel_blob_dictionary(const std::vector<HazelBlob> &blobs) {
-  std::ostringstream out(std::ios::out | std::ios::binary);
-  const std::string magic = hazel_blob_dictionary_magic;
-  out.write(magic.data(), magic.size());
-  addr n = blobs.size();
-  write_pod(&out, n);
-  for (auto &blob : blobs) {
-    addr name_length = blob.name.size();
-    write_pod(&out, name_length);
-    out.write(blob.name.data(), blob.name.size());
-    write_pod(&out, blob.offset);
-    write_pod(&out, blob.length);
-  }
-  return out.str();
-}
-
 struct HazelMergeOutput {
   std::string filename;
   std::fstream out;
@@ -1166,7 +1104,7 @@ struct HazelMergeOutput {
       safe_error(error) = "Hazel merge can't create shard: " + filename;
       return false;
     }
-    const std::string file_header = "#COTTONTAIL\n";
+    const std::string file_header = cottontail_file_magic;
     std::string dictionary = hazel_blob_dictionary(blobs);
     out.write(file_header.data(), file_header.size());
     out.write(dna.data(), dna.size());

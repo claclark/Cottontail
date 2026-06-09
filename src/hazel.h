@@ -7,14 +7,11 @@
 #include <vector>
 
 #include "src/core.h"
+#include "src/owsla.h"
 #include "src/warren.h"
 #include "src/working.h"
 
 namespace cottontail {
-
-constexpr char hazel_blob_dictionary_magic[] = "COTTONTAIL_HAZEL_BLOBS\n";
-constexpr char hazel_idx_magic[] = "COTTONTAIL_HAZEL_IDX\n";
-constexpr char hazel_txt_magic[] = "COTTONTAIL_HAZEL_TXT\n";
 
 class Hazel final : public Warren {
 public:

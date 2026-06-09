@@ -8,6 +8,7 @@
 #include "src/core.h"
 #include "src/dna.h"
 #include "src/hazel.h"
+#include "src/owsla.h"
 #include "src/recipe.h"
 #include "src/simple_warren.h"
 #include "src/stats.h"
@@ -75,7 +76,7 @@ std::shared_ptr<Warren> single_file_burrow(const std::string &burrow,
     safe_error(error) = "Can't open burrow: " + burrow;
     return nullptr;
   }
-  const std::string magic = "#COTTONTAIL\n";
+  const std::string magic = cottontail_file_magic;
   std::string actual(magic.size(), '\0');
   in.read(&actual[0], actual.size());
   if (actual != magic) {

@@ -5,6 +5,11 @@ are not committed plans unless promoted into `ai/plan.md`.
 
 Especially don't do these things without discussion and approval from the user.
 
+## Directory-level locking
+
+- Ensure only one process (i.e., one flufle) is manipulating the databases at
+  any one time.
+
 ## Txt Wrapping
 
 - Revisit `Txt::wrap(...)` and the general wrapper model.

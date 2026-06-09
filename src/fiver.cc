@@ -23,6 +23,7 @@
 #include "src/hopper.h"
 #include "src/null_idx.h"
 #include "src/null_txt.h"
+#include "src/owsla.h"
 #include "src/recipe.h"
 #include "src/safe_map.h"
 #include "src/simple.h"
@@ -34,8 +35,6 @@
 namespace cottontail {
 
 constexpr addr staging = maxfinity / 2;
-const std::string transaction_tag = "\034"; // ASCII file separator
-const std::string text_chunk_tag = "\035";  // ASCII group separator
 
 class FiverAnnotator : public Annotator {
 public:
@@ -558,16 +557,6 @@ void Fiver::get_sequence(addr *start, addr *end) {
   *end = sequence_end_;
 }
 
-namespace {
-std::string seq2str(addr sequence) {
-  std::stringstream ss;
-  ss.fill('0');
-  ss.width(20);
-  ss << sequence;
-  return ss.str();
-}
-} // namespace
-
 std::string Fiver::recipe_() {
   return seq2str(sequence_start_) + "." + seq2str(sequence_end_);
 }
@@ -848,33 +837,6 @@ Fiver::unpickle(const std::string &filename, std::shared_ptr<Working> working,
 
 namespace {
 
-struct HazelBlob {
-  std::string name;
-  addr offset;
-  addr length;
-};
-
-struct HazelPostingEntry {
-  addr feature;
-  addr end;
-  addr count;
-};
-
-struct HazelTextEntry {
-  addr raw_end;
-  addr compressed_end;
-};
-
-template <typename T> void hazel_write_pod(std::ostream *out, const T &value) {
-  out->write(reinterpret_cast<const char *>(&value), sizeof(value));
-}
-
-void hazel_write_string(std::ostream *out, const std::string &value) {
-  addr length = value.size();
-  hazel_write_pod(out, length);
-  out->write(value.data(), value.size());
-}
-
 std::string hazel_package(const std::string &name, const std::string &recipe) {
   std::map<std::string, std::string> parameters;
   parameters["name"] = name;
@@ -935,21 +897,21 @@ bool hazel_write_idx_blob(
   addr directory_offset = 0;
   addr directory_length = 0;
   addr directory_count = 0;
-  hazel_write_pod(out, directory_offset);
-  hazel_write_pod(out, directory_length);
-  hazel_write_pod(out, directory_count);
+  write_pod(out, directory_offset);
+  write_pod(out, directory_length);
+  write_pod(out, directory_count);
 
   std::vector<HazelPostingEntry> directory;
   for (auto &posting : index) {
     HazelPostingEntry entry;
     entry.feature = posting.first;
     entry.end = hazel_tellp(out) - *blob_start;
-    entry.count = posting.second->size();
+    entry.count_or_p = posting.second->size();
     addr p, q;
     fval v;
-    if (entry.count == 1 && posting.second->get(0, &p, &q, &v) && p == q &&
-        v == 0.0) {
-      entry.count = p;
+    if (entry.count_or_p == 1 && posting.second->get(0, &p, &q, &v) &&
+        p == q && v == 0.0) {
+      entry.count_or_p = p;
     } else {
       posting.second->write(out);
       entry.end = hazel_tellp(out) - *blob_start;
@@ -963,16 +925,16 @@ bool hazel_write_idx_blob(
   directory_offset = hazel_tellp(out) - *blob_start;
   directory_count = directory.size();
   for (auto &entry : directory) {
-    hazel_write_pod(out, entry.feature);
-    hazel_write_pod(out, entry.end);
-    hazel_write_pod(out, entry.count);
+    write_pod(out, entry.feature);
+    write_pod(out, entry.end);
+    write_pod(out, entry.count_or_p);
   }
   directory_length = hazel_tellp(out) - *blob_start - directory_offset;
   *blob_length = hazel_tellp(out) - *blob_start;
   out->seekp(*blob_start + magic.size());
-  hazel_write_pod(out, directory_offset);
-  hazel_write_pod(out, directory_length);
-  hazel_write_pod(out, directory_count);
+  write_pod(out, directory_offset);
+  write_pod(out, directory_length);
+  write_pod(out, directory_count);
   out->seekp(*blob_start + *blob_length);
   if (out->fail()) {
     safe_error(error) = "Fiver failed to write Hazel idx directory";
@@ -1015,9 +977,9 @@ bool hazel_write_text_chunk(std::fstream *out, addr chunk_space_start,
                    &compressed, error))
     return false;
   HazelTextEntry entry;
-  entry.raw_end = raw_start + raw_length;
+  entry.raw_byte_end = raw_start + raw_length;
   out->write(compressed.data(), compressed.size());
-  entry.compressed_end = hazel_tellp(out) - chunk_space_start;
+  entry.compressed_byte_end = hazel_tellp(out) - chunk_space_start;
   directory->push_back(entry);
   if (out->fail()) {
     safe_error(error) = "Fiver failed to write Hazel txt chunk";
@@ -1040,11 +1002,11 @@ bool hazel_write_txt_blob(std::fstream *out, std::shared_ptr<Idx> idx,
   addr directory_length = 0;
   addr directory_count = 0;
   addr raw_text_length = text.size();
-  hazel_write_pod(out, directory_offset);
-  hazel_write_pod(out, directory_length);
-  hazel_write_pod(out, directory_count);
-  hazel_write_pod(out, raw_text_length);
-  hazel_write_pod(out, target_chunk_size);
+  write_pod(out, directory_offset);
+  write_pod(out, directory_length);
+  write_pod(out, directory_count);
+  write_pod(out, raw_text_length);
+  write_pod(out, target_chunk_size);
   addr chunk_space_start = hazel_tellp(out);
 
   std::vector<HazelTextEntry> directory;
@@ -1086,41 +1048,23 @@ bool hazel_write_txt_blob(std::fstream *out, std::shared_ptr<Idx> idx,
   directory_offset = directory_start - chunk_space_start;
   directory_count = directory.size();
   for (auto &entry : directory) {
-    hazel_write_pod(out, entry.raw_end);
-    hazel_write_pod(out, entry.compressed_end);
+    write_pod(out, entry.raw_byte_end);
+    write_pod(out, entry.compressed_byte_end);
   }
   directory_length = hazel_tellp(out) - directory_start;
   *blob_length = hazel_tellp(out) - *blob_start;
   out->seekp(*blob_start + magic.size());
-  hazel_write_pod(out, directory_offset);
-  hazel_write_pod(out, directory_length);
-  hazel_write_pod(out, directory_count);
-  hazel_write_pod(out, raw_text_length);
-  hazel_write_pod(out, target_chunk_size);
+  write_pod(out, directory_offset);
+  write_pod(out, directory_length);
+  write_pod(out, directory_count);
+  write_pod(out, raw_text_length);
+  write_pod(out, target_chunk_size);
   out->seekp(*blob_start + *blob_length);
   if (out->fail()) {
     safe_error(error) = "Fiver failed to write Hazel txt directory";
     return false;
   }
   return true;
-}
-
-std::string hazel_blob_dictionary(const std::vector<HazelBlob> &blobs) {
-  std::ostringstream out(std::ios::out | std::ios::binary);
-  const std::string magic = hazel_blob_dictionary_magic;
-  out.write(magic.data(), magic.size());
-  addr n = blobs.size();
-  hazel_write_pod(&out, n);
-  for (auto &blob : blobs) {
-    hazel_write_string(&out, blob.name);
-    hazel_write_pod(&out, blob.offset);
-    hazel_write_pod(&out, blob.length);
-  }
-  return out.str();
-}
-
-std::string hazel_default_name(addr sequence_start, addr sequence_end) {
-  return "hazel." + seq2str(sequence_start) + "." + seq2str(sequence_end);
 }
 
 } // namespace
@@ -1173,7 +1117,7 @@ bool Fiver::hazel(const std::string &filename, std::string *error,
                 sequence_end_, text_chunk_size, parameters);
 
   std::vector<HazelBlob> blobs = {{"idx", 0, 0}, {"txt", 0, 0}};
-  const std::string file_header = "#COTTONTAIL\n";
+  const std::string file_header = cottontail_file_magic;
   std::string dictionary = hazel_blob_dictionary(blobs);
 
   std::fstream out;
