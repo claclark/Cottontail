@@ -5,6 +5,7 @@
 #include <cassert>
 #include <cstdio>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <map>
@@ -12,6 +13,7 @@
 #include <mutex>
 #include <sstream>
 #include <string>
+#include <system_error>
 #include <thread>
 #include <utility>
 #include <unistd.h>
@@ -235,6 +237,11 @@ public:
     return idx;
   }
 
+  static bool merge(const std::vector<std::shared_ptr<HazelIdx>> &idxs,
+                    const std::vector<addr> &text_lengths,
+                    addr text_chunk_feature, const std::string &prefix,
+                    std::ostream *out, std::string *error = nullptr);
+
   virtual ~HazelIdx(){};
   HazelIdx(const HazelIdx &) = delete;
   HazelIdx &operator=(const HazelIdx &) = delete;
@@ -302,8 +309,35 @@ private:
   };
   addr vocab_() final { return directory_.size(); };
 
-  addr posting_start(size_t index) {
+  addr posting_start(size_t index) const {
     return index == 0 ? postings_start_ : directory_[index - 1].end;
+  }
+
+  std::shared_ptr<SimplePosting> posting_at(size_t index, std::string *error) {
+    const HazelPostingEntry &entry = directory_[index];
+    addr start = posting_start(index);
+    if (start == entry.end) {
+      std::shared_ptr<SimplePosting> posting =
+          posting_factory_->posting_from_feature(entry.feature);
+      posting->push(entry.count_or_p, entry.count_or_p, 0.0);
+      return posting;
+    }
+    if (start > entry.end) {
+      safe_error(error) = "Hazel got bad idx posting boundary";
+      return nullptr;
+    }
+    std::string bytes(entry.end - start, '\0');
+    if (!file_->read(blob_offset_ + start, &bytes[0], bytes.size(), error))
+      return nullptr;
+    auto posting = posting_factory_->posting_from_compressed_blob(
+        bytes.data(), bytes.size(), error);
+    if (posting == nullptr)
+      return nullptr;
+    if (posting->feature() != entry.feature) {
+      safe_error(error) = "Hazel posting feature differs from directory";
+      return nullptr;
+    }
+    return posting;
   }
 
   std::shared_ptr<CacheRecord> singleton_cache(addr p) {
@@ -397,6 +431,518 @@ private:
   std::shared_ptr<SimplePostingFactory> posting_factory_;
 };
 
+constexpr addr hazel_posting_entry_size = 3 * sizeof(addr);
+
+addr hazel_idx_header_length() {
+  return hazel_idx_magic.size() + 3 * sizeof(addr);
+}
+
+bool hazel_file_size(const std::string &filename, addr *size) {
+  std::fstream in(filename, std::ios::binary | std::ios::in | std::ios::ate);
+  if (in.fail())
+    return false;
+  std::streampos end = in.tellg();
+  if (end < 0)
+    return false;
+  *size = (addr)end;
+  return true;
+}
+
+bool hazel_reset_file(const std::string &filename, std::string *error) {
+  std::fstream out(filename,
+                   std::ios::binary | std::ios::out | std::ios::trunc);
+  if (out.fail()) {
+    safe_error(error) = "Hazel merge can't create checkpoint: " + filename;
+    return false;
+  }
+  out.close();
+  return true;
+}
+
+bool hazel_truncate_file(const std::string &filename, addr size,
+                         std::string *error) {
+  if (size < 0) {
+    safe_error(error) = "Hazel merge got negative checkpoint size";
+    return false;
+  }
+  if (truncate(filename.c_str(), size) != 0) {
+    safe_error(error) = "Hazel merge can't truncate checkpoint: " + filename;
+    return false;
+  }
+  return true;
+}
+
+bool hazel_reset_checkpoints(const std::string &pst_name,
+                             const std::string &dct_name,
+                             std::string *error) {
+  return hazel_reset_file(pst_name, error) &&
+         hazel_reset_file(dct_name, error);
+}
+
+bool hazel_read_checkpoint_directory(const std::string &dct_name,
+                                     std::vector<HazelPostingEntry> *directory,
+                                     std::string *error) {
+  addr size;
+  if (!hazel_file_size(dct_name, &size))
+    return false;
+  addr usable = size - (size % hazel_posting_entry_size);
+  if (usable != size && !hazel_truncate_file(dct_name, usable, error))
+    return false;
+  directory->clear();
+  if (usable == 0)
+    return true;
+  std::string bytes(usable, '\0');
+  std::fstream in(dct_name, std::ios::binary | std::ios::in);
+  if (in.fail()) {
+    safe_error(error) = "Hazel merge can't read checkpoint: " + dct_name;
+    return false;
+  }
+  in.read(&bytes[0], bytes.size());
+  if (in.fail()) {
+    safe_error(error) = "Hazel merge got bad checkpoint: " + dct_name;
+    return false;
+  }
+  const char *p = bytes.data();
+  addr count = usable / hazel_posting_entry_size;
+  directory->reserve(count);
+  for (addr i = 0; i < count; i++) {
+    HazelPostingEntry entry;
+    entry.feature = read_pod<addr>(p);
+    p += sizeof(addr);
+    entry.end = read_pod<addr>(p);
+    p += sizeof(addr);
+    entry.count_or_p = read_pod<addr>(p);
+    p += sizeof(addr);
+    directory->push_back(entry);
+  }
+  return true;
+}
+
+bool hazel_repair_checkpoint(const std::string &pst_name,
+                             const std::string &dct_name,
+                             std::vector<HazelPostingEntry> *directory,
+                             std::string *error) {
+  addr pst_size;
+  if (!hazel_file_size(pst_name, &pst_size))
+    return false;
+  if (!hazel_read_checkpoint_directory(dct_name, directory, error))
+    return false;
+  addr covered_end = hazel_idx_header_length() + pst_size;
+  addr previous_end = hazel_idx_header_length();
+  size_t keep = 0;
+  for (size_t i = 0; i < directory->size(); i++) {
+    const HazelPostingEntry &entry = (*directory)[i];
+    if (entry.end < previous_end ||
+        (i > 0 && entry.feature <= (*directory)[i - 1].feature)) {
+      safe_error(error) = "Hazel merge got inconsistent idx checkpoint";
+      break;
+    }
+    if (entry.end > covered_end)
+      break;
+    previous_end = entry.end;
+    keep = i + 1;
+  }
+  if (keep < directory->size()) {
+    directory->resize(keep);
+    if (!hazel_truncate_file(dct_name, keep * hazel_posting_entry_size, error))
+      return false;
+  }
+  addr wanted_pst_size =
+      directory->empty() ? 0 : directory->back().end - hazel_idx_header_length();
+  return hazel_truncate_file(pst_name, wanted_pst_size, error);
+}
+
+bool hazel_write_checkpoint_entry(std::fstream *dct,
+                                  const HazelPostingEntry &entry,
+                                  std::string *error) {
+  write_pod(dct, entry.feature);
+  write_pod(dct, entry.end);
+  write_pod(dct, entry.count_or_p);
+  dct->flush();
+  if (dct->fail()) {
+    safe_error(error) = "Hazel merge failed to write idx checkpoint";
+    return false;
+  }
+  return true;
+}
+
+bool hazel_append_checkpoint_posting(
+    std::fstream *pst, std::fstream *dct,
+    std::shared_ptr<SimplePosting> posting, HazelPostingEntry *entry,
+    bool *wrote, std::string *error) {
+  *wrote = false;
+  if (posting == nullptr || posting->size() == 0)
+    return true;
+  pst->seekp(0, pst->end);
+  if (pst->fail()) {
+    safe_error(error) = "Hazel merge can't seek idx checkpoint";
+    return false;
+  }
+  addr start = (addr)pst->tellp() + hazel_idx_header_length();
+  entry->feature = posting->feature();
+  entry->end = start;
+  entry->count_or_p = posting->size();
+  addr p, q;
+  fval v;
+  if (entry->count_or_p == 1 && posting->get(0, &p, &q, &v) && p == q &&
+      v == 0.0) {
+    entry->count_or_p = p;
+  } else {
+    posting->write(pst);
+    pst->flush();
+    entry->end = (addr)pst->tellp() + hazel_idx_header_length();
+    if (pst->fail()) {
+      safe_error(error) = "Hazel merge failed to write idx postings";
+      return false;
+    }
+  }
+  dct->seekp(0, dct->end);
+  if (dct->fail()) {
+    safe_error(error) = "Hazel merge can't seek idx checkpoint";
+    return false;
+  }
+  if (!hazel_write_checkpoint_entry(dct, *entry, error))
+    return false;
+  *wrote = true;
+  return true;
+}
+
+std::shared_ptr<SimplePosting> hazel_checkpoint_posting(
+    const std::string &pst_name, const HazelPostingEntry &entry,
+    addr previous_end, std::shared_ptr<SimplePostingFactory> factory,
+    std::string *error) {
+  if (entry.end == previous_end) {
+    std::shared_ptr<SimplePosting> posting =
+        factory->posting_from_feature(entry.feature);
+    posting->push(entry.count_or_p, entry.count_or_p, 0.0);
+    return posting;
+  }
+  if (entry.end < previous_end) {
+    safe_error(error) = "Hazel merge got bad checkpoint posting boundary";
+    return nullptr;
+  }
+  addr offset = previous_end - hazel_idx_header_length();
+  addr length = entry.end - previous_end;
+  std::string bytes(length, '\0');
+  std::fstream in(pst_name, std::ios::binary | std::ios::in);
+  if (in.fail()) {
+    safe_error(error) = "Hazel merge can't read checkpoint: " + pst_name;
+    return nullptr;
+  }
+  in.seekg(offset, in.beg);
+  in.read(&bytes[0], bytes.size());
+  if (in.fail()) {
+    safe_error(error) = "Hazel merge got bad checkpoint: " + pst_name;
+    return nullptr;
+  }
+  auto posting =
+      factory->posting_from_compressed_blob(bytes.data(), bytes.size(), error);
+  if (posting == nullptr)
+    return nullptr;
+  if (posting->feature() != entry.feature) {
+    safe_error(error) = "Hazel checkpoint posting feature differs from "
+                        "directory";
+    return nullptr;
+  }
+  return posting;
+}
+
+bool hazel_copy_checkpoint_bytes(const std::string &filename, addr length,
+                                 std::ostream *out, std::string *error) {
+  std::fstream in(filename, std::ios::binary | std::ios::in);
+  if (in.fail()) {
+    safe_error(error) = "Hazel merge can't read checkpoint: " + filename;
+    return false;
+  }
+  std::vector<char> buffer(1 << 20);
+  addr remaining = length;
+  while (remaining > 0) {
+    addr n = std::min<addr>(remaining, buffer.size());
+    in.read(buffer.data(), n);
+    if (in.fail()) {
+      safe_error(error) = "Hazel merge got bad checkpoint: " + filename;
+      return false;
+    }
+    out->write(buffer.data(), n);
+    if (out->fail()) {
+      safe_error(error) = "Hazel merge failed to write idx blob";
+      return false;
+    }
+    remaining -= n;
+  }
+  return true;
+}
+
+bool HazelIdx::merge(const std::vector<std::shared_ptr<HazelIdx>> &idxs,
+                     const std::vector<addr> &text_lengths,
+                     addr text_chunk_feature, const std::string &prefix,
+                     std::ostream *out, std::string *error) {
+  if (idxs.size() < 2) {
+    safe_error(error) = "HazelIdx merge needs at least two indexes";
+    return false;
+  }
+  if (text_lengths.size() != idxs.size()) {
+    safe_error(error) = "HazelIdx merge got wrong text length count";
+    return false;
+  }
+  if (text_chunk_feature == null_feature) {
+    safe_error(error) = "HazelIdx merge got bad text chunk feature";
+    return false;
+  }
+  if (prefix == "") {
+    safe_error(error) = "HazelIdx merge got empty checkpoint prefix";
+    return false;
+  }
+  if (out == nullptr) {
+    safe_error(error) = "HazelIdx merge got no output stream";
+    return false;
+  }
+  for (size_t i = 0; i < idxs.size(); i++) {
+    if (idxs[i] == nullptr || idxs[i]->posting_factory_ == nullptr) {
+      safe_error(error) = "HazelIdx merge got null index";
+      return false;
+    }
+    if (text_lengths[i] < 0) {
+      safe_error(error) = "HazelIdx merge got bad text length";
+      return false;
+    }
+    if (idxs[i]->recipe() != idxs[0]->recipe()) {
+      safe_error(error) = "HazelIdx merge got incompatible recipes";
+      return false;
+    }
+  }
+
+  std::shared_ptr<SimplePostingFactory> factory = idxs[0]->posting_factory_;
+  const std::string pst_name = prefix + ".pst";
+  const std::string dct_name = prefix + ".dct";
+  const addr header_length = hazel_idx_header_length();
+
+  std::vector<addr> text_bases;
+  text_bases.reserve(text_lengths.size());
+  addr text_base = 0;
+  for (addr length : text_lengths) {
+    text_bases.push_back(text_base);
+    text_base += length;
+  }
+
+  auto has_source_feature = [&](addr feature) {
+    for (auto &idx : idxs) {
+      size_t index;
+      if (locate_posting(idx->directory_, feature, &index))
+        return true;
+    }
+    return false;
+  };
+
+  auto postings_for_feature = [&](addr feature,
+                                  std::vector<std::shared_ptr<SimplePosting>>
+                                      *postings,
+                                  std::string *error) {
+    postings->clear();
+    for (auto &idx : idxs) {
+      size_t index;
+      if (locate_posting(idx->directory_, feature, &index)) {
+        auto posting = idx->posting_at(index, error);
+        if (posting == nullptr)
+          return false;
+        postings->push_back(posting);
+      }
+    }
+    return true;
+  };
+
+  auto text_chunk_posting = [&]() -> std::shared_ptr<SimplePosting> {
+    std::shared_ptr<SimplePosting> posting =
+        factory->posting_from_feature(text_chunk_feature);
+    for (size_t i = 0; i < idxs.size(); i++) {
+      size_t index;
+      if (!locate_posting(idxs[i]->directory_, text_chunk_feature, &index))
+        continue;
+      std::string posting_error;
+      auto source = idxs[i]->posting_at(index, &posting_error);
+      if (source == nullptr) {
+        safe_error(error) = posting_error;
+        return nullptr;
+      }
+      addr p, q;
+      fval v;
+      for (size_t j = 0; j < source->size(); j++) {
+        source->get(j, &p, &q, &v);
+        posting->push(p, q, addr2fval(fval2addr(v) + text_bases[i]));
+      }
+    }
+    if (posting->size() == 0)
+      return nullptr;
+    return posting;
+  };
+
+  auto open_checkpoint_streams = [&](std::fstream *pst, std::fstream *dct,
+                                     std::string *error) {
+    pst->open(pst_name, std::ios::binary | std::ios::in | std::ios::out);
+    if (pst->fail()) {
+      safe_error(error) = "Hazel merge can't open checkpoint: " + pst_name;
+      return false;
+    }
+    dct->open(dct_name, std::ios::binary | std::ios::in | std::ios::out);
+    if (dct->fail()) {
+      safe_error(error) = "Hazel merge can't open checkpoint: " + dct_name;
+      return false;
+    }
+    pst->seekp(0, pst->end);
+    dct->seekp(0, dct->end);
+    if (pst->fail() || dct->fail()) {
+      safe_error(error) = "Hazel merge can't seek idx checkpoint";
+      return false;
+    }
+    return true;
+  };
+
+  // 1. Establish processing invariant.
+  //
+  // The checkpoint files exist, the dictionary is a whole number of
+  // HazelPostingEntry records, the posting bytes end where the last dictionary
+  // entry says they end, and null_feature has already been handled if any
+  // input contains erasures.
+  std::vector<HazelPostingEntry> checkpoint;
+  std::string checkpoint_error;
+  bool reset =
+      !hazel_repair_checkpoint(pst_name, dct_name, &checkpoint,
+                               &checkpoint_error);
+  bool source_has_null = has_source_feature(null_feature);
+  if (!reset && source_has_null &&
+      (checkpoint.empty() || checkpoint.front().feature != null_feature))
+    reset = true;
+  if (!reset && !source_has_null && !checkpoint.empty() &&
+      checkpoint.front().feature == null_feature)
+    reset = true;
+  if (reset) {
+    if (!hazel_reset_checkpoints(pst_name, dct_name, error))
+      return false;
+    checkpoint.clear();
+  } else if (!checkpoint.empty()) {
+    addr wanted_pst_size = checkpoint.back().end - header_length;
+    if (!hazel_truncate_file(pst_name, wanted_pst_size, error))
+      return false;
+  } else if (!hazel_truncate_file(pst_name, 0, error)) {
+    return false;
+  }
+
+  std::shared_ptr<SimplePosting> exclude;
+  if (!checkpoint.empty() && checkpoint.front().feature == null_feature) {
+    exclude = hazel_checkpoint_posting(pst_name, checkpoint.front(),
+                                       header_length, factory,
+                                       &checkpoint_error);
+    if (exclude == nullptr) {
+      if (!hazel_reset_checkpoints(pst_name, dct_name, error))
+        return false;
+      checkpoint.clear();
+    }
+  }
+
+  std::fstream pst;
+  std::fstream dct;
+  if (!open_checkpoint_streams(&pst, &dct, error))
+    return false;
+
+  if (checkpoint.empty() && source_has_null) {
+    std::vector<std::shared_ptr<SimplePosting>> postings;
+    if (!postings_for_feature(null_feature, &postings, error))
+      return false;
+    exclude = factory->posting_from_merge(postings);
+    HazelPostingEntry entry;
+    bool wrote;
+    if (!hazel_append_checkpoint_posting(&pst, &dct, exclude, &entry, &wrote,
+                                         error))
+      return false;
+    if (wrote)
+      checkpoint.push_back(entry);
+  }
+
+  // 2. Process remaining features.
+  //
+  // Resume after the last completed dictionary feature. Posting semantics are
+  // delegated to SimplePostingFactory; this loop only supplies the Hazel input
+  // postings and appends completed checkpoint records.
+  addr last_feature =
+      checkpoint.empty() ? null_feature : checkpoint.back().feature;
+  std::vector<size_t> positions(idxs.size(), 0);
+  for (size_t i = 0; i < idxs.size(); i++)
+    while (positions[i] < idxs[i]->directory_.size() &&
+           idxs[i]->directory_[positions[i]].feature <= last_feature)
+      positions[i]++;
+
+  for (;;) {
+    addr next = maxfinity;
+    for (size_t i = 0; i < idxs.size(); i++)
+      if (positions[i] < idxs[i]->directory_.size())
+        next = std::min(next, idxs[i]->directory_[positions[i]].feature);
+    if (next == maxfinity)
+      break;
+
+    for (size_t i = 0; i < idxs.size(); i++)
+      if (positions[i] < idxs[i]->directory_.size() &&
+          idxs[i]->directory_[positions[i]].feature == next)
+        positions[i]++;
+
+    std::shared_ptr<SimplePosting> posting;
+    if (next == text_chunk_feature) {
+      posting = text_chunk_posting();
+      if (has_source_feature(text_chunk_feature) && posting == nullptr)
+        return false;
+    } else {
+      std::vector<std::shared_ptr<SimplePosting>> postings;
+      if (!postings_for_feature(next, &postings, error))
+        return false;
+      posting = factory->posting_from_merge(postings, exclude);
+    }
+
+    HazelPostingEntry entry;
+    bool wrote;
+    if (!hazel_append_checkpoint_posting(&pst, &dct, posting, &entry, &wrote,
+                                         error))
+      return false;
+    if (wrote)
+      checkpoint.push_back(entry);
+    last_feature = next;
+  }
+  pst.close();
+  dct.close();
+  if (pst.fail() || dct.fail()) {
+    safe_error(error) = "Hazel merge failed to close idx checkpoint";
+    return false;
+  }
+
+  // 3. Finalize the blob.
+  //
+  // The checkpoint postings and dictionary already use blob-relative `end`
+  // offsets, so finalization is just the Hazel idx header followed by those two
+  // checkpoint files.
+  addr final_pst_size;
+  addr final_dct_size;
+  if (!hazel_file_size(pst_name, &final_pst_size) ||
+      !hazel_file_size(dct_name, &final_dct_size)) {
+    safe_error(error) = "Hazel merge missing idx checkpoint";
+    return false;
+  }
+  if (final_dct_size % hazel_posting_entry_size != 0) {
+    safe_error(error) = "Hazel merge got bad idx checkpoint";
+    return false;
+  }
+  addr directory_offset = header_length + final_pst_size;
+  addr directory_length = final_dct_size;
+  addr directory_count = final_dct_size / hazel_posting_entry_size;
+  out->write(hazel_idx_magic.data(), hazel_idx_magic.size());
+  write_pod(out, directory_offset);
+  write_pod(out, directory_length);
+  write_pod(out, directory_count);
+  if (out->fail()) {
+    safe_error(error) = "Hazel merge failed to write idx blob";
+    return false;
+  }
+  return hazel_copy_checkpoint_bytes(pst_name, final_pst_size, out, error) &&
+         hazel_copy_checkpoint_bytes(dct_name, final_dct_size, out, error);
+}
+
 struct HazelTextCacheEntry {
   std::unique_ptr<char[]> bytes;
   std::atomic<bool> present{false};
@@ -430,6 +976,10 @@ public:
   HazelTxt &operator=(const HazelTxt &) = delete;
   HazelTxt(HazelTxt &&) = delete;
   HazelTxt &operator=(HazelTxt &&) = delete;
+
+  static bool merge(const std::vector<std::shared_ptr<HazelTxt>> &txts,
+                    std::ostream *out, std::string *error = nullptr);
+  addr raw_text_length() const { return raw_text_length_; }
 
 private:
   HazelTxt(){};
@@ -553,11 +1103,11 @@ private:
     data += sizeof(addr);
     raw_text_length_ = read_pod<addr>(data);
     data += sizeof(addr);
-    addr target_chunk_size = read_pod<addr>(data);
+    target_chunk_size_ = read_pod<addr>(data);
     chunk_space_start_ = blob_offset + header_length;
     addr chunk_space_length = blob_length - header_length;
     if (directory_offset < 0 || directory_length < 0 || directory_count < 0 ||
-        raw_text_length_ < 0 || target_chunk_size <= 0 ||
+        raw_text_length_ < 0 || target_chunk_size_ <= 0 ||
         directory_length != directory_count * (addr)(2 * sizeof(addr)) ||
         directory_offset > chunk_space_length ||
         directory_length > chunk_space_length - directory_offset) {
@@ -699,6 +1249,7 @@ private:
   std::shared_ptr<ReadGate> read_gate_;
   addr chunk_space_start_;
   addr raw_text_length_;
+  addr target_chunk_size_;
   std::vector<HazelTextEntry> map_;
   std::unique_ptr<HazelTextCacheEntry[]> cache_;
   std::shared_ptr<Tokenizer> tokenizer_;
@@ -709,6 +1260,96 @@ private:
   addr token_start_ = maxfinity;
   addr token_end_ = maxfinity;
 };
+
+bool HazelTxt::merge(const std::vector<std::shared_ptr<HazelTxt>> &txts,
+                     std::ostream *out, std::string *error) {
+  if (txts.size() < 2) {
+    safe_error(error) = "HazelTxt merge needs at least two texts";
+    return false;
+  }
+  if (out == nullptr) {
+    safe_error(error) = "HazelTxt merge got no output stream";
+    return false;
+  }
+  for (auto &txt : txts) {
+    if (txt == nullptr || txt->read_gate_ == nullptr) {
+      safe_error(error) = "HazelTxt merge got null text";
+      return false;
+    }
+    if (txt->target_chunk_size_ != txts[0]->target_chunk_size_) {
+      safe_error(error) = "HazelTxt merge got incompatible chunk sizes";
+      return false;
+    }
+  }
+
+  addr target_chunk_size = txts[0]->target_chunk_size_;
+  addr blob_start = (addr)out->tellp();
+  out->write(hazel_txt_magic.data(), hazel_txt_magic.size());
+  write_pod<addr>(out, 0);
+  write_pod<addr>(out, 0);
+  write_pod<addr>(out, 0);
+  write_pod<addr>(out, 0);
+  write_pod(out, target_chunk_size);
+  addr chunk_space_start = (addr)out->tellp();
+  if (out->fail()) {
+    safe_error(error) = "Hazel merge failed to write txt blob";
+    return false;
+  }
+
+  std::vector<HazelTextEntry> directory;
+  addr raw_base = 0;
+  for (auto &txt : txts) {
+    addr previous_raw = 0;
+    addr previous_compressed = 0;
+    for (auto &entry : txt->map_) {
+      addr raw_length = entry.raw_byte_end - previous_raw;
+      addr compressed_length = entry.compressed_byte_end - previous_compressed;
+      if (raw_length < 0 || compressed_length < 0) {
+        safe_error(error) = "Hazel got bad txt chunk boundary";
+        return false;
+      }
+      std::unique_ptr<char[]> compressed =
+          txt->read_gate_->read(txt->chunk_space_start_ + previous_compressed,
+                                compressed_length, error);
+      if (compressed == nullptr)
+        return false;
+      out->write(compressed.get(), compressed_length);
+      if (out->fail()) {
+        safe_error(error) = "Hazel merge failed to copy txt chunk";
+        return false;
+      }
+      HazelTextEntry out_entry;
+      out_entry.raw_byte_end = raw_base + entry.raw_byte_end;
+      out_entry.compressed_byte_end = (addr)out->tellp() - chunk_space_start;
+      directory.push_back(out_entry);
+      previous_raw = entry.raw_byte_end;
+      previous_compressed = entry.compressed_byte_end;
+    }
+    raw_base += txt->raw_text_length_;
+  }
+
+  addr directory_offset = (addr)out->tellp() - chunk_space_start;
+  addr directory_count = directory.size();
+  for (auto &entry : directory) {
+    write_pod(out, entry.raw_byte_end);
+    write_pod(out, entry.compressed_byte_end);
+  }
+  addr directory_length =
+      (addr)out->tellp() - (chunk_space_start + directory_offset);
+  addr blob_length = (addr)out->tellp() - blob_start;
+  out->seekp(blob_start + hazel_txt_magic.size());
+  write_pod(out, directory_offset);
+  write_pod(out, directory_length);
+  write_pod(out, directory_count);
+  write_pod(out, raw_base);
+  write_pod(out, target_chunk_size);
+  out->seekp(blob_start + blob_length);
+  if (out->fail()) {
+    safe_error(error) = "Hazel merge failed to write txt blob";
+    return false;
+  }
+  return true;
+}
 
 bool parse_hazel_name(const std::string &name, addr *sequence_start,
                       addr *sequence_end) {
@@ -1482,6 +2123,164 @@ bool posting_factory_from_idx_recipe(
   return *factory != nullptr;
 }
 
+bool hazel_path_exists(const std::string &filename, bool *exists,
+                       std::string *error) {
+  std::error_code ec;
+  *exists = std::filesystem::exists(filename, ec);
+  if (ec) {
+    safe_error(error) =
+        "Hazel merge can't inspect file: " + filename + ": " + ec.message();
+    return false;
+  }
+  return true;
+}
+
+bool hazel_remove_if_exists(const std::string &filename, std::string *error) {
+  bool exists;
+  if (!hazel_path_exists(filename, &exists, error))
+    return false;
+  if (!exists)
+    return true;
+  std::error_code ec;
+  std::filesystem::remove(filename, ec);
+  if (ec) {
+    safe_error(error) =
+        "Hazel merge can't remove file: " + filename + ": " + ec.message();
+    return false;
+  }
+  return true;
+}
+
+bool hazel_cleanup_prefix_files(const std::string &prefix,
+                                std::string *error) {
+  std::filesystem::path target(prefix);
+  std::filesystem::path directory = target.parent_path();
+  if (directory.empty())
+    directory = ".";
+  std::string base = target.filename().string() + ".";
+
+  std::error_code ec;
+  bool exists = std::filesystem::exists(directory, ec);
+  if (ec) {
+    safe_error(error) = "Hazel merge can't inspect directory: " +
+                        directory.string() + ": " + ec.message();
+    return false;
+  }
+  if (!exists)
+    return true;
+
+  std::filesystem::directory_iterator it(directory, ec);
+  std::filesystem::directory_iterator end;
+  if (ec) {
+    safe_error(error) = "Hazel merge can't list directory: " +
+                        directory.string() + ": " + ec.message();
+    return false;
+  }
+  for (; it != end; it.increment(ec)) {
+    if (ec) {
+      safe_error(error) = "Hazel merge can't list directory: " +
+                          directory.string() + ": " + ec.message();
+      return false;
+    }
+    std::string name = it->path().filename().string();
+    if (name.compare(0, base.size(), base) != 0)
+      continue;
+    std::error_code remove_error;
+    std::filesystem::remove(it->path(), remove_error);
+    if (remove_error) {
+      safe_error(error) = "Hazel merge can't remove file: " +
+                          it->path().string() + ": " +
+                          remove_error.message();
+      return false;
+    }
+  }
+  return true;
+}
+
+bool normalize_dna_for_activated_hazel_merge(
+    const std::map<std::string, std::string> &input, std::string *normalized,
+    std::string *error) {
+  std::map<std::string, std::string> parameters = input;
+  parameters.erase("parameters");
+  auto hazel = parameters.find("hazel");
+  if (hazel != parameters.end()) {
+    std::map<std::string, std::string> metadata;
+    if (!cook(hazel->second, &metadata, error))
+      return false;
+    metadata.erase("sequence_start");
+    metadata.erase("sequence_end");
+    hazel->second = freeze(metadata);
+  }
+  *normalized = freeze(parameters);
+  return true;
+}
+
+bool hazel_sequence_range(const std::map<std::string, std::string> &parameters,
+                          bool *present, addr *sequence_start,
+                          addr *sequence_end, std::string *error) {
+  *present = false;
+  auto hazel = parameters.find("hazel");
+  if (hazel == parameters.end())
+    return true;
+  std::map<std::string, std::string> metadata;
+  if (!cook(hazel->second, &metadata, error))
+    return false;
+  auto start = metadata.find("sequence_start");
+  auto end = metadata.find("sequence_end");
+  if (start == metadata.end() && end == metadata.end())
+    return true;
+  if (start == metadata.end() || end == metadata.end()) {
+    safe_error(error) = "Hazel DNA has incomplete sequence range";
+    return false;
+  }
+  try {
+    *sequence_start = std::stoll(start->second);
+    *sequence_end = std::stoll(end->second);
+  } catch (...) {
+    safe_error(error) = "Hazel DNA has bad sequence range";
+    return false;
+  }
+  if (*sequence_start < 0 || *sequence_end < *sequence_start) {
+    safe_error(error) = "Hazel DNA has bad sequence range";
+    return false;
+  }
+  *present = true;
+  return true;
+}
+
+bool merged_activated_hazel_dna(
+    const std::map<std::string, std::string> &first,
+    const std::map<std::string, std::string> &last,
+    bool sequence_present, addr sequence_start, addr sequence_end,
+    std::shared_ptr<std::map<std::string, std::string>> parameters,
+    std::string *dna, std::string *error) {
+  std::map<std::string, std::string> output = first;
+  if (sequence_present) {
+    auto hazel = output.find("hazel");
+    if (hazel == output.end()) {
+      safe_error(error) = "Hazel DNA has no hazel metadata";
+      return false;
+    }
+    std::map<std::string, std::string> metadata;
+    if (!cook(hazel->second, &metadata, error))
+      return false;
+    metadata["sequence_start"] = std::to_string(sequence_start);
+    metadata["sequence_end"] = std::to_string(sequence_end);
+    hazel->second = freeze(metadata);
+  }
+  if (parameters != nullptr) {
+    output["parameters"] = freeze(*parameters);
+  } else {
+    auto inherited = last.find("parameters");
+    if (inherited == last.end())
+      output.erase("parameters");
+    else
+      output["parameters"] = inherited->second;
+  }
+  *dna = freeze(output);
+  return true;
+}
+
 } // namespace
 
 bool Hazel::merge(std::shared_ptr<Working> working,
@@ -1579,6 +2378,179 @@ bool Hazel::merge(std::shared_ptr<Working> working,
   }
   std::remove(tempname.c_str());
   return true;
+}
+
+bool Hazel::merge(
+    const std::vector<std::shared_ptr<Hazel>> &hazels, const std::string &dst,
+    std::shared_ptr<std::map<std::string, std::string>> parameters,
+    std::string *error) {
+  if (hazels.size() < 2) {
+    safe_error(error) = "Hazel merge needs at least two shards";
+    return false;
+  }
+  if (dst == "") {
+    safe_error(error) = "Hazel merge got empty destination";
+    return false;
+  }
+
+  bool exists;
+  if (!hazel_path_exists(dst, &exists, error))
+    return false;
+  if (exists)
+    return hazel_cleanup_prefix_files(dst, error);
+
+  std::string tempname = dst + ".tmp";
+  if (!hazel_remove_if_exists(tempname, error))
+    return false;
+
+  std::vector<std::shared_ptr<HazelIdx>> idxs;
+  std::vector<std::shared_ptr<HazelTxt>> txts;
+  std::vector<addr> text_lengths;
+  idxs.reserve(hazels.size());
+  txts.reserve(hazels.size());
+  text_lengths.reserve(hazels.size());
+
+  std::string normalized;
+  bool sequence_present = false;
+  addr sequence_start = 0;
+  addr sequence_end = 0;
+  addr previous_sequence_end = 0;
+  for (size_t i = 0; i < hazels.size(); i++) {
+    auto hazel = hazels[i];
+    if (hazel == nullptr) {
+      safe_error(error) = "Hazel merge got null shard";
+      return false;
+    }
+    if (hazel->featurizer_ == nullptr || hazel->idx_ == nullptr ||
+        hazel->txt_ == nullptr) {
+      safe_error(error) = "Hazel merge got incomplete shard";
+      return false;
+    }
+
+    auto idx = std::dynamic_pointer_cast<HazelIdx>(hazel->idx_);
+    if (idx == nullptr) {
+      safe_error(error) = "Hazel merge got non-Hazel idx";
+      return false;
+    }
+    auto txt = std::dynamic_pointer_cast<HazelTxt>(hazel->txt_);
+    if (txt == nullptr) {
+      safe_error(error) = "Hazel merge got non-Hazel txt";
+      return false;
+    }
+
+    std::string current;
+    if (!normalize_dna_for_activated_hazel_merge(hazel->parameters_, &current,
+                                                 error))
+      return false;
+    if (i == 0)
+      normalized = current;
+    else if (current != normalized) {
+      safe_error(error) = "Hazel merge got incompatible DNA";
+      return false;
+    }
+
+    bool current_sequence_present;
+    addr current_sequence_start;
+    addr current_sequence_end;
+    if (!hazel_sequence_range(hazel->parameters_, &current_sequence_present,
+                              &current_sequence_start,
+                              &current_sequence_end, error))
+      return false;
+    if (i == 0) {
+      sequence_present = current_sequence_present;
+      if (sequence_present) {
+        sequence_start = current_sequence_start;
+        sequence_end = current_sequence_end;
+        previous_sequence_end = current_sequence_end;
+      }
+    } else {
+      if (current_sequence_present != sequence_present) {
+        safe_error(error) = "Hazel merge got inconsistent sequence metadata";
+        return false;
+      }
+      if (sequence_present) {
+        if (previous_sequence_end == maxfinity ||
+            current_sequence_start != previous_sequence_end + 1) {
+          safe_error(error) = "Hazel merge got non-contiguous shards";
+          return false;
+        }
+        sequence_end = current_sequence_end;
+        previous_sequence_end = current_sequence_end;
+      }
+    }
+
+    idxs.push_back(idx);
+    txts.push_back(txt);
+    text_lengths.push_back(txt->raw_text_length());
+  }
+
+  std::string dna;
+  if (!merged_activated_hazel_dna(
+          hazels.front()->parameters_, hazels.back()->parameters_,
+          sequence_present, sequence_start, sequence_end, parameters, &dna,
+          error))
+    return false;
+
+  addr text_chunk_feature = hazels.front()->featurizer_->featurize(text_chunk_tag);
+  HazelMergeOutput output;
+  auto remove_temp = [&]() {
+    output.out.close();
+    hazel_remove_if_exists(tempname, nullptr);
+  };
+
+  if (!output.open(tempname, dna, error)) {
+    remove_temp();
+    return false;
+  }
+
+  output.blobs[0].offset = (addr)output.out.tellp();
+  if (!HazelIdx::merge(idxs, text_lengths, text_chunk_feature, dst, &output.out,
+                       error)) {
+    remove_temp();
+    return false;
+  }
+  output.blobs[0].length = (addr)output.out.tellp() - output.blobs[0].offset;
+  if (output.out.fail() || output.blobs[0].length < 0) {
+    safe_error(error) = "Hazel merge failed to write idx blob";
+    remove_temp();
+    return false;
+  }
+
+  output.blobs[1].offset = (addr)output.out.tellp();
+  if (!HazelTxt::merge(txts, &output.out, error)) {
+    remove_temp();
+    return false;
+  }
+  output.blobs[1].length = (addr)output.out.tellp() - output.blobs[1].offset;
+  if (output.out.fail() || output.blobs[1].length < 0) {
+    safe_error(error) = "Hazel merge failed to write txt blob";
+    remove_temp();
+    return false;
+  }
+
+  if (!output.close(error)) {
+    remove_temp();
+    return false;
+  }
+
+  if (link(tempname.c_str(), dst.c_str()) != 0) {
+    if (!hazel_path_exists(dst, &exists, error)) {
+      remove_temp();
+      return false;
+    }
+    if (exists) {
+      if (!hazel_cleanup_prefix_files(dst, error)) {
+        remove_temp();
+        return false;
+      }
+      return true;
+    }
+    safe_error(error) = "Hazel merge can't link shard: " + dst;
+    remove_temp();
+    return false;
+  }
+
+  return hazel_cleanup_prefix_files(dst, error);
 }
 
 std::shared_ptr<Warren> Hazel::make(const std::string &filename,

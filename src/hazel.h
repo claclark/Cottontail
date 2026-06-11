@@ -22,6 +22,11 @@ public:
                     const std::vector<std::string> &hazels,
                     const std::string &parameters,
                     std::string *error = nullptr);
+  static bool
+  merge(const std::vector<std::shared_ptr<Hazel>> &hazels,
+        const std::string &dst,
+        std::shared_ptr<std::map<std::string, std::string>> parameters,
+        std::string *error = nullptr);
 
   virtual ~Hazel(){};
   Hazel(const Hazel &) = delete;
