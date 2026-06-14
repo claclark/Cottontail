@@ -192,6 +192,10 @@ With no mode flags, `fiver2hazel` performs both conversion and merge. Existing
 exact per-Fiver Hazels are reused during conversion, and intermediate Hazels
 are preserved after merge.
 
+When scanning the burrow, `fiver2hazel` only considers strict shard names of
+the form `fiver.<number>.<number>` and `hazel.<number>.<number>`, ignoring
+sidecar files such as restart checkpoint files.
+
 The final chunk extends to `raw_text_length`.
 
 An empty txt blob is represented by the fixed header only:
@@ -236,71 +240,62 @@ when practical, or protect shared hopper state with a mutex as `FiverTxt` does.
 
 ## Hazel Merge
 
-`Hazel::merge(...)` has a Working-based implementation in `src/hazel.cc`,
-declared in `src/hazel.h`:
+Detailed merge design and restart notes now live in
+`ai/hazel-merge-notes.md`. This section is the current high-level map.
 
-```
-Hazel::merge(working, hazels, parameters, error)
-```
+There are two `Hazel::merge(...)` surfaces in `src/hazel.cc` / `src/hazel.h`:
 
-The merge writes a complete temp file from `working->make_temp("hazel")`,
-publishes it with a hard link to the canonical final shard name, then removes
-the temp file. The canonical output name is:
+- `Hazel::merge(working, hazel_names, parameters, error)` is the compatibility
+  adapter used by `apps/fiver2hazel --merge`. It parses the old named-shard
+  inputs, activates each Hazel through `Warren::make(...)`, checks filename/DNA
+  sequence agreement when sequence metadata is present, and delegates to the
+  activated overload with a null parameter pointer.
+- `Hazel::merge(hazels, dst, parameters, error)` is the real implementation.
+  The caller supplies activated Hazel objects and a final destination path
+  `dst`, which is also the prefix for merge sidecars.
 
-```
-hazel.<first_sequence_start>.<last_sequence_end>
-```
+The activated merge assembles a complete `dst.tmp`, publishes it by hard-linking
+that temp file to `dst`, and then deletes `dst.*` intermediates. Startup is
+idempotent: if `dst` already exists, the merge reports success after deleting
+sidecars; if `dst.tmp` exists without `dst`, the temp assembly is discarded.
 
-The implementation is structured around two local state structs:
+Only the idx merge is checkpointed. `HazelIdx::merge(...)` owns `dst.pst` and
+`dst.dct`:
 
-- `HazelMergeInput`: one validated input Hazel, opened once, with parsed DNA,
-  blob dictionary, idx/txt directories, sequence range, txt chunk metadata, and
-  a `front` cursor over the sorted idx directory.
-- `HazelMergeOutput`: the output stream plus blob dictionary state and helper
-  methods for writing/patching txt and idx blobs.
+- `dst.pst` stores merged posting payload bytes.
+- `dst.dct` stores three-`addr` directory records for completed output
+  features.
+- On restart, the dictionary is truncated to a record boundary, structurally
+  validated as a prefix with increasing features and sane end offsets, clipped
+  to entries covered by actual posting bytes, and then the posting file is
+  truncated to the surviving final end offset.
+- The merge then resumes with the first feature greater than the last surviving
+  committed dictionary record.
 
-Input validation currently checks:
+That repair path assumes ordinary single-writer append-prefix behavior for the
+sidecar files. It is meant to survive process death and interruption without
+turning Hazel into its own filesystem journal. It does not try to defend
+against hostile files, reused prefixes for different merges, or filesystems
+that can expose stale unrelated data at the end of an append stream.
 
-- each input name matches `hazel.<sequence_start>.<sequence_end>`;
-- input ranges are contiguous in the user-supplied order;
-- the internal `hazel.sequence_start` / `hazel.sequence_end` DNA values exactly
-  match the filename values;
-- all input DNA is compatible after ignoring only
-  `hazel.sequence_start`, `hazel.sequence_end`, `parameters`, and txt
-  `chunk_size`;
-- idx/txt blob headers and directories are internally consistent.
+The idx merge decodes participating postings through the activated input
+`HazelIdx` objects and writes a merged posting for each output feature. It
+synthesizes `null_feature` as the deletion/exclusion posting before ordinary
+feature merges, and synthesizes `text_chunk_tag` by copying input text-chunk
+anchors while adding cumulative raw text lengths. The older unique-source
+raw-copy optimization is not part of the current restartable path; the future
+plan for restoring that case lives in `ai/improvements.md`.
 
-The txt merge copies compressed chunks without decompressing or recompressing.
-Each input chunk is read once from its already-open source file and written
-unchanged into the output txt chunk space. Output txt directory entries use new
-cumulative raw and compressed byte ends. Output `raw_text_length` is the sum of
-input raw text lengths, and output `target_chunk_size` is the minimum input
-chunk size.
+`HazelTxt::merge(...)` has no durable checkpoint. It copies already-compressed
+text chunks from the activated input `HazelTxt` objects into the final assembly
+stream, builds a new cumulative txt directory, and patches the txt blob header.
+The txt side is deterministic and short relative to the long idx posting merge.
 
-The idx merge treats each input idx directory as a sorted feature stream. The
-stream front is a directory cursor, not an eagerly decoded posting. The sweep
-finds the next feature by inspecting front feature ids, decodes only
-participating postings, writes the merged output posting, and advances those
-inputs. Inline singleton entries are decoded into one-record `SimplePosting`s
-before merge and are written back inline only when the final posting is exactly
-one `<p, p, 0>` record.
-
-For an ordinary feature present in exactly one input Hazel when there is no
-`null_feature` exclusion posting, the merge raw-copies the compressed posting
-byte range instead of decoding and re-encoding it. Inline singleton entries on
-this path remain directory-only entries.
-
-Special postings are synthesized before the ordinary sweep and then slipped
-into the output stream at their natural feature positions:
-
-- `null_feature` is merged into `exclude` and used as the exclusion list for
-  ordinary feature merges.
-- `text_chunk_tag` is synthesized by copying input token intervals and adding
-  cumulative prior raw text length to each value.
-
-When the sweep reaches `null_feature` or `text_chunk_tag`, raw input entries
-for those features are consumed and skipped because their contributions were
-already folded into the synthesized posting.
+As of 2026-06-13, repeated manual interruption of
+`apps/fiver2hazel --merge a.meadow` followed by restart completed successfully:
+the final Hazel size matched prior saved merged outputs and the MARCO dev-small
+ranking profile matched earlier clean/resumed results. The concrete run record
+is in `ai/hazel-progress.md`.
 
 `Fiver::hazel(...)` also has the prerequisite separator change: before writing
 a non-empty Fiver to Hazel, it appends a trailing newline if the Fiver text does

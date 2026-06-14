@@ -78,10 +78,8 @@ bool living_fivers(std::shared_ptr<cottontail::Working> working,
   for (auto &name : names) {
     ShardName shard;
     shard.name = name;
-    if (!parse_shard_name(name, "fiver", &shard.start, &shard.end)) {
-      cottontail::safe_error(error) = "Bad fiver shard name: " + name;
-      return false;
-    }
+    if (!parse_shard_name(name, "fiver", &shard.start, &shard.end))
+      continue;
     found.push_back(shard);
   }
   std::sort(found.begin(), found.end(), [](const ShardName &a,
@@ -110,10 +108,8 @@ bool hazel_files(std::shared_ptr<cottontail::Working> working,
   for (auto &name : working->ls("hazel")) {
     ShardName shard;
     shard.name = name;
-    if (!parse_shard_name(name, "hazel", &shard.start, &shard.end)) {
-      cottontail::safe_error(error) = "Bad Hazel shard name: " + name;
-      return false;
-    }
+    if (!parse_shard_name(name, "hazel", &shard.start, &shard.end))
+      continue;
     hazels->push_back(shard);
   }
   std::sort(hazels->begin(), hazels->end(), [](const ShardName &a,

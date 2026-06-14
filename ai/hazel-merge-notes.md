@@ -1,10 +1,10 @@
-# Resumable Hazel Merge Plan
+# Resumable Hazel Merge Notes
 
 This note records the implemented direction for an interruptible, retryable
-Hazel-to-Hazel merge. It is still a planning/status artifact, not a Fluffle
-policy document.
+Hazel-to-Hazel merge. The merge is subtle enough to stand as its own design and
+status note. It is not a Fluffle policy document.
 
-The plan deliberately stays below Fluffle policy. It does not decide when a
+This note deliberately stays below Fluffle policy. It does not decide when a
 merge should run, which shard range should be selected, how merged shards are
 installed into the live view, or how Fivers are retained. Those choices remain
 above this file-level merge primitive.
@@ -28,9 +28,18 @@ static bool merge(
     std::string *error = nullptr);
 ```
 
-The old `Hazel::merge(working, hazel_names, parameters, error)` implementation
-is still present for now. The next cleanup step is to replace or adapt that
-legacy Working/string-name path so callers use the activated-Hazel merge.
+The old `Hazel::merge(working, hazel_names, parameters, error)` surface is
+still present for callers, but its old file-parsing merge implementation has
+been removed. It is now a thin compatibility adapter: parse the old Hazel shard
+names, activate each Hazel file with `Warren::make(...)`, downcast to `Hazel`,
+verify filename/DNA sequence agreement when sequence metadata is present, and
+call the activated-Hazel overload with a null parameter pointer.
+
+As of 2026-06-13, repeated manual-interruption smoke checks on `a.meadow`
+completed successfully. A final Hazel produced after three interrupted
+`fiver2hazel --merge a.meadow` runs matched the known saved output size and
+ranked with the expected MARCO dev-small profile. Details live in
+`ai/hazel-progress.md`.
 
 ## Core Goal
 
@@ -120,12 +129,17 @@ Input Hazel DNA is checked lightly.
 - `HazelTxt::merge` also performs a belt-and-suspenders equality check on the
   activated `target_chunk_size_` values before writing the txt blob header.
 
-Output `parameters` handling follows Fluffle ownership:
+Output `parameters` handling follows Fluffle ownership in the activated
+overload:
 
 - if the shared `parameters` pointer passed to `Hazel::merge` is non-null, the
   output DNA writes `parameters: freeze(*parameters)`;
 - if the pointer is null, the output DNA inherits the `parameters` package from
   the last input Hazel, or omits it if the last input has none.
+
+The compatibility Working/name adapter deliberately passes `nullptr`, matching
+the current `fiver2hazel` behavior where converted input Hazels already carry
+the desired parameter package.
 
 Sequence metadata is optional but meaningful:
 
@@ -300,16 +314,15 @@ top-level blob dictionary records the resulting offsets and lengths.
 
 ## Remaining Cleanup
 
-The activated-Hazel overload is now in place, but the legacy Working/name-based
-merge still exists. The next step is to tear out or adapt:
+The old file-parsing Hazel merge has been removed from `src/hazel.cc`.
+`HazelMergeInput`, the legacy idx/txt merge helpers, and the old
+`posting_for_feature(...)` / `text_chunk_posting(...)` /
+`posting_factory_from_idx_recipe(...)` support code are gone.
 
-- `HazelMergeInput`;
-- the old `HazelMergeOutput` usages that only serve the legacy merge;
-- `posting_for_feature(...)`, `text_chunk_posting(...)`, and
-  `posting_factory_from_idx_recipe(...)` if they become dead after the legacy
-  merge is removed;
-- callers such as `apps/fiver2hazel.cc` and Hazel regression coverage that
-  still use the old `Hazel::merge(working, names, parameters, error)` surface.
+The old Working/name API remains only as a compatibility adapter for existing
+callers such as `apps/fiver2hazel.cc` and Hazel regression coverage. Future
+Fluffle integration can call the activated-Hazel overload directly once it has
+selected and activated candidate Hazels.
 
 Compile/build verification is sufficient unless the user explicitly asks for
 runtime tests, ranking runs, evals, or benchmarks.

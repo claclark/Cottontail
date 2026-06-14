@@ -9,6 +9,11 @@ Especially don't do these things without discussion and approval from the user.
 
 - Ensure only one process (i.e., one flufle) is manipulating the databases at
   any one time.
+- Implement via a lock file with a clearly explained clean-up process.
+- Probably call the lock file "LOCKED.sh" and you should be able to unlock by
+  running it. With internal documentation explaining it.
+- Clean-up should include deleting partial Hazel merges, since we are assuming
+  a hard crash, rather than a clean shutdown.
 
 ## Txt Wrapping
 
@@ -51,6 +56,19 @@ Especially don't do these things without discussion and approval from the user.
   applies.
 - Consider adding a dedicated exclusion/null merge helper instead of relying on
   ordinary posting-list merge behavior.
+
+## Hazel Merge Unique-Source Fast Path
+
+- Reintroduce a narrow fast path inside restartable `HazelIdx::merge` for
+  ordinary features that occur in exactly one input Hazel when there is no
+  active `null_feature` exclusion posting.
+- For non-inline postings, copy the source compressed posting bytes into the
+  checkpoint `.pst` file and then append the corresponding `.dct` entry as the
+  commit marker.
+- Preserve inline singleton postings as dictionary-only checkpoint entries
+  without decoding/re-encoding.
+- Do not apply this path to `null_feature` or the text-chunk posting. The
+  text-chunk posting still needs text-base value adjustment during merge.
 
 ## Split Test Targets and improve regression testing generally
 

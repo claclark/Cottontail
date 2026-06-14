@@ -5,8 +5,140 @@ compared against concrete outcomes.
 
 Entries are historical snapshots. Some sections intentionally describe states,
 commands, binaries, and next steps that were later superseded. For current
-behavior and the active design checkpoint, see `ai/hazel.md`, `ai/notes.md`,
-and `ai/plan.md`.
+behavior and the active design checkpoint, see `ai/hazel.md`,
+`ai/hazel-merge-notes.md`, `ai/notes.md`, and `ai/plan.md`.
+
+## 2026-06-13: Repeated Restart Hazel Merge Smoke
+
+Context:
+
+- The focus was the `HazelIdx::merge` restart path: repair existing
+  `dst.pst`/`dst.dct` checkpoint sidecars, reestablish the processed-feature
+  invariant, and continue.
+- `a.meadow` still contained the same three input Hazel shards covering
+  sequence ranges `0..11`, `12..37`, and `38..58`.
+- The final expected merged Hazel size was known from saved full outputs.
+
+Manual interruption sequence:
+
+```
+./bazel-bin/apps/fiver2hazel --merge a.meadow
+^C
+./bazel-bin/apps/fiver2hazel --merge a.meadow
+^C
+./bazel-bin/apps/fiver2hazel --merge a.meadow
+^C
+./bazel-bin/apps/fiver2hazel --merge a.meadow
+```
+
+Completed run:
+
+- Merge time: `500234` ms.
+- Total time: `500238` ms.
+- Final Hazel:
+  `a.meadow/hazel.00000000000000000000.00000000000000000058`.
+- Final Hazel size: `3219314852` bytes.
+- Saved comparison files `save0`, `save1`, `save2`, and `save3` were also
+  `3219314852` bytes.
+
+Follow-up rank check:
+
+```
+./rank.sh a.meadow/hazel.00000000000000000000.00000000000000000058
+```
+
+- Ranker-reported ranking time: `12114` ms.
+- Wall time: `0:13.54`.
+- User time: `206.08`.
+- System time: `8.12`.
+- CPU: `1581%`.
+- Max RSS: `5657480` KB.
+- Major page faults: `2`.
+- Minor page faults: `1504918`.
+- `MRR @10: 0.18975923272843034`.
+- `QueriesRanked: 6980`.
+- Fake result topics: `645252`, `970152`.
+
+Live checkpoint snapshot observed before the final successful publish:
+
+- `dst.dct`: `247356528` bytes.
+- `dst.pst`: `1008524086` bytes.
+- `dst.tmp`: `0` bytes.
+
+Interpretation:
+
+- Repeated process interruption and restart completed and published the final
+  Hazel.
+- The final output size matched prior saved merged outputs.
+- The ranking profile matched the earlier clean and resumed Hazel results.
+- A large `.dct` relative to `.pst` is plausible for this format: each
+  directory entry is three `addr` values, and inline singleton postings are
+  represented by directory-only entries.
+- This is evidence for robust process-kill/restart behavior under the
+  append-prefix sidecar assumption. It is not intended as a separate durability
+  guarantee beyond normal local-filesystem crash consistency.
+
+## 2026-06-11: Restartable Hazel Merge Smoke Timing
+
+Context:
+
+- Restartable activated-Hazel merge has replaced the old file-parsing merge
+  behind the `apps/fiver2hazel --merge` path.
+- `a.meadow` contains three input Hazel shards covering sequence ranges
+  `0..11`, `12..37`, and `38..58`.
+- `fiver2hazel` discovery now ignores non-shard sidecar names such as
+  checkpoint `.dct`/`.pst` files.
+
+Clean no-interruption merge:
+
+```
+./bazel-bin/apps/fiver2hazel --merge a.meadow/
+```
+
+- Merge time: `707052` ms.
+- Total time: `707056` ms.
+- Final Hazel:
+  `a.meadow/hazel.00000000000000000000.00000000000000000058`.
+
+Follow-up rank check:
+
+```
+./rank.sh a.meadow/hazel.00000000000000000000.00000000000000000058
+```
+
+- Max worker ranking-loop time: `12533` ms.
+- Wall time: `0:14.04`.
+- User time: `206.49`.
+- System time: `9.50`.
+- CPU: `1538%`.
+- Max RSS: `5655848` KB.
+- Major page faults: `2`.
+- Minor page faults: `1504365`.
+- `MRR @10: 0.18975923272843034`.
+- `QueriesRanked: 6980`.
+- Fake result topics: `645252`, `970152`.
+
+Interrupted/resumed smoke check:
+
+- A merge was killed partway through, then restarted with the same command.
+- Resumed merge time: `1044534` ms.
+- Total resumed time: `1044538` ms.
+- The final Hazel size was `3219314852` bytes, matching saved old-merge-sized
+  outputs.
+- Follow-up rank check matched the same MRR/query-count profile:
+  `MRR @10: 0.18975923272843034`, `QueriesRanked: 6980`, fake result topics
+  `645252` and `970152`.
+
+Interpretation:
+
+- Correctness looks stable across both clean and interrupted/resumed merge
+  paths on this workload.
+- The clean restartable merge is in the same neighborhood as the earlier
+  `718082` ms clean observation, but remains slower than the old kept
+  unique-posting raw-copy implementation (`594594` ms).
+- The interrupted/resumed timing confirms that checkpointing avoided restarting
+  from scratch, but the successful resumed path still pays final idx assembly
+  and full txt copy costs.
 
 ## 2026-06-07: Fiver/Hazel Blend Motivation Under New TREC Timer
 

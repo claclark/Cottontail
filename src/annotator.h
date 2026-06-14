@@ -25,21 +25,21 @@ public:
   inline std::string name() { return name_; }
   inline bool annotate(addr feature, addr p, addr q, fval v,
                        std::string *error = nullptr) {
-    if (feature == null_feature)
+    if (feature <= null_feature)
       return true;
     else
       return annotate_(feature, p, q, v, error);
   };
   inline bool annotate(addr feature, addr p, addr q,
                        std::string *error = nullptr) {
-    if (feature == null_feature)
+    if (feature <= null_feature)
       return true;
     else
       return annotate_(feature, p, q, 0.0, error);
   };
   inline bool annotate(addr feature, addr p, addr q, addr v,
                        std::string *error = nullptr) {
-    if (feature == null_feature)
+    if (feature <= null_feature)
       return true;
     else
       return annotate(feature, p, q, addr2fval(v), error);
