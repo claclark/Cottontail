@@ -4,6 +4,7 @@
 
 #include "gtest/gtest.h"
 
+#include "src/array_hopper.h"
 #include "src/compressor.h"
 #include "src/simple_posting.h"
 
@@ -72,9 +73,12 @@ TEST(SimplePosting, Tokens) {
     EXPECT_TRUE(posting6->invariants(&error)) << error;
     EXPECT_TRUE(*posting3 == *posting6);
   }
-  std::unique_ptr<cottontail::Hopper> hopper4 = posting4->hopper();
-  std::unique_ptr<cottontail::Hopper> hopper5 = posting5->hopper();
-  std::unique_ptr<cottontail::Hopper> hopper6 = posting6->hopper();
+  std::unique_ptr<cottontail::Hopper> hopper4 =
+      cottontail::ArrayHopper::make(posting4);
+  std::unique_ptr<cottontail::Hopper> hopper5 =
+      cottontail::ArrayHopper::make(posting5);
+  std::unique_ptr<cottontail::Hopper> hopper6 =
+      cottontail::ArrayHopper::make(posting6);
   cottontail::addr p, q;
   hopper4->tau(0, &p, &q);
   ASSERT_TRUE(p == 1);
@@ -158,9 +162,12 @@ TEST(SimplePosting, Annotations) {
     EXPECT_TRUE(posting6->invariants(&error)) << error;
     EXPECT_TRUE(*posting3 == *posting6);
   }
-  std::unique_ptr<cottontail::Hopper> hopper4 = posting4->hopper();
-  std::unique_ptr<cottontail::Hopper> hopper5 = posting5->hopper();
-  std::unique_ptr<cottontail::Hopper> hopper6 = posting6->hopper();
+  std::unique_ptr<cottontail::Hopper> hopper4 =
+      cottontail::ArrayHopper::make(posting4);
+  std::unique_ptr<cottontail::Hopper> hopper5 =
+      cottontail::ArrayHopper::make(posting5);
+  std::unique_ptr<cottontail::Hopper> hopper6 =
+      cottontail::ArrayHopper::make(posting6);
   cottontail::addr p, q;
   cottontail::fval v;
   hopper4->tau(0, &p, &q, &v);
@@ -527,7 +534,8 @@ TEST(SimplePosting, Hopper) {
   std::shared_ptr<cottontail::SimplePosting> merged =
       factory->posting_from_merge(postings);
   ASSERT_NE(merged, nullptr);
-  std::unique_ptr<cottontail::Hopper> hopper = merged->hopper();
+  std::unique_ptr<cottontail::Hopper> hopper =
+      cottontail::ArrayHopper::make(merged);
   cottontail::addr p, q;
   cottontail::fval v, x = 0.0;
   for (hopper->tau(0, &p, &q, &v); p < cottontail::maxfinity;
@@ -558,7 +566,8 @@ TEST(SimplePosting, Invariants) {
   std::shared_ptr<cottontail::SimplePosting> posting =
       factory->posting_from_annotations(&it, ann.end());
   ASSERT_NE(posting, nullptr);
-  std::unique_ptr<cottontail::Hopper> hopper = posting->hopper();
+  std::unique_ptr<cottontail::Hopper> hopper =
+      cottontail::ArrayHopper::make(posting);
   ASSERT_NE(hopper, nullptr);
   cottontail::addr p, q;
   cottontail::fval v, x = 1.0;
@@ -606,7 +615,8 @@ TEST(SimplePosting, GarbageCollection) {
   ASSERT_NE(postingX, nullptr);
   std::shared_ptr<cottontail::SimplePosting> posting =
       factory->posting_from_merge(postings, postingX);
-  std::unique_ptr<cottontail::Hopper> hopper = posting->hopper();
+  std::unique_ptr<cottontail::Hopper> hopper =
+      cottontail::ArrayHopper::make(posting);
   ASSERT_NE(hopper, nullptr);
   cottontail::addr p, q;
   cottontail::fval v;

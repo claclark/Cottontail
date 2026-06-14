@@ -9,14 +9,13 @@
 #include "src/cache_gate.h"
 #include "src/compressor.h"
 #include "src/core.h"
-#include "src/hopper.h"
 #include "src/simple.h"
 
 namespace cottontail {
 
 struct CacheRecord;
 
-class SimplePosting final : public std::enable_shared_from_this<SimplePosting> {
+class SimplePosting final {
 public:
   void append(std::shared_ptr<SimplePosting> more);
   void write(std::ostream *f);
@@ -26,7 +25,6 @@ public:
   bool invariants(std::string *error = nullptr);
   bool operator==(const SimplePosting &other);
   inline size_t size() { return postings_.size(); }
-  std::unique_ptr<Hopper> hopper();
 
   SimplePosting(const SimplePosting &) = delete;
   SimplePosting &operator=(const SimplePosting &) = delete;
@@ -74,7 +72,8 @@ public:
   std::shared_ptr<SimplePosting>
   posting_from_annotations(std::vector<Annotation>::iterator *start,
                            const std::vector<Annotation>::iterator &end);
-  std::shared_ptr<SimplePosting> posting_from_feature(addr feature);
+  std::shared_ptr<SimplePosting> posting_from_feature(addr feature,
+                                                      bool open = true);
   std::shared_ptr<SimplePosting>
   posting_from_compressed_blob(const char *data, addr length,
                                std::string *error = nullptr);

@@ -8,6 +8,7 @@
 
 #include "src/core.h"
 #include "src/owsla.h"
+#include "src/simple_posting.h"
 #include "src/warren.h"
 #include "src/working.h"
 
@@ -27,6 +28,7 @@ public:
         const std::string &dst,
         std::shared_ptr<std::map<std::string, std::string>> parameters,
         std::string *error = nullptr);
+  std::shared_ptr<SimplePosting> posting(addr feature);
 
   virtual ~Hazel(){};
   Hazel(const Hazel &) = delete;

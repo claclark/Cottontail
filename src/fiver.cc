@@ -15,6 +15,7 @@
 
 #include "src/annotator.h"
 #include "src/appender.h"
+#include "src/array_hopper.h"
 #include "src/compressor.h"
 #include "src/core.h"
 #include "src/fastid_txt.h"
@@ -221,7 +222,7 @@ private:
     if (posting == index_->end())
       return std::make_unique<EmptyHopper>();
     else
-      return posting->second->hopper();
+      return ArrayHopper::make(posting->second);
   };
   addr count_(addr feature) final {
     auto posting = index_->find(feature);
@@ -417,7 +418,7 @@ Fiver::merge(const std::vector<std::shared_ptr<Fiver>> &fivers,
       if (posting != fiver->index_->end()) {
         if (text->length() > 0 && text->back() != '\n')
           *text += "\n";
-        std::unique_ptr<Hopper> hopper = posting->second->hopper();
+        std::unique_ptr<Hopper> hopper = ArrayHopper::make(posting->second);
         addr p, q, v;
         for (hopper->tau(0, &p, &q, &v); p < maxfinity;
              hopper->tau(p + 1, &p, &q, &v))
@@ -506,23 +507,28 @@ Fiver::merge(const std::vector<std::shared_ptr<Fiver>> &fivers, addr feature,
              std::shared_ptr<Compressor> fvalue_compressor) {
   if (fivers.size() == 0)
     return std::make_unique<EmptyHopper>();
-  if (fivers.size() == 1)
-    return fivers[0]->idx()->hopper(feature);
-  if (feature == fivers[0]->featurizer()->featurize(text_chunk_tag)) {
+  std::vector<std::shared_ptr<Fiver>> contributors;
+  for (size_t i = 0; i < fivers.size(); i++)
+    if (fivers[i] != nullptr && fivers[i]->idx()->count(feature) > 0)
+      contributors.push_back(fivers[i]);
+  if (contributors.size() == 0)
+    return std::make_unique<EmptyHopper>();
+  if (contributors.size() == 1)
+    return contributors[0]->idx()->hopper(feature);
+  if (feature == contributors[0]->featurizer()->featurize(text_chunk_tag)) {
     std::vector<std::unique_ptr<cottontail::Hopper>> hoppers;
-    for (size_t i = 0; i < fivers.size(); i++)
-      if (fivers[i] != nullptr && fivers[i]->idx()->count(feature) > 0)
-        hoppers.emplace_back(fivers[i]->idx()->hopper(feature));
+    for (size_t i = 0; i < contributors.size(); i++)
+      hoppers.emplace_back(contributors[i]->idx()->hopper(feature));
     return gcl::VectorHopper::make(&hoppers, false, error);
   }
   std::shared_ptr<SimplePosting> posting;
   if (cache != nullptr && cache->try_get(feature, &posting))
-    return posting->hopper();
+    return ArrayHopper::make(posting);
   std::vector<std::shared_ptr<SimplePosting>> postings;
-  for (size_t i = 0; i < fivers.size(); i++) {
-    auto where = fivers[i]->index_->find(feature);
-    if (where != fivers[i]->index_->end())
-      postings.emplace_back(where->second);
+  for (size_t i = 0; i < contributors.size(); i++) {
+    auto posting = contributors[i]->posting(feature);
+    if (posting != nullptr)
+      postings.emplace_back(posting);
   }
   if (postings.size() == 0)
     return std::make_unique<EmptyHopper>();
@@ -537,7 +543,16 @@ Fiver::merge(const std::vector<std::shared_ptr<Fiver>> &fivers, addr feature,
   posting = posting_factory->posting_from_merge(postings);
   if (cache != nullptr)
     cache->set(feature, posting);
-  return posting->hopper();
+  return ArrayHopper::make(posting);
+}
+
+std::shared_ptr<SimplePosting> Fiver::posting(addr feature) {
+  if (index_ == nullptr)
+    return nullptr;
+  auto where = index_->find(feature);
+  if (where == index_->end())
+    return nullptr;
+  return where->second;
 }
 
 addr Fiver::relocate(addr where) {

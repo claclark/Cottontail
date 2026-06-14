@@ -1,50 +1,110 @@
-# Goal: Review The Fiver-First Bigwig PostingIterator Plan
+# Goal: Review The Bigwig SimplePosting Merge-Cache Plan
 
-Hazel writer, standalone activation, Hazel-to-Hazel merge, scratch conversion
-utilities, and dedicated Hazel regression coverage are in place. The next
-coding milestone is to introduce a `PostingIterator`-style raw posting-list
-path that can work over both `SimplePosting` storage and `CacheRecord` cache
-entries. The first implementation step should integrate only Fiver shards, so
-the iterator and Bigwig merge-cache mechanics can be validated before Hazel
-joins the Bigwig query path.
+Hazel, Fiver, and `SimplePosting` have been aligned for the next Bigwig cache
+step:
 
-This plan records a design discussion, not an authorization to start coding.
-Before editing implementation files, re-read this plan with the user, discuss
-the shape, resolve naming questions, and get explicit approval to implement it.
-Do not treat the plan as a request to hack together a transitional V1. The
-immediate coding step is Fiver-only unless the user explicitly widens the
-scope.
+- `SimplePosting` is storage only. It no longer manufactures hoppers and no
+  longer inherits from `enable_shared_from_this`.
+- `ArrayHopper` binds directly to waitable `SimplePosting` storage.
+- Fiver and Hazel both expose concrete `posting(feature)` methods.
+- Hazel idx cache entries are now waitable `SimplePosting`s, not `CacheRecord`s.
+- `CacheRecord` remains for `SimpleIdx` and existing array-cache paths, but it
+  is no longer part of Hazel's idx cache shape.
+
+This plan records the next design checkpoint. It is not authorization to start
+coding without discussion. Before editing implementation files, re-read this
+plan with the user and confirm the exact scope.
 
 ## Design Direction
 
 Bigwig should continue to expose ordinary hoppers to query code. Internally,
-`BigwigIdx::hopper_(feature)` should schedule asynchronous raw posting-list
-merges when multiple Fiver sub-indexes contribute to a feature. This is useful
-for multi-feature queries: requesting hoppers schedules independent feature
-loads and gives available hardware cores work before traversal reaches each
-hopper.
+the feature mergepoint should return quickly when a real multi-shard merge is
+needed:
 
-The Fiver-only phase should preserve Bigwig's current started view shape: live
-shards still narrow to `Fiver`, and Hazel is not yet part of that view. This
-keeps the first step focused on the iterator abstraction, direct one-source
-delegation, async merge-cache publication, and `ArrayHopper` binding.
+1. create or find a cached waitable `SimplePosting`;
+2. launch a background merge fill on a cache miss;
+3. return `ArrayHopper::make(posting)` immediately.
 
-Hazel keeps its existing immutable-shard cache because it avoids repeated disk
-reads and decompression. Later, once the Fiver-only path is solid, the same
-`PostingIterator` interface should let Hazel cache entries participate without
-copying decoded cache arrays into `SimplePosting` vectors first. Bigwig gains a
-cache for merged raw posting lists. Avoid a feature-by-sequence Fluffle cache
-unless future usage provides a clear need: versioning, eviction, and lifetime
-rules become complicated quickly.
+This mirrors Hazel's current query-time cache behavior: a hopper can be handed
+back before the backing posting has finished filling, and the hopper waits at
+bind time.
 
-A simpler cache-lifetime improvement remains worth discussing separately:
-preserve a Bigwig merged-posting cache across an `end()` -> `start()` boundary
-when the logical sequence has not changed. This is not a sequence-versioned
-cache: one cache generation remains valid until a new commit changes the
-logical sequence. Do not add this incidentally without agreeing on ownership
-and invalidation with the user.
+The first cache step should remain Fiver-only. Bigwig's started view still
+narrows live shards to `Fiver`, and Hazel is not yet part of the Bigwig live
+query path. The point is to validate deferred Bigwig merged postings over the
+existing Fiver view before adding mixed Fiver/Hazel shards.
 
-Deletion semantics stay as they are today:
+The future direction is a Fluffle-managed shard interface implemented by both
+Fiver and Hazel, with a virtual raw-posting operation matching the concrete
+`posting(feature)` methods. Do not introduce that superclass in the immediate
+cache diff unless the user explicitly widens the scope.
+
+## Mergepoint Responsibilities
+
+The feature-level mergepoint currently lives at:
+
+```
+Fiver::merge(fivers, feature, error, cache, ...)
+```
+
+For now it remains Fiver-only, but it should be shaped as the future mixed
+Fiver/Hazel mergepoint:
+
+1. Scan shards with fast `idx()->count(feature)`.
+2. Return `EmptyHopper` if no shard contributes.
+3. If one shard contributes, delegate to that shard's own `idx()->hopper`.
+4. If multiple shards contribute, use the Bigwig-provided merge cache.
+
+Direct one-shard delegation is important. It preserves Fiver's in-memory
+behavior today and Hazel's lazy cache behavior later. Bigwig should stay mostly
+as a query composer rather than accumulating shard-policy details.
+
+## Bigwig Cache Shape
+
+Keep the Bigwig cache conceptually simple:
+
+```
+feature -> std::shared_ptr<SimplePosting>
+```
+
+On a multi-shard cache miss:
+
+1. Create a closed/deferred `SimplePosting` for the feature.
+2. Insert it into the cache before launching work, so concurrent hopper
+   requests share the same pending posting.
+3. Launch a background thread that merges contributor postings into the cached
+   posting.
+4. Release the posting after the vectors are complete.
+5. Return `ArrayHopper::make(posting)` to the caller.
+
+On a cache hit, return `ArrayHopper::make(posting)` immediately. The hopper
+will wait if the posting is still being filled.
+
+Do not reintroduce a separate Bigwig `CacheRecord` completion latch unless a
+concrete problem appears. `SimplePosting` already has the one-way completion
+gate needed for this step.
+
+## Merge Implementation
+
+The current synchronous merge helper is
+`SimplePostingFactory::posting_from_merge(...)`, which creates and returns a
+complete `SimplePosting`.
+
+For the deferred cache fill, add the narrowest helper that can fill an existing
+destination `SimplePosting` without changing posting semantics. Preserve:
+
+- the append fast path when lists are globally ordered and non-overlapping;
+- the priority-queue merge behavior otherwise;
+- the existing `push(...)` semantics;
+- the existing separation between raw merging and deletion/exclusion handling.
+
+The helper should consume Fiver `posting(feature)` results in the first step.
+Later, the same shape can consume Hazel `posting(feature)` results through the
+future shared shard interface.
+
+## Deletion Semantics
+
+Deletion behavior stays compositional:
 
 ```
 NotContainedIn(
@@ -53,201 +113,68 @@ NotContainedIn(
 ```
 
 Do not physically apply exclusions while filling Bigwig's feature cache.
-Keeping raw merging and deletion semantics separate preserves the current
-behavior and leaves physical exclusion merging as an evidence-driven future
-optimization.
+`null_feature` should go through the same merged/direct cache path as ordinary
+features and remain reusable by the `NotContainedIn` query composition.
 
-## Internal Idx Hook
+## Ownership And Lifetime
 
-Add a low-level internal hook allowing composite idx implementations to request
-efficient posting-list iteration from arbitrary sub-indexes.
+For the immediate step, Bigwig's merged-posting cache can remain owned by the
+started `BigwigIdx`, as it is today. This keeps the implementation modest.
 
-The intended C++ shape is:
-
-```
-class Idx {
-protected:
-  static PostingIterator posting(std::shared_ptr<Idx> idx, addr feature) {
-    return idx->posting_(feature);
-  }
-
-private:
-  virtual PostingIterator posting_(addr feature) {
-    return PostingIterator();
-  }
-};
-```
-
-The protected static bridge is intentional. It lets `BigwigIdx`, as an idx
-implementation, collaborate with arbitrary idx backends without making this
-low-level operation part of the public query API.
-
-Names such as `PostingIterator`, `posting(...)`, and `posting_(...)` are
-provisional. Discuss naming with the user before implementation.
-
-Expected backend implementations:
-
-- First implementation: `FiverIdx::posting_(feature)` is essentially a lookup
-  returning iteration over its existing `SimplePosting`.
-- Later implementation: `HazelIdx::posting_(feature)` should reuse the
-  existing `cache(feature)` method, which already locates the feature, creates
-  or reuses a cache line, and synchronously fills it when needed for internal
-  access.
-- Backends without a clear need may retain the default empty result.
-
-## Posting Iterator
-
-Introduce a lean value-type iterator over an immutable posting list.
-
-It should:
-
-- construct from `std::shared_ptr<SimplePosting>`;
-- construct from `std::shared_ptr<CacheRecord>`;
-- retain the relevant backing owner;
-- store raw pointers into posting, qosting, and optional fvalue storage;
-- expose small inline operations for front/end access and advancement;
-- wait on a `CacheRecord` before extracting its raw pointers;
-- avoid heap allocation for the iterator itself.
-
-The iterator exists to let Fiver-backed `SimplePosting`s and Hazel-backed
-`CacheRecord`s eventually participate in one merge without copying Hazel cache
-arrays into `SimplePosting` vectors first. The first use should be Fiver-only.
-
-## Bigwig Idx Cache
-
-Change `BigwigIdx` from its current cache of completed `SimplePosting`s to a
-cache whose entry contains:
-
-```
-std::shared_ptr<CacheRecord> completion;
-std::shared_ptr<SimplePosting> posting;
-```
-
-For Bigwig, the `CacheRecord` is a completion latch. The associated
-`SimplePosting` owns the dynamically built vectors. Once completion is
-signalled, the `SimplePosting` must remain immutable.
-
-The Fiver-only merged-or-direct helper used by `BigwigIdx::hopper_(feature)`
-should:
-
-1. Scan sub-indexes using their fast `count(feature)` methods.
-2. Return `EmptyHopper` immediately if no sub-index contains the feature.
-3. Return the contributing sub-index's own hopper directly if exactly one
-   sub-index contains the feature.
-4. Otherwise acquire the Bigwig cache lock and look for an existing entry.
-5. On a miss, create an unready `CacheRecord` plus an empty `SimplePosting`,
-   insert the pair, and launch a background merge thread.
-6. Release the cache lock before constructing the returned hopper.
-7. Return an `ArrayHopper` backed by the completion latch and cached
-   `SimplePosting`.
-
-The direct one-sub-index path is important. In the first step, a feature present
-in one Fiver should use that Fiver's own hopper directly. Later, the same rule
-will let a feature present in one Hazel use `HazelIdx::hopper_(feature)`
-directly, preserving Hazel's own lazy disk/decompression cache behavior. When
-deletion annotations exist, the ordinary feature hopper is still composed with
-the raw `null_feature` hopper through `NotContainedIn`; direct delegation does
-not bypass deletion semantics.
-
-The cache should remain about raw posting merging. `null_feature` goes through
-the same merged-or-direct mechanism and may be reused by the existing
-`NotContainedIn` composition.
-
-## ArrayHopper Extension
-
-Keep the low-level hopping implementation centralized in `ArrayHopper`.
-
-Clean up its existing ready-`SimplePosting` construction path:
-
-- Add `friend class ArrayHopper;` to `SimplePosting`.
-- Replace the current constructor/static `make(...)` arguments that manually
-  pass `n`, postings, qostings, and fostings extracted by
-  `SimplePosting::hopper()`.
-- Let `ArrayHopper` extract the private vector size and raw pointers itself.
-
-Add a second `ArrayHopper` construction path taking both:
-
-```
-std::shared_ptr<CacheRecord> completion
-std::shared_ptr<SimplePosting> posting
-```
-
-This unusual pairing is intentional:
-
-- wait for readiness using `completion`;
-- after waking, bind `n_` and raw pointers from `posting`;
-- then use the existing low-level hopping code.
-
-An `ArrayHopper` is a sealed box until its own `ready_` state is established.
-Operational methods already call `wait()` before hopping. Preserve a single
-clear invariant: after `ArrayHopper::wait()` returns, its length and raw
-pointers are valid and stable.
-
-Do not convert `CacheRecord` arrays to vectors as part of this work. Existing
-SimpleIdx and Hazel cache behavior can remain unchanged.
-
-## Iterator Merge
-
-Add a merge operation that consumes a collection of fast posting iterators and
-fills a destination `SimplePosting`.
-
-Preserve current posting semantics and the important append optimization:
-
-- when lists are already globally ordered and non-overlapping, append them;
-- otherwise use priority-queue merging and `push(...)` behavior equivalent to
-  the existing `SimplePostingFactory::posting_from_merge(...)` path.
-
-Raw merge inputs reported present by `count(feature)` cannot disappear during
-this operation because exclusions are not physically applied. This avoids
-inventing synthetic empty posting arrays for the Bigwig async cache path.
+A separate cache-lifetime improvement remains open: preserve the Bigwig
+merged-posting cache across `end()` -> `start()` when the logical sequence has
+not changed. That is not a sequence-versioned Fluffle cache; it is one cache
+generation that stays valid until a commit changes the logical sequence. Do not
+add this incidentally without discussing ownership and invalidation first.
 
 ## Mixed Shard View
 
-This is not part of the first Fiver-only implementation step.
+This is not part of the immediate cache step.
 
-The later mixed Fiver/Hazel idx changes require Bigwig's started view to retain
-generic shard Warrens rather than narrowing all live entries to `Fiver`.
+Later mixed Fiver/Hazel query support requires Bigwig's started view to retain
+generic shard Warrens, or a new Fluffle shard superclass, rather than narrowing
+all live entries to `Fiver`.
 
-Review the corresponding txt path as part of implementation:
+Review the txt path before that work:
 
 - `BigwigTxt` currently stores `std::vector<std::shared_ptr<Fiver>>`;
 - its translate/token/range behavior already uses public Warren txt methods;
-- determine with the user whether changing it to generic Warrens is sufficient
-  for the intended mixed Fiver/Hazel view.
+- determine with the user whether changing it to generic Warrens or to the new
+  shard interface is the right minimal mixed-view step.
 
 Do not begin generic-Warren Bigwig view changes, background Hazel
 materialization, activation preference, Fiver retention, or Hazel compaction
-policy work incidentally. Those remain separate policy decisions unless the
-user explicitly brings them into the approved implementation scope.
+policy work incidentally.
 
 ## Discussion Checklist Before Coding
 
 Confirm with the user:
 
 - that the immediate implementation remains Fiver-only;
-- final names for the iterator, idx hook, and Bigwig cache entry;
-- whether the iterator merge belongs in `SimplePostingFactory` or another
-  narrowly scoped location;
-- the exact empty/default iterator representation;
+- whether the async cache fill belongs inside feature-level `Fiver::merge(...)`
+  for now;
+- the exact helper name for filling an existing `SimplePosting`;
 - the thread-launch and failure behavior for Bigwig async cache fills;
-- whether Bigwig's cache remains owned by the started `BigwigIdx`, or should
-  survive `end()` -> `start()` while the logical sequence remains unchanged;
-- the minimal generic-Warren txt change needed for mixed Fiver/Hazel views;
+- whether `Fiver::merge(...)` should keep using the caller-supplied `SafeMap`
+  or move to a more explicit cache-entry helper;
+- whether Bigwig's cache remains owned by the started `BigwigIdx`;
 - whether focused compile-only verification is sufficient for the approved
-  implementation step.
+  implementation step;
+- whether `apps/trec-example` should be run by the user as the substantial
+  dynamic regression after this cache step.
 
 ## Useful Starting Points
 
-- `src/idx.h`
-- `src/array_hopper.h`
-- `src/array_hopper.cc`
 - `src/simple_posting.h`
 - `src/simple_posting.cc`
-- `src/bigwig.cc`
+- `src/array_hopper.h`
+- `src/array_hopper.cc`
+- `src/fiver.h`
 - `src/fiver.cc`
+- `src/bigwig.cc`
 - `src/hazel.cc`
 - `src/fluffle.h`
-- `ai/hazel.md`
+- `apps/trec-example.cc`
 
 ## Verification Rule
 

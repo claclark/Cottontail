@@ -93,9 +93,12 @@
 - Standalone Hazel files can be opened by `Warren::make(...)`, parse idx/txt
   blobs, construct hoppers from posting blobs, translate text through cached
   decompressed text chunks, and shallow-clone the Hazel Warren.
-- Hazel idx activation uses a `CacheRecord`-backed decoded posting cache.
-  Non-inline posting hoppers share cache lines; cache fills use a 16-reader
-  `ReadGate` and publish completion through `CacheGate`.
+- Hazel idx activation uses waitable `SimplePosting` cache entries. Non-inline
+  posting hoppers share cached postings; query-time cache fills use a
+  16-reader `ReadGate`, run in a background thread, and publish completion
+  through `SimplePosting::release()`. Hazel's concrete `posting(feature)`
+  method fills synchronously on the caller's thread and returns a ready
+  posting.
 - Hazel txt activation loads the text map, uses a 16-reader `ReadGate`, keeps a
   mutex-protected `text_chunk_tag` hopper, and caches decompressed chunks
   without eviction.
@@ -124,15 +127,26 @@
 - When deletions exist, `BigwigIdx` caches raw feature and `null_feature`
   merges separately and composes their hoppers with `NotContainedIn`.
 - `CacheGate` is a one-way completion gate. `CacheRecord` starts closed and
-  existing cache-fill paths call `release()` after storage is filled;
-  `SimplePosting` carries a default-open gate for future deferred posting
-  construction.
+  SimpleIdx cache-fill paths call `release()` after storage is filled.
+  `SimplePosting` also carries a completion gate; normal postings are
+  default-open, and deferred cache postings can be created closed and released
+  after their vectors are filled.
 - `ArrayHopper` supports raw-array, `CacheRecord`-backed, and
   `SimplePosting`-backed construction. Deferred backings are waited on and
   bound in out-of-line `ArrayHopper::bind()`; hopper-local `ready_` is plain
   because hoppers are thread-local cursors.
-- Bigwig has not yet switched to a deferred merged-posting cache
-  representation.
+- `SimplePosting` is storage-only. It no longer has `hopper()` and no longer
+  inherits from `enable_shared_from_this`; callers construct `ArrayHopper`s
+  explicitly from known non-empty or deferred-known-non-empty postings.
+- Fiver and Hazel both expose concrete `posting(feature)` methods. A future
+  Fluffle-managed shard interface is expected to virtualize this operation for
+  mixed Fiver/Hazel Bigwig views.
+- Feature-level `Fiver::merge(...)` now scans contributors, returns
+  `EmptyHopper` when none contribute, delegates directly when one shard
+  contributes, and uses Bigwig's cache only for true multi-Fiver merges.
+- Bigwig has not yet switched to asynchronous deferred merged-posting cache
+  fills; current multi-Fiver cache misses still fill synchronously before
+  returning a hopper.
 - Started Bigwig clones preserve the source read view without cloning an active
   write transaction; a clone that wants to write must call `transaction()`
   itself. Focused regression coverage checks that a started Bigwig clone stays
@@ -198,10 +212,9 @@
   is unimplemented; compare the plan with `ai/log.md`, current code, and this
   notes file.
 - The current Hazel/Bigwig integration direction is still a finely crafted
-  Fiver/Hazel blend, but the next implementation step is narrower: introduce a
-  `PostingIterator`-style raw posting-list path usable with both
-  `SimplePosting` and `CacheRecord`, then integrate it into Bigwig for Fivers
-  only before adding Hazel to the live mixed-shard query path.
+  Fiver/Hazel blend, but the next implementation step is narrower: make true
+  multi-Fiver Bigwig cache misses produce deferred waitable `SimplePosting`s in
+  a background merge fill, while keeping Hazel out of the live Bigwig view.
 - Some prerequisites may already be complete while later steps remain gated for
   discussion or approval.
 - Before implementing from `ai/plan.md`, honor any explicit discussion gate in
@@ -212,11 +225,11 @@
 - Hazel writer, standalone activation, Hazel-to-Hazel merge, conversion tools,
   and dedicated Hazel regression coverage are in place.
 - Bigwig's started view still narrows live shards to `Fiver`; this is
-  intentional for the next Fiver-only iterator step.
-- The planned internal Idx posting-list hook and `PostingIterator` abstraction
-  are the next integration area. The generic-Warren Bigwig txt/idx view and
-  mixed Fiver/Hazel merge path come after the Fiver-only iterator path is
-  validated.
+  intentional for the next Fiver-only deferred-cache step.
+- Fiver and Hazel are now aligned around concrete `posting(feature)` accessors
+  returning waitable `SimplePosting` storage. The generic-Warren or shard
+  superclass Bigwig txt/idx view and mixed Fiver/Hazel merge path come after
+  the Fiver-only deferred-cache path is validated.
 - A separate cache-lifetime question remains open: whether a Bigwig
   merged-posting cache should survive `end()` -> `start()` while the logical
   sequence remains unchanged. This is intentionally simpler than maintaining

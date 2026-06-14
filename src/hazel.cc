@@ -171,34 +171,31 @@ bool locate_posting(const std::vector<HazelPostingEntry> &directory,
   return true;
 }
 
-void mark_cache_ready(std::shared_ptr<CacheRecord> entry) {
-  entry->release();
-}
-
-void fill_bogus_cache_entry(std::shared_ptr<CacheRecord> entry) {
-  addr n = entry->n;
-  entry->postings = shared_array<addr>(n);
-  entry->qostings = shared_array<addr>(n);
-  entry->fostings = nullptr;
+void fill_bogus_posting(std::shared_ptr<SimplePosting> posting, addr n) {
   for (addr i = 0; i < n; i++) {
-    entry->postings.get()[i] = minfinity + 1 + i;
-    entry->qostings.get()[i] = minfinity + 2 + i;
+    posting->push(minfinity + 1 + i, minfinity + 2 + i, 0.0);
   }
-  mark_cache_ready(entry);
+  posting->release();
 }
 
-void fill_hazel_cache_entry(std::shared_ptr<CacheRecord> entry,
-                            std::shared_ptr<ReadGate> read_gate,
-                            std::shared_ptr<SimplePostingFactory> factory,
-                            addr offset, addr length) {
+void fill_hazel_posting(std::shared_ptr<SimplePosting> posting,
+                        std::shared_ptr<ReadGate> read_gate,
+                        std::shared_ptr<SimplePostingFactory> factory,
+                        addr offset, addr length, addr n) {
   std::string error;
   std::unique_ptr<char[]> bytes = read_gate->read(offset, length, &error);
-  if (bytes != nullptr &&
-      factory->cache_entry_from_compressed_blob(entry, bytes.get(), length,
-                                                &error))
-    return;
+  if (bytes != nullptr) {
+    std::shared_ptr<SimplePosting> decoded =
+        factory->posting_from_compressed_blob(bytes.get(), length, &error);
+    if (decoded != nullptr && decoded->feature() == posting->feature() &&
+        (addr)decoded->size() == n) {
+      posting->append(decoded);
+      posting->release();
+      return;
+    }
+  }
   assert(false);
-  fill_bogus_cache_entry(entry);
+  fill_bogus_posting(posting, n);
 }
 
 template <typename Work> void async(Work work) {
@@ -248,23 +245,31 @@ public:
   HazelIdx(HazelIdx &&) = delete;
   HazelIdx &operator=(HazelIdx &&) = delete;
 
-  std::shared_ptr<CacheRecord> cache(addr feature) {
+  std::shared_ptr<SimplePosting> posting(addr feature) {
     size_t index;
     if (!locate_posting(directory_, feature, &index))
       return nullptr;
     addr start = posting_start(index);
     addr end = directory_[index].end;
-    if (start == end)
-      return singleton_cache(directory_[index].count_or_p);
+    if (start == end) {
+      std::shared_ptr<SimplePosting> posting =
+          posting_factory_->posting_from_feature(feature);
+      posting->push(directory_[index].count_or_p,
+                    directory_[index].count_or_p, 0.0);
+      return posting;
+    }
     if (start > end) {
       assert(false);
       return nullptr;
     }
     bool created;
-    std::shared_ptr<CacheRecord> entry = cache_record(index, &created);
+    std::shared_ptr<SimplePosting> entry = posting_record(index, &created);
     if (created)
-      fill_hazel_cache_entry(entry, read_gate_, posting_factory_,
-                             blob_offset_ + start, end - start);
+      fill_hazel_posting(entry, read_gate_, posting_factory_,
+                         blob_offset_ + start, end - start,
+                         directory_[index].count_or_p);
+    else
+      entry->wait();
     return entry;
   }
 
@@ -286,14 +291,15 @@ private:
       return std::make_unique<EmptyHopper>();
     }
     bool created;
-    std::shared_ptr<CacheRecord> entry = cache_record(index, &created);
+    std::shared_ptr<SimplePosting> entry = posting_record(index, &created);
     if (created) {
       std::shared_ptr<ReadGate> read_gate = read_gate_;
       std::shared_ptr<SimplePostingFactory> factory = posting_factory_;
       addr offset = blob_offset_ + start;
       addr length = end - start;
-      async([entry, read_gate, factory, offset, length] {
-        fill_hazel_cache_entry(entry, read_gate, factory, offset, length);
+      addr n = directory_[index].count_or_p;
+      async([entry, read_gate, factory, offset, length, n] {
+        fill_hazel_posting(entry, read_gate, factory, offset, length, n);
       });
     }
     return ArrayHopper::make(entry);
@@ -340,19 +346,7 @@ private:
     return posting;
   }
 
-  std::shared_ptr<CacheRecord> singleton_cache(addr p) {
-    std::shared_ptr<CacheRecord> entry =
-        std::shared_ptr<CacheRecord>(new CacheRecord);
-    entry->n = 1;
-    entry->postings = shared_array<addr>(1);
-    entry->qostings = entry->postings;
-    entry->fostings = nullptr;
-    *entry->postings = p;
-    entry->release();
-    return entry;
-  }
-
-  std::shared_ptr<CacheRecord> cache_record(size_t index, bool *created) {
+  std::shared_ptr<SimplePosting> posting_record(size_t index, bool *created) {
     addr feature = directory_[index].feature;
     std::lock_guard<std::mutex> lock(cache_lock_);
     auto cached = cache_.find(feature);
@@ -360,9 +354,8 @@ private:
       *created = false;
       return cached->second;
     }
-    std::shared_ptr<CacheRecord> entry =
-        std::shared_ptr<CacheRecord>(new CacheRecord);
-    entry->n = directory_[index].count_or_p;
+    std::shared_ptr<SimplePosting> entry =
+        posting_factory_->posting_from_feature(feature, false);
     cache_[feature] = entry;
     *created = true;
     return entry;
@@ -426,7 +419,7 @@ private:
   addr postings_start_;
   std::vector<HazelPostingEntry> directory_;
   std::shared_ptr<ReadGate> read_gate_;
-  std::map<addr, std::shared_ptr<CacheRecord>> cache_;
+  std::map<addr, std::shared_ptr<SimplePosting>> cache_;
   std::mutex cache_lock_;
   std::shared_ptr<SimplePostingFactory> posting_factory_;
 };
@@ -1928,6 +1921,12 @@ std::shared_ptr<Warren> Hazel::make(const std::string &filename,
     }
   }
   return hazel;
+}
+
+std::shared_ptr<SimplePosting> Hazel::posting(addr feature) {
+  std::shared_ptr<HazelIdx> idx =
+      std::static_pointer_cast<HazelIdx>(this->idx());
+  return idx->posting(feature);
 }
 
 std::shared_ptr<Warren> Hazel::clone_(std::string *error) {

@@ -57,6 +57,7 @@ public:
   addr relocate(addr where);
   void set_sequence(addr number);
   void get_sequence(addr *start, addr *end);
+  std::shared_ptr<SimplePosting> posting(addr feature);
   addr get_storage_estimate() {
     return storage_estimate_;
   }

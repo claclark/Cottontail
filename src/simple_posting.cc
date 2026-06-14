@@ -72,9 +72,9 @@ std::shared_ptr<SimplePosting> SimplePostingFactory::posting_from_annotations(
 }
 
 std::shared_ptr<SimplePosting>
-SimplePostingFactory::posting_from_feature(addr feature) {
+SimplePostingFactory::posting_from_feature(addr feature, bool open) {
   std::shared_ptr<SimplePosting> posting = std::shared_ptr<SimplePosting>(
-      new SimplePosting(posting_compressor_, fvalue_compressor_));
+      new SimplePosting(posting_compressor_, fvalue_compressor_, open));
   posting->feature_ = feature;
   return posting;
 }
@@ -366,7 +366,7 @@ std::shared_ptr<SimplePosting> SimplePostingFactory::posting_from_merge(
     return nullptr;
   if (exclude == nullptr || exclude->size() == 0)
     return posting_from_merge(postings);
-  std::unique_ptr<cottontail::Hopper> hopper = exclude->hopper();
+  std::unique_ptr<cottontail::Hopper> hopper = ArrayHopper::make(exclude);
   addr feature = postings[0]->feature();
   std::shared_ptr<SimplePosting> merged_posting = posting_from_feature(feature);
   std::priority_queue<Element, std::vector<Element>, Compare> queue;
@@ -605,56 +605,6 @@ bool SimplePosting::operator==(const SimplePosting &other) {
          qostings_ == other.qostings_ && fostings_ == other.fostings_ &&
          posting_compressor_ == other.posting_compressor_ &&
          fvalue_compressor_ == other.fvalue_compressor_;
-}
-
-namespace {
-template <typename T> std::shared_ptr<T> v2sa(const std::vector<T> &v) {
-  std::shared_ptr<T> sa = shared_array<T>(v.size());
-  memcpy(sa.get(), v.data(), v.size() * sizeof(T));
-  return sa;
-}
-} // namespace
-
-std::unique_ptr<Hopper> SimplePosting::hopper() {
-  addr n = postings_.size();
-  if (n == 0) {
-    return std::make_unique<EmptyHopper>();
-  } else if (n == 1) {
-    if (qostings_.size() == 0) {
-      if (fostings_.size() == 0) {
-        return std::make_unique<SingletonHopper>(postings_[0], postings_[0],
-                                                 0.0);
-      } else {
-        return std::make_unique<SingletonHopper>(postings_[0], postings_[0],
-                                                 fostings_[0]);
-      }
-    } else {
-      if (fostings_.size() == 0) {
-        return std::make_unique<SingletonHopper>(postings_[0], qostings_[0],
-                                                 0.0);
-      } else {
-        return std::make_unique<SingletonHopper>(postings_[0], qostings_[0],
-                                                 fostings_[0]);
-      }
-    }
-  } else {
-    return ArrayHopper::make(shared_from_this());
-#if 0
-    std::shared_ptr<addr> postings;
-    std::shared_ptr<addr> qostings;
-    std::shared_ptr<fval> fostings;
-    postings = v2sa<addr>(postings_);
-    if (qostings_.size() == 0)
-      qostings = postings;
-    else
-      qostings = v2sa<addr>(qostings_);
-    if (fostings_.size() == 0)
-      fostings = nullptr;
-    else
-      fostings = v2sa<fval>(fostings_);
-    return ArrayHopper::make(n, postings, qostings, fostings);
-#endif
-  }
 }
 
 } // namespace cottontail
