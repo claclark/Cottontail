@@ -1,0 +1,856 @@
+Business = "business" + "businesses" + "commercial"
+Company = "company" + "companies"
+Industry = "industry" +  "industries" + "manufacturing" 
+Biz = Business + Company + Industry
+Japan = "tokyo" + "osaka" + "japan" + "japanese" + "hiroshima"
+JapanCo0 = "fujitsu" + "toshiba" + "nippon" + "nec" + "toyota" + "sony"
+JapanInc = Japan + JapanCo0
+EC0 = "german" + "germany" + "french" + "france" + "british" + "britain"
+EC1 = "italian" + "italy" + "spanish" + "spain" + "greek" + "greece"
+EC2 = "ec" + "eec"
+EC = EC0 + EC1 + EC2
+Announce0 = "announced" + "announce" + "announces" + "announcement"
+Announce1 = "announcements" + "announcing"
+Announce2 = (("press" <> "release")) < [2] + (("news" <> "conference") < [2])
+Announce = Announce0 + Announce1 + Announce2
+US = (("u" <> "s") < [2]) + "america" + "american" + "US"
+US00 = "AK" + "alaska" + "AL" + "alabama" + "AR" + "arkansas" + "AZ" + "arizona"
+US01 = "CA" + "california" + "CO" + "colorado" + "CT" + "connecticut"
+US02 = "DE" + "delaware" + "FL" + "florida" + "GA" + "georgia" + "HI" + "hawaii"
+US03 = "IA" + "iowa" + "ID" + "idaho" + "IL" + "illinois" + "IN" + "indiana"
+US04 = "KS" + "kansas" + "KY" + "kentucky" + "LA" + "louisiana"
+US05 = "MA" + "massachusetts" + "MD" + "maryland" + "ME" + "maine"
+US06 = "MI" + "michigan" + "MN" + "minnesota" + "MO" + "missouri"
+US07 = "MS" + "mississippi" + "MT" + "montana"
+US08 = "NC" + (("north" <> "carolina") < [2])
+US09 = "ND" + (("north" <> "dakota") < [2])
+US10 = "NE" + "nebraska" + "NH" + (("new" <> "hampshire") < [2])
+US11 = "NJ" + (("new" <> "jersey") < [2]) + "NM" + (("new" <> "mexico") < [2])
+US12 = "NV" + "nevada" + "NY" + (("new" <> "york") < [2]) + "OH" + "ohio"
+US13 = "OK" + "oklahoma" + "OR" + "oregon" + "PA" + "pennsylvania"
+US14 = "PR" + (("puerto" <> "rico") < [2])
+US15 = "RI" + (("rhode" <> "island") < [2])
+US16 = "SC" + (("south" <> "carolina") < [2])
+US17 = "SD" + (("south" <> "dakota") < [2])
+US18 = "TN" + "tennessee" + "TX" + "texas" + "UT" + "utah" + "VA" + "virginia"
+US19 = "VT" + "vermont" + "WA" + "washington" + "WI" + "wisconsin"
+US20 = "WV" + "WY" + "wyoming"
+US21 = "atlanta" + "baltimore" + "boston" + "chicago" + "cincinnati"
+US22 = "cleveland" + "dallas" + "denver" + "detroit" + "honolulu"
+US23 = "houston" + "indianapolis" + "vegas" + (("los" <> "angeles") < [2])
+US24 = "louisville" + "miami" + "milwaukee" + "minneapolis"
+US25 = (("new" <> "orleans") < [2]) + "omaha" + "philadelphia" + "pittsburgh" 
+US26 = (("st" <> "louis") < [2]) + (("salt" <> "lake" <> "city") < [3]) 
+US27 = (("san" <> "diego") < [2]) + (("san" <> "francisco") < [2]) + "seattle" 
+US0 = US00 + US01 + US02 + US03 + US04 + US05 + US06 + US07 + US08 + US09
+US1 = US10 + US11 + US12 + US13 + US14 + US15 + US16 + US17 + US18 + US19 + US20
+US2 = US21 + US22 + US23 + US24 + US25 + US26 + US27
+USbroad = US0 + US1 + US2 + US
+USnarrow = US0 + US1 + US2
+USstate = US0 + US1
+@output "201.output"
+
+ap = (("au" <>  "pair") < [2])
+child = "child" + "children" + "baby" + "babies" + "infant" + "infants"
+
+babysitter0 = ("baby" <> ("sitters" + "sitter")) < [2]
+babysitter1 = "babysitter" + "babysitters"
+babysitter = babysitter0 + babysitter1
+
+cc0 = ("nanny" + "nannies") ^ child
+cc1 = ("live" <> "in" <> babysitter0) < [3]
+cc1 = ("live" <> "in" <> babysitter1) < [4]
+cc2 = (("child" <> "care" <> ("worker" + "workers")) < [3]) ^ ("home" + "homes")
+cc = cc0 + cc1 + cc2 + ap
+
+standard0 = "standard" + "standards" + "train" + "training" + "monitoring"
+standard1 = "quality" + "responsibility"
+standard = standard0 + standard1
+
+q0 = ap^child^standard
+q1 = (ap + cc)^standard
+q2 = child^"care"^standard
+
+@rank 201 q0 q1 ap cc babysitter q2
+@output "202.output"
+
+nukes0 = (("atom" + "atomic" + "hydrogen") <> ("bomb" + "bombs")) < [2]
+nukes1 = "thermonuclear" + (("thermo" <> "nuclear") < [2])
+nukes2a = "weapon" + "weapons" + "weaponry" + "missile" + "missiles" 
+nukes2b = "submarine" + "submarines" + "sub" + "subs"
+nukes2c = "reactor" + "reactors"
+nukes2 = (("nuclear" + "atomic") <> (nukes2a + nukes2b + nukes2c)) < [2]
+nukes3 = "plutonium" + "calutron"
+nukes = nukes0 + nukes1 + nukes2 + nukes3
+
+treaty0 = "SALT" + "START"
+treaty1 = "treaty" + "treaties" + "agreement" + "agreements"
+treaty2 = ("test" <> "ban") < [2]
+treaty = treaty0 + treaty1 + treaty2
+
+monitor0 = "enforcement" + "enforce" + "limitation" + "proliferation"
+monitor1 = "supervision"  + "monitor" + "monitors" + "monitoring"
+monitor2 = "violation" + "violated" + "violating" + "violates"
+monitor3 = "inspect" + "inspects" + "inspecting" + "inspected"
+monitor4 = "observation" + "observer" + "observers"
+monitor = monitor0 + monitor1 + monitor2 + monitor3 + monitor4
+
+q0 = treaty^nukes^monitor
+q1 = treaty^("nuclear" + "atomic")^monitor
+q2 = (treaty^nukes) + (nukes^monitor)
+
+@rank 202 q0 q1 q2
+@output "203.output"
+
+tA0 = "the" + "a" + "used" + "of" + "rubber" + "discarded" + "scrap"
+tA1 =  "auto" + "autos" + "car" + "cars" + "automobile" + "automobiles"
+tA2 = "truck" + "trucks"
+tire = "tire" + "tires"
+tA = ((tA0 <> tire) < [2]) + (((tA1 + tA2) ^ tire) < [4])
+
+tB = "tires" + "rubber"
+
+x0 = "disposal" + "incinerate" + "incineration" + "incinerator"
+x1 = "recycled" + "recycles" + "recycle" + "recycling"
+x2 = ("re" <> ("cycled" + "cycles" + "cycle" + "cycling")) < [2]
+x3 = "retread" + "retreaded" + "retreading" + "retreads"
+x4 = ("re" <> ("tread" + "treaded" + "treading" + "treads")) < [2]
+x = x0 + x1 + x2 + x3 + x4
+
+q0 = (tA + "tyres" + "tyre") ^ x
+q1 = tB ^ x
+
+@rank 203 q0 q1 tA
+@output "204.output"
+
+plant = (("nuclear" + "atomic") ^ ("plant" + "plants" + "power")) < [5]
+
+pro0 = "production" + "capacity" + "output" + "generates"
+pro1 = (("kilo" + "mega" + "giga") <> ("watt" + "watts")) < [2]
+pro2 = "kilowatt" + "kilowatts" + "megawatt" + "megawatts"
+pro3 = "gigawatt" + "gigawatts"
+pro = pro0 + pro1 + pro2 + pro3
+
+q0 = plant^pro^USbroad
+q1 = (plant^pro) + (("nuclear" + "atomic")^pro^USbroad) + (plant^USbroad)
+q2 = (("nuclear" + "atomic")^pro) + plant
+
+@rank 204 q0 q1 q2
+@output "205.output"
+
+a0 = "survivalist" + "survivalism" + "skinhead" + "skinheads"
+a1 = ("skin" <> ("head" + "heads")) < [2]
+a2 = "militia" + "militiamen" + "mercenary"
+a3 = ("para" <> "military") < [2]
+a4 = ("white" <> "supremacist") < [2]
+a = a0 + a1 + a2 + a3 + a4
+
+q0 = a^USbroad
+q1 = a
+
+@rank 205 q0 q1
+@output "206.output"
+
+b1 = (("ross" <> "perot") < [2]) ^ "president"
+b2 = ("george" <> "wallace") < [2] 
+b3 = ("libertarian" <> "party") < [2]
+b4 = ("third" <> "party") < [2]
+
+q = b1 + b2 + b3 + b4
+
+@rank 206 q
+@output "207.output"
+
+c0 = "quebec" ^ ("separatism" + "separatist" + "separation" + "separate")
+c1 = "quebec" ^ ("sovereignty" + "sovereign" + "independent" + "independence")
+c2 = ("jacques" <> "parizeau") < [2]
+c3 = ("louise" <> "beaudoin") < [2]
+c4 = ("parti" <> "quebecois") < [2]
+c = c0 + c1 + c2 + c3 + c4
+
+d0 = "economic" + "economically" + "economics"
+d1 = "poll" + "opinion" + "referendum" + "majority"
+d = d0 + d1
+
+q0 = c^d
+q1 = c
+q2 = "quebec"
+
+@rank 207 q0 q1 q2
+@output "208.output"
+
+bc0 = "bioconversion" + (("bio" <> "conversion") < [2])
+bc1 = "compost" + "composting" + "composts"
+bc2 = ("plant" <> "material") < [2]
+bc = bc0 + bc1 + bc2
+
+
+rd0 = "research" + "researching" + "development" + "developments"
+rd1 = "study" + "studies" + "studying"
+rd2 = "breakthrough" + (("break" <> "through") < [2])
+rd = rd0 + rd1 + rd2
+
+kx0 = ("waste" + "garbage" + "trash") ^ ("conversion" + "reclaim")
+kx1 = "recycled" + "recycles" + "recycle" + "recycling"
+kx2 = ("re" <> ("cycled" + "cycles" + "cycle" + "cycling")) < [2]
+kx3 = "biodegradable" + (("bio" <> "degradable") < [2])
+kx = kx0 + kx1 + kx2 + kx3
+
+q0 = rd^bc
+q1 = bc0 + bc1 + kx
+
+@rank 208 q0 q1
+@output "209.output"
+
+sc = ("social" <> "security") < [2]
+cost = "financial" + "cost" + "future" + "debt" + "deficit"
+bb = ("baby" <> ("boomer" + "boom")) < [2]
+
+q = sc^(cost + bb)
+
+@rank 209 q sc
+@output "210.output"
+
+e0 = (("medical" <> "waste") < [2])
+e1 = "biohazard" + (("bio" <> "hazard") < [2])
+e2 = "hypodermic" + "needles" + "syringe" + "syringes"
+e = e0 + e1 + e2
+
+gc0 = "garbage" + "waste" + "trash" + "dumping" + "illegal"
+gc1 = "collection" + "removal" + "disposal" + "cleanup" + "contaminated"
+gc = gc0 + gc1
+
+
+med = "medical" + "hospital" + "hospitals"
+
+q0 = e^gc
+q1 = (e0 + e1) + (med^gc)
+
+@rank 210 q0 q1 e
+@output "211.output"
+
+f0 = "DWI" + "DUI" + "breathalyzer" + "MADD"
+f1 = (("impaired" + "drunk") <> "driving") < [2]
+f = f0 + f1
+
+g0 = "auto" + "automobile" + "safety" + "fatal" + "fatality" + "fatalities"
+g1 = "accident" + "accidents" + "driving" + "vehicle" + "vehicles" + "law"
+g2 = "police" + "laws"
+g = g0 + g1 + g2
+
+q = f + (g^"alcohol")
+
+@rank 211 q
+@output "212.output"
+
+h0 = "copyright"+"copyrights"+"patent"+"patents"+"trademark"+"trademarks"
+h1 = (("trade" <> ("mark" + "marks")) < [2])
+h2 = ("intellectual" <> "property") < [2]
+h = h0 + h1 + h2
+
+i0 = "foreign" + "china" + "chinese" + "india" + "indian" + "asian" + "asia"
+i1 = "singapore" + "treaty" + "diplomat" + "diplomatic" + "trade"
+i2 = "duty" + "tariff" + "tariffs" + "sanctions" + "japan" + "japanese"
+i3 = "taiwan" + "treaties"
+i = i0 + i1 + i2 + i3
+
+q = h^i
+
+@rank 212 q
+@output "213.output"
+
+dna = ((("dna" + "genetic") <> ("test" + "testing" + "evidence")) < [2])
+
+law0 = "innocent" + "innocence" + "guilty" + "guilt" + "jury" + "juries"
+law1 = "crime" + "crimes" + "police" + "attorney" + "lawyer"
+law2 = "prosecutor" + "prosecutors" + "prosecution" + "judge" + "judges"
+law3 = "defendants" + "defendants" + "court" + "courts"
+law4 = "murder" + "murders" + "rape" + "rapes"
+law5 = "acquit" + "acquits" + "acquitted" + "acquited"
+law6 = "exonerate" + "exonerates" + "exonerated"
+law7 = "convict" + "convicted" + "convicts"
+law8 = "police" + "detective" + "fbi" + (("law" <> "enforcement") < [2])
+law = law0 + law1 + law2 + law3 + law4 + law5 + law6 + law7 + law8
+
+q0 = dna^law
+q1 = (("dna" + "genetic")^law) + dna
+q2 = "dna"
+q3 = "genetic"
+
+@rank 213 q0 q1 q2 q3
+@output "214.output"
+
+hypnosis0 = "hypnosis" + "hypnotizing" + "hypnotize" + "hypnotized"
+hypnosis1 = "hypnotizes" + "hypnotic"
+hypnosis = hypnosis0 + hypnosis1
+
+trance0 = (("self" + "auto") ^ hypnosis) < [4]
+trance1 = "trance" + "trances" + (("altered" <> ("state" + "states")) < [2])
+trance2 = "meditation" + "meditate" + "meditates" + "meditating" + "meditated"
+trance = trance0 + trance1 + trance2
+
+b0 = "biorhythm" + (("bio" <> "rhythm") < [2]) + "mantra"
+b1 = "breathing" + "breath" + "relax" + "relaxation" + "relaxing" + "relaxes"
+b = b0 + b1
+
+junk0 = "psychosis" + "hallucination" + "hallucinations"
+junk1 = ("brain" <> ("washing" + "wash" + "washes" + "washed")) < [2]
+junk2 = "brainwashing" + "brainwash" + "brainwashes" + "brainwashed"
+junk3 = "mesmerize" + "mesmerizes" + "mesmerized" + "mesmerizing"
+junk = junk0 + junk1 + junk2 + junk3
+
+q = trance^b
+q1 = trance + b0 + (("speaking" <> "in" <> "tongues") < [3])
+
+@rank 214 q q1 hypnosis junk
+@output "215.output"
+
+infant = "baby" + "babies" + "infant" + "infants"
+death = "death" + "deaths" + "mortality" + "died"
+im = (("infant" <> "mortality") < [2])
+q = im^USbroad
+q1 = infant^death
+
+@rank 215 q im q1
+@output "216.output"
+
+os = "osteoporosis"
+cb = "calcium"^("bone" + "bones")
+
+rx0 = "treatment" + "treatments" + "prevention" + "cure" + "drug" + "drugs"
+rx1 = "therapy" + "medical" + "medicine" + "doctor" + "doctors"
+rx2 = "research" + "researching" + "researcher" + "researchers"
+rx = rx0 + rx1 + rx2
+
+q0 = os^rx
+q1 = os + cb^rx
+q2 = cb + (rx^"calcium") + (rx^("bone" + "bones"))
+
+@rank 216 q0 q1 q2
+@output "217.output"
+
+seti = "SETI"
+life0 = "life" + "intelligence"
+life1 = "signal" + "signals" + "broadcast" + "broadcasts"
+life2 = "radio" + "probe" + "probes"
+life3 = "communications" + "communication"
+life = life0 + life1 + life2 + life3
+et0 = ("extra" <> "terrestrial") < [2]
+et1 = ("other" <> ("planets" + "stars")) < [2]
+et2 = ("another" <> ("planet" + "star")) < [2]
+et3 = ("outer" <> "space") < [2]
+et = et0 + et1 + et2 + et3
+
+q0 = seti + et^life
+q1 = et + "UFO" + (("space" <> "aliens") < [2])
+
+@rank 217 q0 q1 
+@output "218.output"
+
+q0 = ("mini" <> "steel" <> ("mill" + "mills")) < [3]
+q1 = ("steel" <> ("mill" + "mills" + "industry")) < [2]
+
+@rank 218 q0 q1
+@output "219.output"
+
+auto = "automobile" + "automobiles" + "car" + "truck" + "auto" + "autos"
+trade0 = "export" + "exports" + "import" + "imports" + "trade" + "trading"
+trade1 = "duty" + "tariff" + "tariffs" + "sanctions"
+trade = trade0 + trade1
+japan = "japan" + "japanese"
+na = "mexico" + "mexican" + "canada" + "canadian" + "ontario"
+
+q0 = auto^trade^na^japan^US
+q1 = auto^trade^na^japan
+q2 = auto^trade^(na + japan)^US
+
+@rank 219 q0 q1 q2
+@output "220.output"
+
+makers = "author" + "authors" + "maker" + "makers" + "writer" + "writers"
+crossword = "crossword" + "crosswords"
+game = "puzzle" + "puzzles" + "game" + "games"
+
+q0 = crossword^makers
+q1 = game^makers
+
+@rank 220 q0 crossword q1
+@output "221.output"
+
+w0 = "church" + "churches" + "group" + "groups" + "youth"
+w1 = "community" + "communities" + "agency" + "agencies"
+w2 = "stop" + "halt" + "help" + "counsel" + "counseling" + "outreach" + "youths"
+w = w0 + w1 + w2
+drugs = "drugs" + "crack" + "gang" + "gangs"
+crime = "violence" + "crime" + "warfare"
+
+q0 = drugs^w^crime
+q1 = drugs^w
+q2 = drugs^crime
+
+@rank 221 q0 q1 q2
+@output "222.output"
+
+data = "research" + "study" + "studies" + "data" + "indicating"
+capital0 = ("capital" <> "punishment") < [2]
+capital1 = ("death" <> ("sentence" + "penalty")) < [2]
+capital2 = ("electric" <> "chair") < [2]
+capital = capital0 + capital1 + capital2
+deterrent = "deterrent" + "deter" + "deters" + "deterrence"
+
+kll = "execution" + "murder" + "murders" + "murdered" + "murderer" + "killer"
+
+q0 = data^capital^deterrent
+q1 = (deterrent^kll) + (data^capital) + (capital^deterrent)
+
+@rank 222 q0 q1 capital
+@output "223.output"
+
+pc = "PC" + (("personal" <> "computer") < [2])
+pcRev = (pc ^ "revolution") < [8]
+
+history = "history" + (("early" <> "days") < [2])
+bill = (("bill" + "william") <> "gates") < [2]
+
+q = pcRev + (history^(bill + "DOS" + "microsoft")) + (bill^pc)
+
+@rank 223 q bill
+@output "224.output"
+
+drug0 = "pharmaceutical" + "pharmaceuticals" + "medicine" + "medical"
+drug1 = "drug" + "drugs" + "treatment" + "treatments" + "control"
+drug = drug0 + drug1
+lower = drug + "diet" + "dietary" + "lower" + "reduce" + "controlling"
+
+bp = (("blood" <> "pressure") < [2]) + "hypertension"
+
+q = bp ^ lower
+
+@rank 224 q bp
+@output "225.output"
+
+fema = "fema" + (("federal" <> "emergency" <> "management" <> "agency") < [4])
+
+disaster0 = "disaster" + "flood" + "floods" + "flooding" + "earthquake"
+disaster1 = "earthquakes" + "hurricane" + "hurricanes"
+disaster2 = "tornado" + "tornadoes" + "tornadoes"
+disaster = disaster0 + disaster1 + disaster2
+
+q1 = (("disaster" <> "relief") < [2]) + (disaster^USbroad)
+
+@rank 225 fema q1
+@output "226.output"
+
+gamble = "lottery" + "lotteries" + "gambling" + "casino"
+tax = "taxation" + "taxes" + "tax" + "taxing"
+
+q0 = gamble ^ tax ^ USbroad
+q1 = (gamble ^ tax) + (gamble ^ USbroad)
+
+@rank 226 q0 q1 gamble
+@output "227.output"
+
+mil0 = "army" + "navy" + "naval" + "marines" + "marine"
+mil1 = (("air" <> "force") < [2]) + "military" + "soldier"
+mil = mil0 + mil1
+death = "fatality" + "fatalities" + "deaths" + "death" + "killed" + "fatal"
+how0 = (("friendly" <> "fire") < [2]) 
+how1 = "training" + "accident" + "accidents" + "accidental" + "brawl"
+how2 = (("war" <> ("game" + "games")) < [2])
+how = how0 + how1 + how2
+
+q0 = mil^death^USbroad^how
+q1 = (mil^death^how) + (mil^death^USbroad) + (how0^(mil + USbroad))
+
+@rank 227 q0 q1
+@output "228.output"
+
+env0 = "environmental" + "environment" + "lake" + "lakes" + "pond" + "ponds"
+env1 = "ocean" + "oceans" + "forest" + "forests" + "stream" + "streams"
+env2 = "beach" + "beaches" + "wilderness" + "marsh" + "marshes"
+env3 = "ecology" + "ecologist" + "ecologists"
+env4 = "ecosystem" + "ecosystems" + (("eco" <> ("system" + "systems")) < [2])
+env = env0 + env1 + env2 + env3 + env4
+
+recover = "recover" + "recovery" + "recovers" + "cleanup" + "save" + "scrubber"
+
+poll0 = "pollution" + "pollutant" + "pollutants" + "polluting" + "polluted"
+poll1 = "waste" + "toxic" + (("acid" <> "rain") < [2]) + "chemical" + "DDT"
+poll2 = "smog"
+poll = poll0 + poll1 + poll2
+
+q = ((env^recover) < [8]) + ((poll^recover) < [8]) + (env^poll^recover)
+
+@rank 228 q
+@output "229.output"
+
+sch0 = "schizophrenia" + "schizophrenic" + "schizophrenics"
+sch1 = (("dementia" <> "praecox") < [2])
+sch = sch0 + sch1
+
+psy = "psychotic" + "psychosis"
+
+rx0 = "treatment" + "treatment" + "cure" + "drug" + "drugs" + "therapy"
+rx1 = "medical" + "medicine" + "doctors" + "doctor" + "hospital" + "hospitals"
+rx2 = "research" + "researching" + "researcher" + "researchers"
+rx = rx0 + rx1 + rx2
+
+q0 = rx^sch
+q1 = sch + (rx^psy)
+
+@rank 229 q0 q1
+@output "230.output"
+
+electricX = "electric" + "electrically" + "electricity" + "battery"
+
+electric0 = ("zero" <> ("emission" + "emissions")) < [2] + "ZEV"
+electric1 = ("fuel" <> ("cell" + "cells")) < [2]
+electric2 = (electricX <> "powered") < [2]
+electric = electric0 + electric1 + electric2
+
+car0 = "automobile" + "automobiles" + "automotive" + "car" + "cars" + "auto"
+car1 = "vehicle" + "vehicles"
+car = car0 + car1
+
+q0 = (electric^car) + ((electricX ^ car) < [4])
+q1 = electricX^car
+
+@rank 230 q0 q1
+@output "231.output"
+
+funding = "budget" + "budgets" + "funding" + "fund" + "money"
+nea = (("national" <> "endowment" <> "for" <> "the" <> "arts") < [5]) + "NEA"
+
+q0 = funding^nea
+q1 = nea + (funding^"arts")
+
+@rank 231 q0 q1
+@output "232.output"
+
+nd0 = ("near" <> "death") < [2]
+nd1 = ("out" <> "of" <> "body") < [2]
+nd2 = ("tunnel" <> "of" <> "light") < [3]
+nd3 = ((("flashed" + "flash" + "flashes") <> "before" <> [1] <> "eyes") < [4])
+nd4 = "flatliner" + "flatliners"
+nd5 = ("flat" <> ("liner" + "liners")) < [2]
+nd = nd0 + nd1 + nd2 + nd3 + nd4 + nd5
+
+q = nd + ("death"^("soul" + "revelation"))
+
+@rank 232 q
+@output "233.output"
+
+cogen = "cogeneration" + (("co" <> "generation") < [2])
+
+hr0 = ("heat" <> "recovery") < [2]
+hr1 = (("waste" + "surplus") <> "heat") < [2]
+hr = hr0 + hr1
+energy0 = "energy" + "resource" + "resources" + "generation" + "power" + "dam"
+energy1 = "electricity" + "electrical" + "wattage" + "kilowatt" + "megawatt"
+energy = energy0 + energy1
+
+q = hr^energy
+
+@rank 233 cogen q hr
+@output "234.output"
+
+fc = ("fuel" <> ("cell" + "cells")) < [2]
+
+@rank 234 fc
+@output "235.output"
+
+drugs0 = "drugs" + "drug" + "narcotic" + "narcotics"
+drugs1 = "marijuana" + "hemp" + "cannabis" + "hashish" + "THC"
+drugs = drugs0 + drugs1
+
+org = "NORML"
+
+legal0 = "legalize" + "legalizing" + "legalization"
+legal1 = "liberalize" + "liberalized" + "repeal" + "repealed"
+legal2 = ("de" <> ("criminalized" + "criminalize" + "criminalizing")) < [2]
+legal3 = "decriminalized" + "decriminalize" + "decriminalizing"
+legal = legal0 + legal1 + legal2 + legal3
+
+q0 = (legal^drugs) + org
+
+@rank 235 q0
+@output "236.output"
+
+fish = "fish" + "fishing" + "fished"
+overfishing0 = "overfish" + "overfishing" + "overfished"
+overfishing1 = (("over" <> fish) < [2])
+overfishing = overfishing0 + overfishing1
+fisheries = "fisheries" + "fishery" + (("fishing" ^ "industry") < [2])
+resource0 = "environment" + "quota" + "quotas" + "raping"
+resource1 = "depletes" + "depleting" + "deplete" + "depleted"
+resource2 = "declining" + "decline" + "declined"
+resource3 = ("wiped" <> "out") < [2] + (fish ^  "stocks")
+resource4 = "dwindling" + "dwindle" + "dwindled"
+resource = resource0 + resource1 + resource2 + resource3 + resource4
+law0 = ("law" <> "of" <> "the" <> "sea") < [4]
+law1 = ("northwest" <> "atlantic" <> "fisheries" + "organization") < [4]
+law2 = "NAFO" + (("200" <> "mile" <> ("limit" + "limits")) < [3])
+law = law0 + law1 + law2
+
+hs0 = (("high" <> "seas") < [2])
+hs1 = ("international" <> "waters") < [2]
+hs = hs0 + hs1
+
+xlaw0 = "law" + "laws" + "agreement" + "agreements" + "treaty" + "treaties"
+xlaw1 = "convention" + "conventions" + "arrest" + "arrests" + "seize" + "seized"
+xlaw2 = "piracy" + "pirates" + "pirate"
+xlaw = xlaw0 + xlaw1 + xlaw2
+
+q = overfishing + (fisheries^resource) + law + (hs^xlaw)
+
+@rank 236 q
+@output "237.output"
+
+electricX = "electric" + "electrically" + "electricity"
+
+electric0 = (("zero" + "low") <> ("emission" + "emissions")) < [2]
+electric1 = ("fuel" <> ("cell" + "cells")) < [2]
+electric2 = (electricX <> "powered") < [2]
+electric = electric0 + electric1 + electric2
+
+other0 = "hydrogen" + "propane" + (("natural" <> "gas") < [2]) + "LPG" + "LNG"
+other1 = ("solar" <> ("power" <> "energy")) < [2] + "ethanol" + "ammonia"
+other2 = "oxygenates" + "gasohol" + "methanol" + "biofuel" + "biofuels"
+other3 = (("flexible" <> "fuel") < [2]) + "FFV"
+other4 = ("bio" <> ("fuel" + "fuels")) < [2]
+other = other0 + other1 + other2 + other3 + other4
+
+car0 = "automobile" + "automobiles" + "automotive" + "car" + "cars"
+car1 = "vehicle" + "vehicles"
+car = car0 + car1
+
+aaa = "alternative" + "alternatives" + "additive" + "additives"
+gas = (("gasoline" + "fuel") ^ aaa) < [4]
+
+q = ((electric + other)^car) + ((electricX ^ car) < [4]) + gas
+
+@rank 237 q
+@output "238.output"
+
+np = ("national" <> ("parks" + "park")) < [2]
+
+bb0 = "budget" + "budgets" + "deficit" + "financial" + "finance" + "finance"
+bb1 = "fiscal" + "revenue" + "revenues" + "charges" + "charge" + "parking"
+bb2 = "maintain" + "maintenance" + "manage" + "manages" + "management"
+bb3 = "upkeep"
+bb = bb0 + bb1 + bb2 + bb3
+
+q = bb^np
+
+@rank 238 q
+@output "239.output"
+
+can0 = "cancer" + "carcinogen" + "carcinogenic" + "carcinogens" + "melanoma"
+can1 = "carcinoma" + "malignant" + "leukemia" + "cancerous"
+can = can0 + can1
+
+cause0 = (("ozone" <> "layer") < [2]) + "waste" + "asbestos"
+cause1 = "pollution" + "pollutant" + "pollutants" + "polluted"
+cause2 = "hazard" + "liability" + "lawsuit" + (("linked" <> "to") < [2])
+cause3 = "exposure" + "exposes" + "blame" + "correlation"
+cause4 = "incidence" + "occurrence" + "caused"
+cause = cause0 + cause1 + cause2 + cause3 + cause4
+
+dog = (("love" <> "canal") < [2]) + (("three" <> "mile" <> "island") < [3])
+
+where0 = "city" + "town" + "environment" + "environmental"
+where1 = "region" + "regions" + "contamination"
+where2 = (("in" + "near" + "within") <> USnarrow) < [5]
+where3 = "location" + "miles" + "vicinity" + "east" + "west" + "north" + "south"
+where4 = "eastern" + "western" + "northern" + "southern"
+where5 = "buried" + "lake" + "underground" + "river" + "geographic"
+where6 = "site" + "radius" + "leak" + "leakage" + "fire" + "radon"
+where7 = "suburb" + "feet" + "yards" + "canal" + "island" + "fallout"
+where = where0 + where1 + where2 + where3 + where4 + where5 + where6 + where7
+
+q0 = can^((cause^where) + dog)
+q1 = can^where
+q2 = can^cause
+
+@rank 239 q0 q1 q2
+@output "240.output"
+
+terrorist0 = "terrorist" + "terrorists" + "terrorism"
+terrorist1 = "plo" + "libya" + "bombing"
+terrorist2 = "hijacking" + "skyjacking" + "hijack" + "hijacked"
+terrorist3 = ((("hi" + "sky") <> ("jack" + "jacking" + "jacked")) < [2])
+terrorist = terrorist0 + terrorist1 + terrorist2 + terrorist3
+
+combat0 = "stop" + "reduce" + "protect" + "security" + "eliminate"
+combat1 = "control" + "detect" + "surveillance" + "intelligence"
+combat2 = "measures" + "measure"
+combat3 = ("war" <> "on") < [2]
+combat = combat0 + combat1 + combat2 + combat3
+
+anti = (("anti" + "counter") <> terrorist0) < [2]
+
+tech0 = "detector" + "sniffer" + "sniffing" + "hidden" + "gun" + "weapon"
+tech1 = "detectors" + "sniffers" + "guns" + "weapons"
+tech2 = "bomb" + "explosives" + "technology"
+tech = tech0 + tech1 + tech2
+
+agree0 = "bill" + "law" + "laws" + "treaty" + "crackdown"
+agree1 = "agreement" + "congress" + "president"
+agree = agree0 + agree1
+
+q0 = ((anti + (terrorist^combat))^(tech + agree))
+q1 = anti + (terrorist^combat)
+
+@rank 240 q0 q1
+@output "241.output"
+
+assoc = "association" + "associations" + "society" + "societies"
+groups0 = (("bar" + "legal" + "medical" + "law") <> assoc) < [2]
+groups1 = ((USstate <> "bar") < [2])
+groups2 = (("american" <> "medical" <> "association") < [3]) + "AMA"
+groups = groups0 + groups1
+
+mal0 = "malfeasance" + "fraud" + "harassment" + "investigation"
+mal1 = "fraudulent"  + "penalty" + "illegal" + "illegally"
+mal2 = "hearing" + "investigated" + "investigate"
+malX = "disbar" + "disbarment" + "disbarred" + "disbarring"
+malY = "malpractice" + (("mal" <> "practice") < [2])
+
+mal = mal0 + mal1 + mal2 + malX
+
+q0 = groups^mal
+q1 = groups^malY
+q2 = malX + malY
+
+@rank 241 q0 q1 q2
+@output "242.output"
+
+aa = (("affirmative" <> "action") < [2])
+
+aax = ("minority" <> ("owned" + "business" + "businesses")) < [2]
+
+con0 = "construction" + "building"
+
+con = (con0 <> ("industry" + "firms" + "firm")) < [2]
+
+q0 = aa^con
+q1 = (aa + aax)^con0
+q2 = aax
+
+@rank 242 q0 q1 q2
+@output "243.output"
+
+ff0 = ("fossil" <> ("fuel" + "fuels")) < [2]
+ff1 = "oil" + "coal" + (("natural" <> "gas") < [2])
+ff = ff0 + ff1
+
+restrict0 = "limit" + "limiting" + "limits" + "restrict" + "restriction"
+restrict1 = "reduce" + "reducing" + "reduces" + "reduced" + "reduction"
+restrict2 = "elimination" + "eliminate" + "eliminated" + "eliminating"
+restrict3 = "eliminates" + (("phase" <> "out") < [2])
+restrict = restrict0 + restrict1 + restrict2 + restrict3
+
+q = restrict^ff
+
+@rank 243 q 
+@output "244.output"
+
+td0 = (("balance" <> "of" <> "trade") < [3]) + (("trade" <> "balance") < [2])
+td1 = (("trade" <> "surplus") < [2]) + (("trade" <> "deficit") < [2])
+td = td0 + td1
+
+q = td^Japan
+
+@rank 244 q
+@output "245.output"
+
+village = "communities" + "community" + "village" + "villages"
+ret = ("retirement" <> village) < [2]
+
+home = (("nursing" + "retirement") <> ("home" + "homes")) < [2]
+ret2 = ("retired" + "elderly" + "seniors" + "retirement")^village
+
+q1 = (ret2^village) + home
+
+@rank 245 ret q1
+@output "246.output"
+
+arms0 = "arms" + "gun" + "guns" + "tanks"
+arms1 = "firearm" + "firearms" + "weapon" + "weapons" + "rifle" + "rifles"
+arms2 = (("fighter" <> ("jet" + "jets")) <  [2]) + "bomber" + "bombers"
+arms = arms0 + arms1 + arms2
+export0 = "export" + "exports" + "trade" + "sale" + "sales"
+export1 = "tariff" + "tariffs"
+export = export0 + export1
+
+q = arms^export^USbroad
+
+@rank 246 q
+@output "247.output"
+
+chunnel = "chunnel" + (("channel" <> "tunnel") < [2])
+
+ec0 = "economic" + "economically" + "economics"
+ec1 = "import" + "export" + "imports" + "exports" + "trade" + "railway"
+ec2 = "skeptic" + "skeptics" + "skepticism" + "euroskeptic" + "euroskeptics"
+ec3 = "nationalism" + "nationalist" + "nationalists"
+ec4 = ("john" <> ("bull" + "bullish" + "bullishness" + "bullism")) < [2]
+ec5 = ("little" <> ("englander" + "englanders")) < [2]
+ec6 = "federalism" + "superstate" + "european" + "europe" + "europeans"
+ec7 = "french" + "calais" + "EU" + "EC" + "EEC"
+ec = ec0 + ec1 + ec2 + ec3 + ec4 + ec5 + ec6 + ec7
+
+q = ec^chunnel
+
+@rank 247 q chunnel
+@output "248.output"
+
+blind0 = "blind" + (("vision" <> "impaired") < [2])
+blind1 = ("visually" <> ("disabled" + "impaired" + "handicapped")) < [2]
+blind2 = ("visual" <> ("disability" + "impairment" + "handicap")) < [2]
+blind = blind0 + blind1 + blind2
+
+el0 = "software" + "computer" + "computers" + "telewriter" + "teletype"
+el1 = ((("voice" + "speech") <> "recognition") < [2]) + "synthesizer"
+el2 = "scanner" + "scanner" + "digital" + "teletypewriter" + "TTY"
+el3 = ("image" <> ("processing" + "analysis")) < [2]
+el4 = "electronic" + "electronics" + "technology" + "technological"
+el = el0 + el1 + el2 + el3 + el4
+
+q = el^blind
+
+@rank 248 q
+@output "249.output"
+
+rf = (("rain" <> ("forest" + "forests")) < [2]) + "rainforest" + "rainforests"
+green0 = ("green" <> "house" <> "effect") < [3]
+green1 = ("greenhouse" <> "effect") < [2]
+green2 = ("global" <> "warming") < [2]
+green = green0 + green1 + green2
+
+env0 = "environmental" + "environment" + "weather" + "ocean" + "oceans"
+env1 = "climate" + "climatic" + "warming" + "ecology" + "ecological" + "eco"
+env = env0 + env1
+
+q0 = (rf^green) + ((rf + green)^env)
+q1 = rf + green
+
+@rank 249 q0 q1
+@output "250.output"
+
+sales = "sale" + "sales" + "purchase" + "purchases" + "buying" + "buy"
+aguns0 = "handgun" + "handguns" + (("hand" <> ("gun" + "guns")) < [2])
+aguns1 = (("automatic" + "assault") <> ("weapons" + "weapon")) < [2]
+aguns = aguns0 + aguns1
+guns0 = "firearm" + "firearms" + "weapon" + "weapons"
+guns1 = "gun" + "guns" + "rifle" + "rifles" + "shotgun" + "shotguns"
+guns2 = "pistol" + "pistols" + "revolver" + "revolvers"
+guns = guns0 + guns1 + guns2
+crime0 = "drugs" + "crack" + "gang" + "gangs"
+crime1 = "violence" + "crime" + "crimes"
+crime = crime0 + crime1
+
+q1 = aguns + (crime^guns)
+q0 = sales^q1
+
+@rank 250 q0 q1
