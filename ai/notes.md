@@ -119,11 +119,19 @@
 
 ## Current Bigwig Cache Status
 
-- A started `BigwigIdx` owns a `SafeMap<feature, SimplePosting>` cache for
-  posting lists merged across its current Fiver-only view. `Fiver::merge(...)`
-  consults this caller-supplied cache.
-- The cache is currently discarded with the started `BigwigIdx`; Fluffle does
-  not own an idx cache.
+- Fluffle owns the Bigwig merged-posting cache generation:
+  `FluffleCache = SafeMap<addr, std::shared_ptr<SimplePosting>>`.
+- A started Bigwig read view captures both the visible shard vector and the
+  current Fluffle cache pointer. Existing started readers keep their cache
+  generation by `shared_ptr` lifetime.
+- The cache generation is replaced when a kitten becomes a committed visible
+  Fiver, inside `Bigwig::commit_()` while `fluffle_->lock` is held. Do not
+  invalidate the cache in `ready()`: the shard is still a kitten there and is
+  not part of the visible read snapshot.
+- Static indexes reuse the same cache generation across `end()` -> `start()`
+  cycles until a visible commit changes the logical snapshot.
+- `BigwigIdx` is still Fiver-only. Its multi-Fiver path uses `Fiver::merge(...)`
+  and the captured Fluffle cache.
 - When deletions exist, `BigwigIdx` caches raw feature and `null_feature`
   merges separately and composes their hoppers with `NotContainedIn`.
 - `CacheGate` is a one-way completion gate. `CacheRecord` starts closed and
@@ -144,6 +152,9 @@
 - Feature-level `Fiver::merge(...)` now scans contributors, returns
   `EmptyHopper` when none contribute, delegates directly when one shard
   contributes, and uses Bigwig's cache only for true multi-Fiver merges.
+- `FiverIdx::hopper_()` returns `SingletonHopper` directly for in-memory
+  one-entry postings. Hazel still relies on `ArrayHopper` being correct for
+  one-entry waitable `SimplePosting`s.
 - Bigwig has not yet switched to asynchronous deferred merged-posting cache
   fills; current multi-Fiver cache misses still fill synchronously before
   returning a hopper.
@@ -211,10 +222,11 @@
   progress across multiple coding steps. Do not assume every item in the plan
   is unimplemented; compare the plan with `ai/log.md`, current code, and this
   notes file.
-- The current Hazel/Bigwig integration direction is still a finely crafted
-  Fiver/Hazel blend, but the next implementation step is narrower: make true
-  multi-Fiver Bigwig cache misses produce deferred waitable `SimplePosting`s in
-  a background merge fill, while keeping Hazel out of the live Bigwig view.
+- The current Hazel/Bigwig integration direction is a conservative
+  Fiver/Hazel blend. The next implementation step is narrower than full
+  lifecycle integration: include already-existing Hazel shards in Bigwig read
+  snapshots without physical merging, background conversion, or retention
+  policy.
 - Some prerequisites may already be complete while later steps remain gated for
   discussion or approval.
 - Before implementing from `ai/plan.md`, honor any explicit discussion gate in
@@ -224,16 +236,20 @@
 
 - Hazel writer, standalone activation, Hazel-to-Hazel merge, conversion tools,
   and dedicated Hazel regression coverage are in place.
-- Bigwig's started view still narrows live shards to `Fiver`; this is
-  intentional for the next Fiver-only deferred-cache step.
+- Bigwig's started view still narrows live shards to `Fiver`. The next planned
+  step is to make Bigwig query already-existing Hazel shards too, without
+  merging Fiver and Hazel postings physically.
 - Fiver and Hazel are now aligned around concrete `posting(feature)` accessors
   returning waitable `SimplePosting` storage. The generic-Warren or shard
-  superclass Bigwig txt/idx view and mixed Fiver/Hazel merge path come after
-  the Fiver-only deferred-cache path is validated.
-- A separate cache-lifetime question remains open: whether a Bigwig
-  merged-posting cache should survive `end()` -> `start()` while the logical
-  sequence remains unchanged. This is intentionally simpler than maintaining
-  feature-by-sequence cache versions in Fluffle.
+  superclass Bigwig txt/idx view and mixed Fiver/Hazel physical merge path come
+  after the no-merge Hazel visibility step.
+- The no-merge Hazel visibility step should use public Warren APIs where
+  possible. `BigwigTxt` already only needs public txt methods; `BigwigIdx` can
+  compose shard hoppers with direct delegation or `VectorHopper` before the
+  future `posting(feature)` merge abstraction is introduced.
+- Fluffle cache lifetime is no longer an open design question for the current
+  code: the cache generation is shared across starts and invalidated when the
+  visible logical snapshot changes through commit publication.
 - Background lifecycle policy remains separate: creation timing, Fiver
   retention, activation preference, Fluffle mixed-range representation, and
   safe background publication still require discussion.

@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "apps/walk.h"
+#include "src/cache_gate.h"
 #include "src/cottontail.h"
 
 const std::string DEFAULT_COLLECTION = "/data/hdd3/Collections/trec";
@@ -252,6 +253,7 @@ int main(int argc, char **argv) {
   }
   bool verbose = false;
   std::mutex output_mutex;
+  cottontail::CacheGate rankers_ready(false);
 
   // Scriber worker
   std::queue<std::string> docq;
@@ -316,7 +318,8 @@ int main(int argc, char **argv) {
         output_mutex.unlock();
         exit(1);
       }
-      cottontail::tf_annotations(warren, nullptr, p, q);
+      if (cottontail::tf_annotations(warren, nullptr, p, q))
+        rankers_ready.open();
       std::unique_ptr<cottontail::Hopper> doc_hopper =
           warren->hopper_from_gcl(container_query);
       if (doc_hopper == nullptr) {
@@ -397,6 +400,7 @@ int main(int argc, char **argv) {
       exit(1);
     }
     bool done = false;
+    rankers_ready.wait();
     while (!done) {
       done = stop;
       warren->start();

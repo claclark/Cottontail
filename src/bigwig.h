@@ -71,6 +71,7 @@ private:
   std::mutex warrens_lock_;
   bool warrens_valid_ = false;
   std::vector<std::shared_ptr<Fiver>> warrens_;
+  std::shared_ptr<FluffleCache> cache_;
   std::shared_ptr<Compressor> posting_compressor_;
   std::shared_ptr<Compressor> fvalue_compressor_;
   std::shared_ptr<Compressor> text_compressor_;

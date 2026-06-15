@@ -1,183 +1,189 @@
-# Goal: Review The Bigwig SimplePosting Merge-Cache Plan
+# Goal: Add Hazel Shards To Bigwig Read Snapshots Without Merging
 
-Hazel, Fiver, and `SimplePosting` have been aligned for the next Bigwig cache
-step:
+Hazel, Fiver, and Bigwig have been aligned enough to take the next small
+integration step:
 
-- `SimplePosting` is storage only. It no longer manufactures hoppers and no
-  longer inherits from `enable_shared_from_this`.
+- `SimplePosting` is storage only. It no longer manufactures hoppers.
 - `ArrayHopper` binds directly to waitable `SimplePosting` storage.
 - Fiver and Hazel both expose concrete `posting(feature)` methods.
-- Hazel idx cache entries are now waitable `SimplePosting`s, not `CacheRecord`s.
-- `CacheRecord` remains for `SimpleIdx` and existing array-cache paths, but it
-  is no longer part of Hazel's idx cache shape.
+- Hazel idx cache entries are waitable `SimplePosting`s, not `CacheRecord`s.
+- Fluffle owns the Bigwig merged-posting cache generation.
+- A Bigwig start captures both the visible shard snapshot and the current cache
+  generation.
+- The Fluffle cache generation is replaced when a kitten is committed into a
+  visible Fiver, not when the write is merely prepared.
+- `ArrayHopper` has explicit singleton and singleton-interval coverage; Fiver
+  also restores its in-memory singleton fast path.
 
 This plan records the next design checkpoint. It is not authorization to start
-coding without discussion. Before editing implementation files, re-read this
-plan with the user and confirm the exact scope.
+coding without discussion.
 
-## Design Direction
+## Immediate Goal
 
-Bigwig should continue to expose ordinary hoppers to query code. Internally,
-the feature mergepoint should return quickly when a real multi-shard merge is
-needed:
+Make Bigwig read snapshots include existing Hazel shards as read-only shards,
+without introducing Hazel merge policy or Hazel/Fiver physical merge behavior.
 
-1. create or find a cached waitable `SimplePosting`;
-2. launch a background merge fill on a cache miss;
-3. return `ArrayHopper::make(posting)` immediately.
+The first mixed view should answer queries over whatever committed Fiver and
+Hazel shards are already present in the Fluffle. It should not:
 
-This mirrors Hazel's current query-time cache behavior: a hopper can be handed
-back before the backing posting has finished filling, and the hopper waits at
-bind time.
+- convert Fivers to Hazels in the background;
+- merge Hazels together;
+- merge Fivers and Hazels into a new physical shard;
+- choose retention or activation policy;
+- introduce the future shard superclass unless the code clearly demands it.
 
-The first cache step should remain Fiver-only. Bigwig's started view still
-narrows live shards to `Fiver`, and Hazel is not yet part of the Bigwig live
-query path. The point is to validate deferred Bigwig merged postings over the
-existing Fiver view before adding mixed Fiver/Hazel shards.
+Think of this as "Hazel is query-visible" rather than "Hazel participates in
+the lifecycle machinery."
 
-The future direction is a Fluffle-managed shard interface implemented by both
-Fiver and Hazel, with a virtual raw-posting operation matching the concrete
-`posting(feature)` methods. Do not introduce that superclass in the immediate
-cache diff unless the user explicitly widens the scope.
+## Snapshot And Cache Invariant
 
-## Mergepoint Responsibilities
+The Bigwig feature cache is valid for one logical visible shard snapshot.
 
-The feature-level mergepoint currently lives at:
+Visible means the shards that `Bigwig::start_()` will include in its read view.
+Today this is Fiver-only. In the next step it should include Fiver and Hazel
+shards.
+
+The cache generation must change when the logical visible snapshot changes:
+
+- a kitten being appended to Fluffle does not change the visible snapshot;
+- a kitten becoming a committed Fiver does change the visible snapshot;
+- adding an already-built Hazel to the visible Fluffle view changes the visible
+  snapshot;
+- background consolidation is supposed to preserve query answers. If it changes
+  results, that is a consolidation bug, not a cache policy feature.
+
+Do not move cache invalidation back into `ready()`. That was the source of a
+stale-cache race in `apps/trec-example`: an old visible snapshot could populate
+the new cache generation while the new Fiver was still a kitten.
+
+## Bigwig Read View
+
+Current Bigwig read state narrows to:
 
 ```
-Fiver::merge(fivers, feature, error, cache, ...)
+std::vector<std::shared_ptr<Fiver>>
 ```
 
-For now it remains Fiver-only, but it should be shaped as the future mixed
-Fiver/Hazel mergepoint:
+The no-merge Hazel step should change the started view to hold generic readable
+shards. The likely minimal type is:
 
-1. Scan shards with fast `idx()->count(feature)`.
-2. Return `EmptyHopper` if no shard contributes.
+```
+std::vector<std::shared_ptr<Warren>>
+```
+
+This is intentionally less ambitious than a new Fluffle shard superclass. A
+superclass may still be the right later cleanup, especially around
+`posting(feature)`, but it is not required for simply querying already-started
+Fiver and Hazel Warrens.
+
+## BigwigTxt
+
+`BigwigTxt` is the easiest part. It currently stores Fivers, but its operations
+already use the public Warren txt interface:
+
+- `warren->txt()->translate(p, q)`
+- `warren->txt()->tokens()`
+- `warren->txt()->range(...)`
+
+The no-merge Hazel step should make `BigwigTxt` store generic Warrens and keep
+that behavior. Do not add text merge logic.
+
+## BigwigIdx
+
+`BigwigIdx` currently calls `Fiver::merge(...)` over the Fiver-only view.
+
+For the no-merge Hazel step, BigwigIdx should produce hoppers by composing shard
+hoppers, not by physically merging postings:
+
+1. Scan the started shard view with fast `idx()->count(feature)`.
+2. Return `EmptyHopper` when no shard contributes.
 3. If one shard contributes, delegate to that shard's own `idx()->hopper`.
-4. If multiple shards contribute, use the Bigwig-provided merge cache.
+4. If multiple shards contribute, return a `VectorHopper` over each
+   contributor's `idx()->hopper(feature)`.
 
-Direct one-shard delegation is important. It preserves Fiver's in-memory
-behavior today and Hazel's lazy cache behavior later. Bigwig should stay mostly
-as a query composer rather than accumulating shard-policy details.
+This makes Hazel query-visible without requiring the future mixed
+`posting(feature)` mergepoint.
 
-## Bigwig Cache Shape
-
-Keep the Bigwig cache conceptually simple:
-
-```
-feature -> std::shared_ptr<SimplePosting>
-```
-
-On a multi-shard cache miss:
-
-1. Create a closed/deferred `SimplePosting` for the feature.
-2. Insert it into the cache before launching work, so concurrent hopper
-   requests share the same pending posting.
-3. Launch a background thread that merges contributor postings into the cached
-   posting.
-4. Release the posting after the vectors are complete.
-5. Return `ArrayHopper::make(posting)` to the caller.
-
-On a cache hit, return `ArrayHopper::make(posting)` immediately. The hopper
-will wait if the posting is still being filled.
-
-Do not reintroduce a separate Bigwig `CacheRecord` completion latch unless a
-concrete problem appears. `SimplePosting` already has the one-way completion
-gate needed for this step.
-
-## Merge Implementation
-
-The current synchronous merge helper is
-`SimplePostingFactory::posting_from_merge(...)`, which creates and returns a
-complete `SimplePosting`.
-
-For the deferred cache fill, add the narrowest helper that can fill an existing
-destination `SimplePosting` without changing posting semantics. Preserve:
-
-- the append fast path when lists are globally ordered and non-overlapping;
-- the priority-queue merge behavior otherwise;
-- the existing `push(...)` semantics;
-- the existing separation between raw merging and deletion/exclusion handling.
-
-The helper should consume Fiver `posting(feature)` results in the first step.
-Later, the same shape can consume Hazel `posting(feature)` results through the
-future shared shard interface.
+The existing multi-Fiver physical merge cache remains useful for the Fiver-only
+path and later cache work, but it should not be forced into the first Hazel
+visibility step. If the mixed view contains any Hazel, prefer no-merge hopper
+composition for that feature.
 
 ## Deletion Semantics
 
-Deletion behavior stays compositional:
+Deletion behavior should remain compositional:
 
 ```
-NotContainedIn(
-    merged_or_direct_hopper(feature),
-    merged_or_direct_hopper(null_feature))
+NotContainedIn(feature_hopper, null_feature_hopper)
 ```
 
-Do not physically apply exclusions while filling Bigwig's feature cache.
-`null_feature` should go through the same merged/direct cache path as ordinary
-features and remain reusable by the `NotContainedIn` query composition.
+For the mixed no-merge step, both `feature_hopper` and `null_feature_hopper`
+can be constructed with the same shard-hopper composition rules:
 
-## Ownership And Lifetime
+- empty if no shard contributes;
+- direct delegation if one shard contributes;
+- `VectorHopper` when multiple shards contribute.
 
-For the immediate step, Bigwig's merged-posting cache can remain owned by the
-started `BigwigIdx`, as it is today. This keeps the implementation modest.
+Do not physically apply exclusions while composing a mixed Fiver/Hazel query
+view.
 
-A separate cache-lifetime improvement remains open: preserve the Bigwig
-merged-posting cache across `end()` -> `start()` when the logical sequence has
-not changed. That is not a sequence-versioned Fluffle cache; it is one cache
-generation that stays valid until a commit changes the logical sequence. Do not
-add this incidentally without discussing ownership and invalidation first.
+## Activation
 
-## Mixed Shard View
+Bigwig activation currently discovers live Fiver files and unpickles them into
+Fluffle. The next step should additionally discover already-existing Hazel shard
+files and activate them into the same Fluffle read list.
 
-This is not part of the immediate cache step.
+Keep the first policy conservative:
 
-Later mixed Fiver/Hazel query support requires Bigwig's started view to retain
-generic shard Warrens, or a new Fluffle shard superclass, rather than narrowing
-all live entries to `Fiver`.
+- only strict shard filenames should be considered;
+- do not let sidecar files or partial checkpoint files become visible;
+- preserve sequence ordering;
+- avoid overlapping visible ranges unless the existing "newer/larger range
+  hides older contained range" policy is intentionally extended to Hazels.
 
-Review the txt path before that work:
+If activation needs range parsing shared by Fiver and Hazel, prefer a small
+local helper over a broad lifecycle abstraction.
 
-- `BigwigTxt` currently stores `std::vector<std::shared_ptr<Fiver>>`;
-- its translate/token/range behavior already uses public Warren txt methods;
-- determine with the user whether changing it to generic Warrens or to the new
-  shard interface is the right minimal mixed-view step.
+## Out Of Scope
 
-Do not begin generic-Warren Bigwig view changes, background Hazel
-materialization, activation preference, Fiver retention, or Hazel compaction
-policy work incidentally.
+Do not include these in the immediate no-merge Hazel visibility step:
 
-## Discussion Checklist Before Coding
+- background Fiver-to-Hazel conversion;
+- Hazel-to-Hazel merge scheduling;
+- mixed Fiver/Hazel physical posting merge;
+- async Bigwig cache fill;
+- Fiver retention policy after Hazel creation;
+- preference policy when both a Fiver and exact Hazel exist;
+- a new Fluffle shard superclass unless the no-merge implementation becomes
+  awkward without it.
 
-Confirm with the user:
+## Verification
 
-- that the immediate implementation remains Fiver-only;
-- whether the async cache fill belongs inside feature-level `Fiver::merge(...)`
-  for now;
-- the exact helper name for filling an existing `SimplePosting`;
-- the thread-launch and failure behavior for Bigwig async cache fills;
-- whether `Fiver::merge(...)` should keep using the caller-supplied `SafeMap`
-  or move to a more explicit cache-entry helper;
-- whether Bigwig's cache remains owned by the started `BigwigIdx`;
-- whether focused compile-only verification is sufficient for the approved
-  implementation step;
-- whether `apps/trec-example` should be run by the user as the substantial
-  dynamic regression after this cache step.
+Follow the repository rule: compile/build checks only unless the user
+explicitly asks for runtime experiments, ranking runs, evals, or benchmarks.
+
+Likely compile checks:
+
+```sh
+bazel build //src:cottontail
+bazel build //test:tests
+bazel build //test:hazel_test
+bazel build //apps:trec-example
+```
+
+Do not run `bazel test`, ranking, evals, benchmarks, or `apps/trec-example`
+unless explicitly requested.
 
 ## Useful Starting Points
 
-- `src/simple_posting.h`
-- `src/simple_posting.cc`
-- `src/array_hopper.h`
-- `src/array_hopper.cc`
-- `src/fiver.h`
-- `src/fiver.cc`
 - `src/bigwig.cc`
-- `src/hazel.cc`
+- `src/bigwig.h`
 - `src/fluffle.h`
-- `apps/trec-example.cc`
-
-## Verification Rule
-
-Agents should run compile/build checks only. Do not run test cases, including
-`bazel test`, runtime experiments, ranking runs, evals, or benchmarks unless
-the user explicitly asks for that specific verification work.
+- `src/fiver.cc`
+- `src/fiver.h`
+- `src/hazel.cc`
+- `src/hazel.h`
+- `src/vector_hopper.cc`
+- `src/owsla.h`
+- `apps/fiver2hazel.cc`
+- `test/hazel.cc`

@@ -221,8 +221,16 @@ private:
     auto posting = index_->find(feature);
     if (posting == index_->end())
       return std::make_unique<EmptyHopper>();
-    else
+    else if (posting->second->size() == 1) {
+      addr p, q;
+      fval v;
+      if (posting->second->get(0, &p, &q, &v))
+        return std::make_unique<SingletonHopper>(p, q, v);
+      else
+        return std::make_unique<EmptyHopper>();
+    } else {
       return ArrayHopper::make(posting->second);
+    }
   };
   addr count_(addr feature) final {
     auto posting = index_->find(feature);

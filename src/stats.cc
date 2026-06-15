@@ -18,7 +18,10 @@ namespace cottontail {
 std::shared_ptr<Stats> Stats::make(std::shared_ptr<Warren> warren,
                                    std::string *error) {
   if (meadowlark::is_meadow(warren)) {
-    return Stats::make("tf-idf", "", warren, error);
+    std::shared_ptr<Stats> stats = Stats::make("tf-idf", "", warren);
+    if (stats == nullptr)
+      safe_error(error) = "No ranking statistics available in warren";
+    return stats;
   }
   std::string stats_key = "statistics";
   std::string stats_name;
@@ -33,12 +36,14 @@ std::shared_ptr<Stats> Stats::make(std::shared_ptr<Warren> warren,
     if (container_value != "") {
       stats_name = "idf";
     } else {
-      safe_error(error) = "No ranking statistic in warren";
+      safe_error(error) = "No ranking statistics available in warren";
       return nullptr;
     }
   }
   std::shared_ptr<Stats> stats =
-      Stats::make(stats_name, stats_recipe, warren, error);
+      Stats::make(stats_name, stats_recipe, warren);
+  if (stats == nullptr)
+    safe_error(error) = "No ranking statistics available in warren";
   return stats;
 }
 

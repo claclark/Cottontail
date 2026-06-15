@@ -90,11 +90,15 @@ private:
 class BigwigIdx final : public Idx {
 public:
   static std::shared_ptr<Idx>
-  make(const std::vector<std::shared_ptr<Fiver>> &warrens) {
+  make(const std::vector<std::shared_ptr<Fiver>> &warrens,
+       std::shared_ptr<FluffleCache> cache) {
     std::shared_ptr<BigwigIdx> idx =
         std::shared_ptr<BigwigIdx>(new BigwigIdx());
     assert(idx != nullptr);
     idx->warrens_ = warrens;
+    if (cache == nullptr)
+      cache = std::make_shared<FluffleCache>();
+    idx->cache_ = cache;
     idx->erasing_ = false;
     for (auto &&warren : warrens)
       if (warren->idx()->count(null_feature)) {
@@ -116,10 +120,11 @@ private:
   std::unique_ptr<Hopper> hopper_(addr feature) final {
     if (erasing_ && feature != null_feature) {
       return std::make_unique<cottontail::gcl::NotContainedIn>(
-          std::move(Fiver::merge(warrens_, feature, nullptr, &cache_)),
-          std::move(Fiver::merge(warrens_, null_feature, nullptr, &cache_)));
+          std::move(Fiver::merge(warrens_, feature, nullptr, cache_.get())),
+          std::move(
+              Fiver::merge(warrens_, null_feature, nullptr, cache_.get())));
     } else {
-      return Fiver::merge(warrens_, feature, nullptr, &cache_);
+      return Fiver::merge(warrens_, feature, nullptr, cache_.get());
     }
   };
   addr count_(addr feature) final {
@@ -136,7 +141,7 @@ private:
         n += warren->idx()->vocab();
     return n;
   }
-  SafeMap<addr, std::shared_ptr<SimplePosting>> cache_;
+  std::shared_ptr<FluffleCache> cache_;
   std::vector<std::shared_ptr<Fiver>> warrens_;
   bool erasing_;
 };
@@ -532,6 +537,7 @@ std::shared_ptr<Warren> Bigwig::clone_(std::string *error) {
   if (warrens_valid_) {
     for (auto &warren : warrens_)
       bigwig->warrens_.push_back(warren);
+    bigwig->cache_ = cache_;
     bigwig->warrens_valid_ = true;
     warrens_lock_.unlock();
     bigwig->start();
@@ -542,18 +548,30 @@ std::shared_ptr<Warren> Bigwig::clone_(std::string *error) {
 }
 
 void Bigwig::start_() {
+  std::shared_ptr<FluffleCache> cache;
   {
     std::lock_guard<std::mutex> _(warrens_lock_);
     if (!warrens_valid_) {
       fluffle_->lock.lock();
+      warrens_.clear();
       for (auto &warren : fluffle_->warrens)
         if (warren != nullptr && warren->name() == "fiver")
           warrens_.push_back(std::static_pointer_cast<Fiver>(warren));
+      if (fluffle_->cache == nullptr)
+        fluffle_->cache = std::make_shared<FluffleCache>();
+      cache_ = fluffle_->cache;
       fluffle_->lock.unlock();
       warrens_valid_ = true;
+    } else if (cache_ == nullptr) {
+      fluffle_->lock.lock();
+      if (fluffle_->cache == nullptr)
+        fluffle_->cache = std::make_shared<FluffleCache>();
+      cache_ = fluffle_->cache;
+      fluffle_->lock.unlock();
     }
+    cache = cache_;
   }
-  idx_ = BigwigIdx::make(warrens_);
+  idx_ = BigwigIdx::make(warrens_, cache);
   assert(idx_ != nullptr);
   txt_ = Txt::wrap(txt_recipe_, BigwigTxt::make(warrens_));
   assert(txt_ != nullptr);
@@ -564,6 +582,7 @@ void Bigwig::end_() {
     std::lock_guard<std::mutex> _(warrens_lock_);
     warrens_valid_ = false;
     warrens_.clear();
+    cache_ = nullptr;
   }
   idx_ = nullptr;
   txt_ = nullptr;
@@ -964,6 +983,7 @@ void Bigwig::try_merge() {
 void Bigwig::commit_() {
   fluffle_->lock.lock();
   fiver_->commit();
+  fluffle_->cache = std::make_shared<FluffleCache>();
   fiver_->start();
   fluffle_->lock.unlock();
   appender_ = nullptr;
