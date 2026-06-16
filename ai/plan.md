@@ -6,9 +6,8 @@ integration step:
 - `SimplePosting` is storage only. It no longer manufactures hoppers.
 - `ArrayHopper` binds directly to waitable `SimplePosting` storage.
 - `Owsla` exists as the narrow Warren subclass for posting-capable shards.
-- Fiver subclasses `Owsla`; Hazel exposes the same concrete
-  `posting(feature)` operation and should join `Owsla` when it becomes
-  Bigwig-query-visible.
+- Fiver and Hazel subclass `Owsla` and expose the same concrete
+  `posting(feature)` operation.
 - Hazel idx cache entries are waitable `SimplePosting`s, not `CacheRecord`s`,
   and use `OwslaCache`.
 - Fluffle owns the Bigwig merged-posting cache generation as an `OwslaCache`.
@@ -84,9 +83,7 @@ commit, activation, merge policy, text access, or transaction behavior. Its job
 is to say: "given a feature, produce the raw posting on the caller's thread, or
 return `nullptr` if the shard has none."
 
-Fiver already implements this operation as an `Owsla`. Hazel has the matching
-concrete operation and should inherit `Owsla` as part of the mixed read-view
-step:
+Fiver and Hazel both implement this operation as `Owsla` subclasses:
 
 - Fiver returns the in-memory `SimplePosting`;
 - Hazel fills or waits on its cached `SimplePosting` synchronously.
@@ -158,12 +155,11 @@ raw postings for the captured visible shard snapshot. Cache only true
 multi-shard posting merges, and use Bigwig's own compressors explicitly rather
 than depending on the first contributing shard for compressor choices.
 
-`text_chunk_tag` is mergeable for query purposes: a merged posting and a
-`VectorHopper` over shard text-chunk hoppers are semantically equivalent here.
-However, do not store `text_chunk_tag` in the generic Bigwig feature cache.
-That cache is for normal feature postings keyed to a sequence snapshot; text
-chunk postings are part of the text-composition path and should be produced
-fresh or delegated through hoppers.
+`text_chunk_tag` is mergeable for query purposes. However, do not store
+`text_chunk_tag` in the generic Bigwig feature cache. That cache is for normal
+feature postings keyed to a sequence snapshot; text chunk postings are part of
+the text-composition path and should be merged fresh or delegated through
+hoppers.
 
 `hopper(feature)` should wrap the raw posting result in an `ArrayHopper`, or
 return `EmptyHopper` when the raw posting is `nullptr`. For asynchronous cache

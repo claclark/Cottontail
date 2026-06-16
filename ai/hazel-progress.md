@@ -115,6 +115,68 @@ Comparison with the 2026-06-07 single-Fiver `b.meadow` record:
 - Interpretation: the single-Fiver path remains stable; the large cache-related
   improvement is specific to multi-shard Bigwig reads.
 
+Follow-up regression checks after making Hazel inherit `Owsla` and replacing
+the multi-Fiver `text_chunk_tag` `VectorHopper` path with a fresh uncached
+posting merge:
+
+```
+./rank.sh a.meadow/
+```
+
+- Max worker ranking-loop time: `9256` ms.
+- Wall time: `1:18.60`.
+- User time: `257.00`.
+- System time: `17.38`.
+- CPU: `349%`.
+- Max RSS: `21824160` KB.
+- Major page faults: `0`.
+- Minor page faults: `7295545`.
+- `MRR @10: 0.18975923272843034`.
+- `QueriesRanked: 6980`.
+- Fake result topics: `645252`, `970152`.
+
+```
+./rank.sh b.meadow/
+```
+
+- Max worker ranking-loop time: `6586` ms.
+- Wall time: `1:13.91`.
+- User time: `230.79`.
+- System time: `12.19`.
+- CPU: `328%`.
+- Max RSS: `21598360` KB.
+- Major page faults: `0`.
+- Minor page faults: `6278870`.
+- `MRR @10: 0.1896242666120888`.
+- `QueriesRanked: 6980`.
+- Fake result topics: `645252`, `970152`.
+
+```
+./rank.sh a.meadow/hazel.00000000000000000000.00000000000000000058
+```
+
+- Max worker ranking-loop time: `12455` ms.
+- Wall time: `0:13.95`.
+- User time: `205.50`.
+- System time: `9.06`.
+- CPU: `1537%`.
+- Max RSS: `5959800` KB.
+- Major page faults: `0`.
+- Minor page faults: `1909489`.
+- `MRR @10: 0.18975923272843034`.
+- `QueriesRanked: 6980`.
+- Fake result topics: `645252`, `970152`.
+
+Interpretation:
+
+- The three-Fiver `a.meadow` path remains in the same range as the earlier
+  post-async-cache-fill run (`9256` ms vs. `9209` ms) with unchanged
+  MRR/query count.
+- The single-Fiver `b.meadow` path remains stable and slightly faster than the
+  earlier 2026-06-16 `6706` ms observation.
+- The merged Hazel path remains consistent with earlier merged-Hazel ranking
+  checks and preserves the same MRR/query-count profile.
+
 ## 2026-06-13: Repeated Restart Hazel Merge Smoke
 
 Context:

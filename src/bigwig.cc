@@ -19,7 +19,6 @@
 #include "src/fluffle.h"
 #include "src/hopper.h"
 #include "src/recipe.h"
-#include "src/vector_hopper.h"
 #include "src/warren.h"
 
 namespace cottontail {
@@ -183,10 +182,10 @@ private:
     if (contributing.size() == 1)
       return contributing[0]->idx()->hopper(feature);
     if (feature == contributing[0]->featurizer()->featurize(text_chunk_tag)) {
-      std::vector<std::unique_ptr<cottontail::Hopper>> hoppers;
-      for (auto &warren : contributing)
-        hoppers.emplace_back(warren->idx()->hopper(feature));
-      return gcl::VectorHopper::make(&hoppers, false, nullptr);
+      std::shared_ptr<SimplePosting> posting =
+          posting_factory_->posting_from_feature(feature);
+      fill_posting(posting, posting_factory_, contributing, feature);
+      return ArrayHopper::make(posting);
     }
     bool fill;
     std::shared_ptr<SimplePosting> posting =

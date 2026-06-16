@@ -14,7 +14,7 @@
 
 namespace cottontail {
 
-class Hazel final : public Warren {
+class Hazel final : public Owsla {
 public:
   static std::shared_ptr<Warren> make(const std::string &filename,
                                       const std::string &dna,
@@ -28,7 +28,7 @@ public:
         const std::string &dst,
         std::shared_ptr<std::map<std::string, std::string>> parameters,
         std::string *error = nullptr);
-  std::shared_ptr<SimplePosting> posting(addr feature);
+  std::shared_ptr<SimplePosting> posting(addr feature) final;
 
   virtual ~Hazel(){};
   Hazel(const Hazel &) = delete;
@@ -40,7 +40,7 @@ private:
   Hazel(std::shared_ptr<Featurizer> featurizer,
         std::shared_ptr<Tokenizer> tokenizer, std::shared_ptr<Idx> idx,
         std::shared_ptr<Txt> txt)
-      : Warren(nullptr, featurizer, tokenizer, idx, txt){};
+      : Owsla(nullptr, featurizer, tokenizer, idx, txt){};
   std::shared_ptr<Warren> clone_(std::string *error) final;
   std::string recipe_() final { return dna_; };
   bool set_parameter_(const std::string &key, const std::string &value,

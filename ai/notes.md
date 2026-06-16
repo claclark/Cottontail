@@ -132,9 +132,10 @@
   not part of the visible read snapshot.
 - Static indexes reuse the same cache generation across `end()` -> `start()`
   cycles until a visible commit changes the logical snapshot.
-- `BigwigIdx` is still Fiver-only. Its multi-Fiver path now handles empty,
-  single-shard, and `text_chunk_tag` cases directly, and uses the captured
-  `OwslaCache` only for true multi-Fiver posting merges.
+- `BigwigIdx` is still Fiver-only. Its multi-Fiver path now handles empty and
+  single-shard cases directly, merges `text_chunk_tag` postings fresh without
+  caching, and uses the captured `OwslaCache` only for true normal
+  multi-Fiver posting merges.
 - When deletions exist, `BigwigIdx` caches raw feature and `null_feature`
   merges separately and composes their hoppers with `NotContainedIn`.
 - `CacheGate` is a one-way completion gate. `CacheRecord` starts closed and
@@ -150,9 +151,7 @@
   inherits from `enable_shared_from_this`; callers construct `ArrayHopper`s
   explicitly from known non-empty or deferred-known-non-empty postings.
 - `Owsla` is the narrow Warren subclass for shards that expose
-  `posting(feature)`. Fiver now subclasses `Owsla`; Hazel still exposes a
-  concrete `posting(feature)` method and is expected to move onto the same
-  shard superclass when Bigwig's mixed read view is introduced.
+  `posting(feature)`. Fiver and Hazel both subclass `Owsla`.
 - The old feature-level `Fiver::merge(...)` hopper helper has been removed.
   `Fiver::merge(...)` now refers only to physical Fiver-to-Fiver shard merge;
   BigwigIdx owns visible-read feature posting composition and caching.
@@ -249,9 +248,8 @@
 - Bigwig's started view still narrows live shards to `Fiver`. The next planned
   step is to make Bigwig query already-existing Hazel shards too, without
   merging Fiver and Hazel postings physically.
-- Fiver is now an `Owsla`; Hazel still has the same concrete
-  `posting(feature)` accessor and should join that superclass when the mixed
-  Bigwig read view is introduced. The mixed Fiver/Hazel physical merge path
+- Fiver and Hazel are now both `Owsla` subclasses with concrete
+  `posting(feature)` accessors. The mixed Fiver/Hazel physical merge path
   remains separate from the no-merge visibility step.
 - The no-merge Hazel visibility step should use public Warren APIs where
   possible. `BigwigTxt` already only needs public txt methods; `BigwigIdx`
