@@ -26,12 +26,10 @@
 #include "src/null_txt.h"
 #include "src/owsla.h"
 #include "src/recipe.h"
-#include "src/safe_map.h"
 #include "src/simple.h"
 #include "src/simple_posting.h"
 #include "src/stemmer.h"
 #include "src/tokenizer.h"
-#include "src/vector_hopper.h"
 
 namespace cottontail {
 
@@ -505,53 +503,6 @@ Fiver::merge(const std::vector<std::shared_ptr<Fiver>> &fivers,
   fiver->txt_ = FiverTxt::make(fiver->featurizer_, fiver->tokenizer_,
                                fiver->idx_, fiver->text_);
   return fiver;
-}
-
-std::unique_ptr<Hopper>
-Fiver::merge(const std::vector<std::shared_ptr<Fiver>> &fivers, addr feature,
-             std::string *error,
-             SafeMap<addr, std::shared_ptr<SimplePosting>> *cache,
-             std::shared_ptr<Compressor> posting_compressor,
-             std::shared_ptr<Compressor> fvalue_compressor) {
-  if (fivers.size() == 0)
-    return std::make_unique<EmptyHopper>();
-  std::vector<std::shared_ptr<Fiver>> contributors;
-  for (size_t i = 0; i < fivers.size(); i++)
-    if (fivers[i] != nullptr && fivers[i]->idx()->count(feature) > 0)
-      contributors.push_back(fivers[i]);
-  if (contributors.size() == 0)
-    return std::make_unique<EmptyHopper>();
-  if (contributors.size() == 1)
-    return contributors[0]->idx()->hopper(feature);
-  if (feature == contributors[0]->featurizer()->featurize(text_chunk_tag)) {
-    std::vector<std::unique_ptr<cottontail::Hopper>> hoppers;
-    for (size_t i = 0; i < contributors.size(); i++)
-      hoppers.emplace_back(contributors[i]->idx()->hopper(feature));
-    return gcl::VectorHopper::make(&hoppers, false, error);
-  }
-  std::shared_ptr<SimplePosting> posting;
-  if (cache != nullptr && cache->try_get(feature, &posting))
-    return ArrayHopper::make(posting);
-  std::vector<std::shared_ptr<SimplePosting>> postings;
-  for (size_t i = 0; i < contributors.size(); i++) {
-    auto posting = contributors[i]->posting(feature);
-    if (posting != nullptr)
-      postings.emplace_back(posting);
-  }
-  if (postings.size() == 0)
-    return std::make_unique<EmptyHopper>();
-  std::shared_ptr<Compressor> the_posting_compressor = posting_compressor;
-  if (the_posting_compressor == nullptr)
-    the_posting_compressor = fivers[0]->posting_compressor_;
-  std::shared_ptr<Compressor> the_fvalue_compressor = fvalue_compressor;
-  if (the_fvalue_compressor == nullptr)
-    the_fvalue_compressor = fivers[0]->fvalue_compressor_;
-  std::shared_ptr<SimplePostingFactory> posting_factory =
-      SimplePostingFactory::make(the_posting_compressor, the_fvalue_compressor);
-  posting = posting_factory->posting_from_merge(postings);
-  if (cache != nullptr)
-    cache->set(feature, posting);
-  return ArrayHopper::make(posting);
 }
 
 std::shared_ptr<SimplePosting> Fiver::posting(addr feature) {

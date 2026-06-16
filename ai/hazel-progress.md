@@ -8,6 +8,113 @@ commands, binaries, and next steps that were later superseded. For current
 behavior and the active design checkpoint, see `ai/hazel.md`,
 `ai/hazel-merge-notes.md`, `ai/notes.md`, and `ai/plan.md`.
 
+## 2026-06-16: Three-Fiver Bigwig After OwslaCache
+
+Context:
+
+- Bigwig merged-posting cache generations now use `OwslaCache`, which installs
+  a waitable `SimplePosting` before filling. The winning caller fills the
+  posting; other callers wait on the same storage instead of independently
+  rebuilding the same merged posting.
+- The old feature-level `Fiver::merge(...)` hopper/cache helper has been
+  removed; BigwigIdx owns visible-read feature posting composition.
+- Test burrow was the three-Fiver `a.meadow`.
+
+Run:
+
+```
+./rank.sh a.meadow
+```
+
+- Max worker ranking-loop time: `9062` ms.
+- Wall time: `1:18.15`.
+- User time: `255.32`.
+- System time: `15.65`.
+- CPU: `346%`.
+- Max RSS: `21677512` KB.
+- Major page faults: `0`.
+- Minor page faults: `7258753`.
+- `MRR @10: 0.18975923272843034`.
+- `QueriesRanked: 6980`.
+- Fake result topics: `645252`, `970152`.
+
+Comparison with the 2026-06-07 three-Fiver `a.meadow` record:
+
+- Max worker ranking-loop time improved from `25891` ms to `9062` ms
+  (`2.86x` faster).
+- Wall time improved from `1:46.29` to `1:18.15`.
+- User time dropped from `584.06` to `255.32`.
+- System time dropped from `96.51` to `15.65`.
+- Max RSS dropped from `67673128` KB to `21677512` KB.
+- Minor page faults dropped from `25829605` to `7258753`.
+- MRR and query count were unchanged.
+
+Interpretation:
+
+- The large improvement is consistent with removing repeated concurrent
+  multi-Fiver merged-posting construction during ranking.
+- The three-Fiver path is now close to the old single-Fiver `b.meadow` memory
+  footprint (`21677512` KB vs. `21804204` KB recorded on 2026-06-07), though
+  its hot ranking loop remains slower (`9062` ms vs. `6980` ms).
+- The merged Hazel path still has much lower end-to-end wall time and memory on
+  the earlier record, but its hot ranking loop was slower than this updated
+  three-Fiver path (`12583` ms vs. `9062` ms).
+
+Follow-up after async cache fill and Bigwig posting-factory ownership cleanup:
+
+```
+./rank.sh a.meadow
+```
+
+- Max worker ranking-loop time: `9209` ms.
+- Wall time: `1:19.63`.
+- User time: `259.66`.
+- System time: `17.01`.
+- CPU: `347%`.
+- Max RSS: `21808088` KB.
+- Major page faults: `0`.
+- Minor page faults: `7297867`.
+- `MRR @10: 0.18975923272843034`.
+- `QueriesRanked: 6980`.
+- Fake result topics: `645252`, `970152`.
+
+Comparison with the earlier 2026-06-16 post-`OwslaCache` run:
+
+- Max worker ranking-loop time changed from `9062` ms to `9209` ms.
+- Wall time changed from `1:18.15` to `1:19.63`.
+- Max RSS changed from `21677512` KB to `21808088` KB.
+- MRR and query count were unchanged.
+- Interpretation: the async fill / factory ownership cleanup left the
+  three-Fiver ranking profile essentially unchanged, while preserving the large
+  gain over the 2026-06-07 three-Fiver baseline.
+
+Single-Fiver regression check after the same cache/Owsla work:
+
+```
+./rank.sh b.meadow
+```
+
+- Max worker ranking-loop time: `6706` ms.
+- Wall time: `1:15.09`.
+- User time: `231.79`.
+- System time: `11.94`.
+- CPU: `324%`.
+- Max RSS: `21598456` KB.
+- Major page faults: `0`.
+- Minor page faults: `6278874`.
+- `MRR @10: 0.1896242666120888`.
+- `QueriesRanked: 6980`.
+- Fake result topics: `645252`, `970152`.
+
+Comparison with the 2026-06-07 single-Fiver `b.meadow` record:
+
+- Max worker ranking-loop time changed from `6980` ms to `6706` ms.
+- Wall time changed from `1:22.42` to `1:15.09`.
+- Max RSS changed from `21804204` KB to `21598456` KB.
+- MRR and query count were unchanged.
+- Interpretation: the single-Fiver path remains stable; the large cache-related
+  improvement is specific to multi-shard Bigwig reads.
+
 ## 2026-06-13: Repeated Restart Hazel Merge Smoke
 
 Context:

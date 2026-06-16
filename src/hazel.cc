@@ -263,7 +263,8 @@ public:
       return nullptr;
     }
     bool created;
-    std::shared_ptr<SimplePosting> entry = posting_record(index, &created);
+    std::shared_ptr<SimplePosting> entry =
+        cache_.get(directory_[index].feature, posting_factory_, &created);
     if (created)
       fill_hazel_posting(entry, read_gate_, posting_factory_,
                          blob_offset_ + start, end - start,
@@ -291,7 +292,8 @@ private:
       return std::make_unique<EmptyHopper>();
     }
     bool created;
-    std::shared_ptr<SimplePosting> entry = posting_record(index, &created);
+    std::shared_ptr<SimplePosting> entry =
+        cache_.get(directory_[index].feature, posting_factory_, &created);
     if (created) {
       std::shared_ptr<ReadGate> read_gate = read_gate_;
       std::shared_ptr<SimplePostingFactory> factory = posting_factory_;
@@ -344,21 +346,6 @@ private:
       return nullptr;
     }
     return posting;
-  }
-
-  std::shared_ptr<SimplePosting> posting_record(size_t index, bool *created) {
-    addr feature = directory_[index].feature;
-    std::lock_guard<std::mutex> lock(cache_lock_);
-    auto cached = cache_.find(feature);
-    if (cached != cache_.end()) {
-      *created = false;
-      return cached->second;
-    }
-    std::shared_ptr<SimplePosting> entry =
-        posting_factory_->posting_from_feature(feature, false);
-    cache_[feature] = entry;
-    *created = true;
-    return entry;
   }
 
   bool load(std::string *error) {
@@ -419,8 +406,7 @@ private:
   addr postings_start_;
   std::vector<HazelPostingEntry> directory_;
   std::shared_ptr<ReadGate> read_gate_;
-  std::map<addr, std::shared_ptr<SimplePosting>> cache_;
-  std::mutex cache_lock_;
+  OwslaCache cache_;
   std::shared_ptr<SimplePostingFactory> posting_factory_;
 };
 

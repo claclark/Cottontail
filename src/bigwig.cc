@@ -12,6 +12,7 @@
 
 #include "src/annotator.h"
 #include "src/appender.h"
+#include "src/array_hopper.h"
 #include "src/compressor.h"
 #include "src/core.h"
 #include "src/featurizer.h"
@@ -91,14 +92,17 @@ class BigwigIdx final : public Idx {
 public:
   static std::shared_ptr<Idx>
   make(const std::vector<std::shared_ptr<Fiver>> &warrens,
-       std::shared_ptr<FluffleCache> cache) {
+       std::shared_ptr<OwslaCache> cache,
+       std::shared_ptr<SimplePostingFactory> posting_factory) {
     std::shared_ptr<BigwigIdx> idx =
         std::shared_ptr<BigwigIdx>(new BigwigIdx());
     assert(idx != nullptr);
     idx->warrens_ = warrens;
     if (cache == nullptr)
-      cache = std::make_shared<FluffleCache>();
+      cache = std::make_shared<OwslaCache>();
     idx->cache_ = cache;
+    assert(posting_factory != nullptr);
+    idx->posting_factory_ = posting_factory;
     idx->erasing_ = false;
     for (auto &&warren : warrens)
       if (warren->idx()->count(null_feature)) {
@@ -120,11 +124,9 @@ private:
   std::unique_ptr<Hopper> hopper_(addr feature) final {
     if (erasing_ && feature != null_feature) {
       return std::make_unique<cottontail::gcl::NotContainedIn>(
-          std::move(Fiver::merge(warrens_, feature, nullptr, cache_.get())),
-          std::move(
-              Fiver::merge(warrens_, null_feature, nullptr, cache_.get())));
+          std::move(raw_hopper(feature)), std::move(raw_hopper(null_feature)));
     } else {
-      return Fiver::merge(warrens_, feature, nullptr, cache_.get());
+      return raw_hopper(feature);
     }
   };
   addr count_(addr feature) final {
@@ -141,7 +143,66 @@ private:
         n += warren->idx()->vocab();
     return n;
   }
-  std::shared_ptr<FluffleCache> cache_;
+  std::vector<std::shared_ptr<Fiver>> contributors(addr feature) {
+    std::vector<std::shared_ptr<Fiver>> contributing;
+    for (auto &warren : warrens_)
+      if (warren != nullptr && warren->idx()->count(feature) > 0)
+        contributing.push_back(warren);
+    return contributing;
+  }
+
+  static void
+  fill_posting(std::shared_ptr<SimplePosting> posting,
+               std::shared_ptr<SimplePostingFactory> posting_factory,
+               std::vector<std::shared_ptr<Fiver>> contributing, addr feature) {
+    std::vector<std::shared_ptr<SimplePosting>> postings;
+    addr n = 0;
+    for (auto &warren : contributing) {
+      n += warren->idx()->count(feature);
+      auto child = warren->posting(feature);
+      if (child != nullptr)
+        postings.push_back(child);
+    }
+    std::shared_ptr<SimplePosting> merged =
+        posting_factory->posting_from_merge(postings);
+    if (merged != nullptr) {
+      posting->append(merged);
+      posting->release();
+      return;
+    }
+    assert(false);
+    for (addr i = 0; i < n; i++)
+      posting->push(minfinity + 1 + i, minfinity + 2 + i, 0.0);
+    posting->release();
+  }
+
+  std::unique_ptr<Hopper> raw_hopper(addr feature) {
+    std::vector<std::shared_ptr<Fiver>> contributing = contributors(feature);
+    if (contributing.size() == 0)
+      return std::make_unique<EmptyHopper>();
+    if (contributing.size() == 1)
+      return contributing[0]->idx()->hopper(feature);
+    if (feature == contributing[0]->featurizer()->featurize(text_chunk_tag)) {
+      std::vector<std::unique_ptr<cottontail::Hopper>> hoppers;
+      for (auto &warren : contributing)
+        hoppers.emplace_back(warren->idx()->hopper(feature));
+      return gcl::VectorHopper::make(&hoppers, false, nullptr);
+    }
+    bool fill;
+    std::shared_ptr<SimplePosting> posting =
+        cache_->get(feature, posting_factory_, &fill);
+    if (fill) {
+      std::shared_ptr<SimplePostingFactory> posting_factory = posting_factory_;
+      std::thread thread([posting, posting_factory, contributing, feature] {
+        fill_posting(posting, posting_factory, contributing, feature);
+      });
+      thread.detach();
+    }
+    return ArrayHopper::make(posting);
+  }
+
+  std::shared_ptr<OwslaCache> cache_;
+  std::shared_ptr<SimplePostingFactory> posting_factory_;
   std::vector<std::shared_ptr<Fiver>> warrens_;
   bool erasing_;
 };
@@ -447,6 +508,8 @@ std::shared_ptr<Bigwig> Bigwig::make(const std::string &burrow,
   bigwig->fluffle_ = fluffle;
   bigwig->posting_compressor_ = posting_compressor;
   bigwig->fvalue_compressor_ = fvalue_compressor;
+  bigwig->posting_factory_ =
+      SimplePostingFactory::make(posting_compressor, fvalue_compressor);
   bigwig->text_compressor_ = text_compressor;
   bigwig->txt_recipe_ = txt_parameters["recipe"];
   if (stemmer != nullptr)
@@ -502,6 +565,9 @@ std::shared_ptr<Bigwig> Bigwig::make(
     bigwig->text_compressor_ = null_compressor;
   else
     bigwig->text_compressor_ = text_compressor;
+  bigwig->posting_factory_ =
+      SimplePostingFactory::make(bigwig->posting_compressor_,
+                                 bigwig->fvalue_compressor_);
   if (working != nullptr && !write_dna(working, bigwig->recipe(), error))
     return nullptr;
   return bigwig;
@@ -524,6 +590,7 @@ std::shared_ptr<Warren> Bigwig::clone_(std::string *error) {
   bigwig->fluffle_ = fluffle_;
   bigwig->posting_compressor_ = posting_compressor_;
   bigwig->fvalue_compressor_ = fvalue_compressor_;
+  bigwig->posting_factory_ = posting_factory_;
   bigwig->text_compressor_ = text_compressor_;
   bigwig->default_container_ = default_container_;
   if (stemmer_ != nullptr) {
@@ -549,7 +616,7 @@ std::shared_ptr<Warren> Bigwig::clone_(std::string *error) {
 }
 
 void Bigwig::start_() {
-  std::shared_ptr<FluffleCache> cache;
+  std::shared_ptr<OwslaCache> cache;
   {
     std::lock_guard<std::mutex> _(warrens_lock_);
     if (!warrens_valid_) {
@@ -559,7 +626,7 @@ void Bigwig::start_() {
         if (warren != nullptr && warren->name() == "fiver")
           warrens_.push_back(std::static_pointer_cast<Fiver>(warren));
       if (fluffle_->cache == nullptr)
-        fluffle_->cache = std::make_shared<FluffleCache>();
+        fluffle_->cache = std::make_shared<OwslaCache>();
       cache_ = fluffle_->cache;
       fluffle_->lock.unlock();
       warrens_valid_ = true;
@@ -567,7 +634,7 @@ void Bigwig::start_() {
     assert(cache_ != nullptr);
     cache = cache_;
   }
-  idx_ = BigwigIdx::make(warrens_, cache);
+  idx_ = BigwigIdx::make(warrens_, cache, posting_factory_);
   assert(idx_ != nullptr);
   txt_ = Txt::wrap(txt_recipe_, BigwigTxt::make(warrens_));
   assert(txt_ != nullptr);
@@ -979,7 +1046,7 @@ void Bigwig::try_merge() {
 void Bigwig::commit_() {
   fluffle_->lock.lock();
   fiver_->commit();
-  fluffle_->cache = std::make_shared<FluffleCache>();
+  fluffle_->cache = std::make_shared<OwslaCache>();
   fiver_->start();
   fluffle_->lock.unlock();
   appender_ = nullptr;

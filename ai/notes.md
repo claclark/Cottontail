@@ -93,12 +93,12 @@
 - Standalone Hazel files can be opened by `Warren::make(...)`, parse idx/txt
   blobs, construct hoppers from posting blobs, translate text through cached
   decompressed text chunks, and shallow-clone the Hazel Warren.
-- Hazel idx activation uses waitable `SimplePosting` cache entries. Non-inline
-  posting hoppers share cached postings; query-time cache fills use a
-  16-reader `ReadGate`, run in a background thread, and publish completion
-  through `SimplePosting::release()`. Hazel's concrete `posting(feature)`
-  method fills synchronously on the caller's thread and returns a ready
-  posting.
+- Hazel idx activation uses `OwslaCache`-backed waitable `SimplePosting` cache
+  entries. Non-inline posting hoppers share cached postings; query-time cache
+  fills use a 16-reader `ReadGate`, run in a background thread, and publish
+  completion through `SimplePosting::release()`. Hazel's concrete
+  `posting(feature)` method fills synchronously on the caller's thread and
+  returns a ready posting.
 - Hazel txt activation loads the text map, uses a 16-reader `ReadGate`, keeps a
   mutex-protected `text_chunk_tag` hopper, and caches decompressed chunks
   without eviction.
@@ -119,8 +119,10 @@
 
 ## Current Bigwig Cache Status
 
-- Fluffle owns the Bigwig merged-posting cache generation:
-  `FluffleCache = SafeMap<addr, std::shared_ptr<SimplePosting>>`.
+- Fluffle owns the Bigwig merged-posting cache generation as an `OwslaCache`.
+  `OwslaCache::get(feature, posting_factory, &fill)` atomically returns an
+  existing waitable `SimplePosting` or installs a closed one and marks the
+  caller as the fill owner.
 - A started Bigwig read view captures both the visible shard vector and the
   current Fluffle cache pointer. Existing started readers keep their cache
   generation by `shared_ptr` lifetime.
@@ -130,8 +132,9 @@
   not part of the visible read snapshot.
 - Static indexes reuse the same cache generation across `end()` -> `start()`
   cycles until a visible commit changes the logical snapshot.
-- `BigwigIdx` is still Fiver-only. Its multi-Fiver path uses `Fiver::merge(...)`
-  and the captured Fluffle cache.
+- `BigwigIdx` is still Fiver-only. Its multi-Fiver path now handles empty,
+  single-shard, and `text_chunk_tag` cases directly, and uses the captured
+  `OwslaCache` only for true multi-Fiver posting merges.
 - When deletions exist, `BigwigIdx` caches raw feature and `null_feature`
   merges separately and composes their hoppers with `NotContainedIn`.
 - `CacheGate` is a one-way completion gate. `CacheRecord` starts closed and
@@ -146,18 +149,20 @@
 - `SimplePosting` is storage-only. It no longer has `hopper()` and no longer
   inherits from `enable_shared_from_this`; callers construct `ArrayHopper`s
   explicitly from known non-empty or deferred-known-non-empty postings.
-- Fiver and Hazel both expose concrete `posting(feature)` methods. A future
-  Fluffle-managed shard interface is expected to virtualize this operation for
-  mixed Fiver/Hazel Bigwig views.
-- Feature-level `Fiver::merge(...)` now scans contributors, returns
-  `EmptyHopper` when none contribute, delegates directly when one shard
-  contributes, and uses Bigwig's cache only for true multi-Fiver merges.
+- `Owsla` is the narrow Warren subclass for shards that expose
+  `posting(feature)`. Fiver now subclasses `Owsla`; Hazel still exposes a
+  concrete `posting(feature)` method and is expected to move onto the same
+  shard superclass when Bigwig's mixed read view is introduced.
+- The old feature-level `Fiver::merge(...)` hopper helper has been removed.
+  `Fiver::merge(...)` now refers only to physical Fiver-to-Fiver shard merge;
+  BigwigIdx owns visible-read feature posting composition and caching.
 - `FiverIdx::hopper_()` returns `SingletonHopper` directly for in-memory
   one-entry postings. Hazel still relies on `ArrayHopper` being correct for
   one-entry waitable `SimplePosting`s.
-- Bigwig has not yet switched to asynchronous deferred merged-posting cache
-  fills; current multi-Fiver cache misses still fill synchronously before
-  returning a hopper.
+- Bigwig multi-Fiver cache misses now install the closed `OwslaCache` posting,
+  start a detached fill thread, and return an `ArrayHopper` over the waitable
+  posting. The fill thread captures the posting, factory, and contributing
+  Fivers rather than the `BigwigIdx` object.
 - Started Bigwig clones preserve the source read view without cloning an active
   write transaction; a clone that wants to write must call `transaction()`
   itself. Focused regression coverage checks that a started Bigwig clone stays
@@ -215,6 +220,11 @@
   be very fast once hot but expensive to open and hold in memory; merged Hazel
   has a slightly slower hot loop on this workload but much lower wall time and
   memory use.
+- User-reported 2026-06-16 regression/ranking checks after the `OwslaCache`
+  work passed. The three-Fiver `a.meadow` hot ranking loop improved from
+  `25891` ms to about `9.1` seconds with unchanged MRR/query count, while the
+  single-Fiver `b.meadow` path stayed stable at `6706` ms and unchanged
+  MRR/query count.
 
 ## Active Mid-Flight Plan
 
@@ -239,14 +249,14 @@
 - Bigwig's started view still narrows live shards to `Fiver`. The next planned
   step is to make Bigwig query already-existing Hazel shards too, without
   merging Fiver and Hazel postings physically.
-- Fiver and Hazel are now aligned around concrete `posting(feature)` accessors
-  returning waitable `SimplePosting` storage. The generic-Warren or shard
-  superclass Bigwig txt/idx view and mixed Fiver/Hazel physical merge path come
-  after the no-merge Hazel visibility step.
+- Fiver is now an `Owsla`; Hazel still has the same concrete
+  `posting(feature)` accessor and should join that superclass when the mixed
+  Bigwig read view is introduced. The mixed Fiver/Hazel physical merge path
+  remains separate from the no-merge visibility step.
 - The no-merge Hazel visibility step should use public Warren APIs where
-  possible. `BigwigTxt` already only needs public txt methods; `BigwigIdx` can
-  compose shard hoppers with direct delegation or `VectorHopper` before the
-  future `posting(feature)` merge abstraction is introduced.
+  possible. `BigwigTxt` already only needs public txt methods; `BigwigIdx`
+  already owns posting composition/caching for the Fiver-only view and should
+  extend that mergepoint to `Owsla` children for the mixed Hazel/Fiver view.
 - Fluffle cache lifetime is no longer an open design question for the current
   code: the cache generation is shared across starts and invalidated when the
   visible logical snapshot changes through commit publication.

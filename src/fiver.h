@@ -9,16 +9,15 @@
 #include "src/core.h"
 #include "src/featurizer.h"
 #include "src/idx.h"
-#include "src/safe_map.h"
+#include "src/owsla.h"
 #include "src/simple_posting.h"
 #include "src/tokenizer.h"
 #include "src/txt.h"
-#include "src/warren.h"
 #include "src/working.h"
 
 namespace cottontail {
 
-class Fiver final : public Warren {
+class Fiver final : public Owsla {
 public:
   static std::shared_ptr<Fiver>
   make(std::shared_ptr<Working> working, std::shared_ptr<Featurizer> featurizer,
@@ -32,12 +31,6 @@ public:
         std::shared_ptr<Compressor> posting_compressor = nullptr,
         std::shared_ptr<Compressor> fvalue_compressor = nullptr,
         std::shared_ptr<Compressor> text_compressor = nullptr);
-  static std::unique_ptr<Hopper>
-  merge(const std::vector<std::shared_ptr<Fiver>> &fivers, addr feature,
-        std::string *error = nullptr,
-        SafeMap<addr, std::shared_ptr<SimplePosting>> *cache = nullptr,
-        std::shared_ptr<Compressor> posting_compressor = nullptr,
-        std::shared_ptr<Compressor> fvalue_compressor = nullptr);
   bool pickle(const std::string &filename, std::string *error = nullptr);
   bool pickle(std::string *error = nullptr);
   bool discard(std::string *error = nullptr);
@@ -57,7 +50,7 @@ public:
   addr relocate(addr where);
   void set_sequence(addr number);
   void get_sequence(addr *start, addr *end);
-  std::shared_ptr<SimplePosting> posting(addr feature);
+  std::shared_ptr<SimplePosting> posting(addr feature) final;
   addr get_storage_estimate() {
     return storage_estimate_;
   }
@@ -73,7 +66,7 @@ private:
         std::shared_ptr<Featurizer> featurizer,
         std::shared_ptr<Tokenizer> tokenizer, std::shared_ptr<Idx> idx,
         std::shared_ptr<Txt> txt)
-      : Warren(working, featurizer, tokenizer, idx, txt) {
+      : Owsla(working, featurizer, tokenizer, idx, txt) {
     name_ = "kitten";
   };
   std::string recipe_() final;

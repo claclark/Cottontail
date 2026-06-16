@@ -5,15 +5,24 @@ integration step:
 
 - `SimplePosting` is storage only. It no longer manufactures hoppers.
 - `ArrayHopper` binds directly to waitable `SimplePosting` storage.
-- Fiver and Hazel both expose concrete `posting(feature)` methods.
-- Hazel idx cache entries are waitable `SimplePosting`s, not `CacheRecord`s.
-- Fluffle owns the Bigwig merged-posting cache generation.
+- `Owsla` exists as the narrow Warren subclass for posting-capable shards.
+- Fiver subclasses `Owsla`; Hazel exposes the same concrete
+  `posting(feature)` operation and should join `Owsla` when it becomes
+  Bigwig-query-visible.
+- Hazel idx cache entries are waitable `SimplePosting`s, not `CacheRecord`s`,
+  and use `OwslaCache`.
+- Fluffle owns the Bigwig merged-posting cache generation as an `OwslaCache`.
 - A Bigwig start captures both the visible shard snapshot and the current cache
   generation.
 - The Fluffle cache generation is replaced when a kitten is committed into a
   visible Fiver, not when the write is merely prepared.
 - `ArrayHopper` has explicit singleton and singleton-interval coverage; Fiver
   also restores its in-memory singleton fast path.
+- BigwigIdx owns Fiver-only posting composition and caching today. True
+  multi-Fiver cache misses install a closed waitable posting, fill it
+  asynchronously, and return a hopper over that posting.
+- Regression builds and user-run ranking checks passed after the Owsla cache
+  work; measurements are recorded in `ai/hazel-progress.md`.
 
 This plan records the next design checkpoint. It is not authorization to start
 coding without discussion.
@@ -36,8 +45,9 @@ Think of this as "Hazel is query-visible" rather than "Hazel participates in
 the lifecycle machinery."
 
 This is still a cleanup/alignment step, not new user-visible behavior. The
-main alignment target is that Fiver, Hazel, and Bigwig all expose the same raw
-posting operation.
+main alignment target is that Fiver and Hazel expose the same raw posting
+operation to Bigwig's read snapshot. Bigwig remains the aggregator over that
+snapshot rather than becoming an `Owsla` itself.
 
 ## Snapshot And Cache Invariant
 
@@ -62,8 +72,8 @@ the new cache generation while the new Fiver was still a kitten.
 
 ## Owsla Posting Interface
 
-Introduce a small common shard interface, tentatively `Owsla`, for the shared
-operation already implemented concretely by Fiver and Hazel:
+Use the small common shard interface `Owsla` for the shared operation already
+implemented concretely by Fiver and Hazel:
 
 ```
 std::shared_ptr<SimplePosting> posting(addr feature)
@@ -74,11 +84,15 @@ commit, activation, merge policy, text access, or transaction behavior. Its job
 is to say: "given a feature, produce the raw posting on the caller's thread, or
 return `nullptr` if the shard has none."
 
-Fiver, Hazel, and Bigwig should all implement this operation:
+Fiver already implements this operation as an `Owsla`. Hazel has the matching
+concrete operation and should inherit `Owsla` as part of the mixed read-view
+step:
 
 - Fiver returns the in-memory `SimplePosting`;
-- Hazel fills or waits on its cached `SimplePosting` synchronously;
-- Bigwig composes the postings from its started child shard snapshot.
+- Hazel fills or waits on its cached `SimplePosting` synchronously.
+
+Bigwig should not implement `Owsla`. Its idx layer composes postings from the
+started child shard snapshot.
 
 `posting(feature)` is storage composition, not query semantics. It does not
 apply `null_feature` exclusions.
@@ -98,11 +112,11 @@ readable shards. The likely shape is:
 std::vector<std::shared_ptr<Owsla>>
 ```
 
-The objects in that vector are still Warrens in practice: Fiver, Hazel, and
-Bigwig. Bigwig text composition still needs the public Warren `txt()` interface,
-so the implementation may keep a parallel/read-compatible Warren view or make
-the concrete shard type available as both Warren and Owsla. Avoid turning Owsla
-into a broader abstraction just to serve text.
+The objects in that vector are still Warrens in practice: Fiver and Hazel.
+Bigwig text composition still needs the public Warren `txt()` interface, so the
+implementation may keep a parallel/read-compatible Warren view or rely on the
+fact that `Owsla` is a Warren. Avoid turning Owsla into a broader abstraction
+just to serve text.
 
 ## BigwigTxt
 
@@ -118,16 +132,17 @@ that behavior. Do not add text merge logic.
 
 ## BigwigIdx
 
-`BigwigIdx` currently calls `Fiver::merge(...)` over the Fiver-only view.
+`BigwigIdx` currently owns Fiver-only visible-read posting composition and
+cache fills.
 
-For the no-merge Hazel step, `BigwigIdx` should move toward the same structure
-as Hazel's idx:
+For the no-merge Hazel step, `BigwigIdx` should extend that structure to
+`Owsla` children:
 
-- `posting(feature)` does the synchronous work on the caller's thread;
+- raw posting composition does the synchronous work on the caller's thread;
 - `hopper(feature)` creates/uses a waitable posting and can start a worker
   thread for cache misses.
 
-Bigwig's raw posting operation should:
+BigwigIdx's raw posting composition should:
 
 1. Scan the started shard view with fast `idx()->count(feature)`.
 2. Return `nullptr` when no shard contributes.
@@ -136,8 +151,7 @@ Bigwig's raw posting operation should:
    into one `SimplePosting`.
 
 This makes Hazel query-visible through the same mergepoint that already works
-for Fiver, and it makes nested Bigwigs or mixed Bigwig/Hazel/Fiver views
-conceptually possible.
+for Fiver. Nested Bigwigs should not be part of this step.
 
 The Bigwig feature cache belongs at this aggregation layer. It caches merged
 raw postings for the captured visible shard snapshot. Cache only true
