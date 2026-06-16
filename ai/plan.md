@@ -30,10 +30,14 @@ Hazel shards are already present in the Fluffle. It should not:
 - merge Hazels together;
 - merge Fivers and Hazels into a new physical shard;
 - choose retention or activation policy;
-- introduce the future shard superclass unless the code clearly demands it.
+- expand the shard lifecycle machinery beyond what query visibility needs.
 
 Think of this as "Hazel is query-visible" rather than "Hazel participates in
 the lifecycle machinery."
+
+This is still a cleanup/alignment step, not new user-visible behavior. The
+main alignment target is that Fiver, Hazel, and Bigwig all expose the same raw
+posting operation.
 
 ## Snapshot And Cache Invariant
 
@@ -56,6 +60,29 @@ Do not move cache invalidation back into `ready()`. That was the source of a
 stale-cache race in `apps/trec-example`: an old visible snapshot could populate
 the new cache generation while the new Fiver was still a kitten.
 
+## Owsla Posting Interface
+
+Introduce a small common shard interface, tentatively `Owsla`, for the shared
+operation already implemented concretely by Fiver and Hazel:
+
+```
+std::shared_ptr<SimplePosting> posting(addr feature)
+```
+
+Keep this interface narrow. It should not become a lifecycle superclass for
+commit, activation, merge policy, text access, or transaction behavior. Its job
+is to say: "given a feature, produce the raw posting on the caller's thread, or
+return `nullptr` if the shard has none."
+
+Fiver, Hazel, and Bigwig should all implement this operation:
+
+- Fiver returns the in-memory `SimplePosting`;
+- Hazel fills or waits on its cached `SimplePosting` synchronously;
+- Bigwig composes the postings from its started child shard snapshot.
+
+`posting(feature)` is storage composition, not query semantics. It does not
+apply `null_feature` exclusions.
+
 ## Bigwig Read View
 
 Current Bigwig read state narrows to:
@@ -64,17 +91,18 @@ Current Bigwig read state narrows to:
 std::vector<std::shared_ptr<Fiver>>
 ```
 
-The no-merge Hazel step should change the started view to hold generic readable
-shards. The likely minimal type is:
+The no-merge Hazel step should change the started view to hold posting-capable
+readable shards. The likely shape is:
 
 ```
-std::vector<std::shared_ptr<Warren>>
+std::vector<std::shared_ptr<Owsla>>
 ```
 
-This is intentionally less ambitious than a new Fluffle shard superclass. A
-superclass may still be the right later cleanup, especially around
-`posting(feature)`, but it is not required for simply querying already-started
-Fiver and Hazel Warrens.
+The objects in that vector are still Warrens in practice: Fiver, Hazel, and
+Bigwig. Bigwig text composition still needs the public Warren `txt()` interface,
+so the implementation may keep a parallel/read-compatible Warren view or make
+the concrete shard type available as both Warren and Owsla. Avoid turning Owsla
+into a broader abstraction just to serve text.
 
 ## BigwigTxt
 
@@ -92,22 +120,41 @@ that behavior. Do not add text merge logic.
 
 `BigwigIdx` currently calls `Fiver::merge(...)` over the Fiver-only view.
 
-For the no-merge Hazel step, BigwigIdx should produce hoppers by composing shard
-hoppers, not by physically merging postings:
+For the no-merge Hazel step, `BigwigIdx` should move toward the same structure
+as Hazel's idx:
+
+- `posting(feature)` does the synchronous work on the caller's thread;
+- `hopper(feature)` creates/uses a waitable posting and can start a worker
+  thread for cache misses.
+
+Bigwig's raw posting operation should:
 
 1. Scan the started shard view with fast `idx()->count(feature)`.
-2. Return `EmptyHopper` when no shard contributes.
-3. If one shard contributes, delegate to that shard's own `idx()->hopper`.
-4. If multiple shards contribute, return a `VectorHopper` over each
-   contributor's `idx()->hopper(feature)`.
+2. Return `nullptr` when no shard contributes.
+3. If one shard contributes, delegate to that shard's `posting(feature)`.
+4. If multiple shards contribute, collect the child postings and merge them
+   into one `SimplePosting`.
 
-This makes Hazel query-visible without requiring the future mixed
-`posting(feature)` mergepoint.
+This makes Hazel query-visible through the same mergepoint that already works
+for Fiver, and it makes nested Bigwigs or mixed Bigwig/Hazel/Fiver views
+conceptually possible.
 
-The existing multi-Fiver physical merge cache remains useful for the Fiver-only
-path and later cache work, but it should not be forced into the first Hazel
-visibility step. If the mixed view contains any Hazel, prefer no-merge hopper
-composition for that feature.
+The Bigwig feature cache belongs at this aggregation layer. It caches merged
+raw postings for the captured visible shard snapshot. Cache only true
+multi-shard posting merges, and use Bigwig's own compressors explicitly rather
+than depending on the first contributing shard for compressor choices.
+
+`text_chunk_tag` is mergeable for query purposes: a merged posting and a
+`VectorHopper` over shard text-chunk hoppers are semantically equivalent here.
+However, do not store `text_chunk_tag` in the generic Bigwig feature cache.
+That cache is for normal feature postings keyed to a sequence snapshot; text
+chunk postings are part of the text-composition path and should be produced
+fresh or delegated through hoppers.
+
+`hopper(feature)` should wrap the raw posting result in an `ArrayHopper`, or
+return `EmptyHopper` when the raw posting is `nullptr`. For asynchronous cache
+fills, the hopper can be returned over a waitable `SimplePosting`, as Hazel
+does today.
 
 ## Deletion Semantics
 
@@ -118,14 +165,15 @@ NotContainedIn(feature_hopper, null_feature_hopper)
 ```
 
 For the mixed no-merge step, both `feature_hopper` and `null_feature_hopper`
-can be constructed with the same shard-hopper composition rules:
+can be constructed with the same Bigwig posting/hopper composition rules:
 
 - empty if no shard contributes;
-- direct delegation if one shard contributes;
-- `VectorHopper` when multiple shards contribute.
+- direct delegation if one shard contributes at the posting layer;
+- merged raw posting when multiple shards contribute.
 
-Do not physically apply exclusions while composing a mixed Fiver/Hazel query
-view.
+Do not apply exclusions in `posting(feature)`. `null_feature` remains raw data
+there, just like any other feature. The topmost query hopper is responsible for
+`NotContainedIn(feature_hopper, null_feature_hopper)`.
 
 ## Activation
 
@@ -150,12 +198,12 @@ Do not include these in the immediate no-merge Hazel visibility step:
 
 - background Fiver-to-Hazel conversion;
 - Hazel-to-Hazel merge scheduling;
-- mixed Fiver/Hazel physical posting merge;
-- async Bigwig cache fill;
+- mixed Fiver/Hazel physical shard merge;
+- background cache prewarming or fill work not tied to a requested hopper;
 - Fiver retention policy after Hazel creation;
 - preference policy when both a Fiver and exact Hazel exist;
-- a new Fluffle shard superclass unless the no-merge implementation becomes
-  awkward without it.
+- broad lifecycle abstraction beyond the narrow posting-capable Owsla
+  interface.
 
 ## Verification
 

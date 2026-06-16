@@ -535,6 +535,7 @@ std::shared_ptr<Warren> Bigwig::clone_(std::string *error) {
   }
   warrens_lock_.lock();
   if (warrens_valid_) {
+    assert(cache_ != nullptr);
     for (auto &warren : warrens_)
       bigwig->warrens_.push_back(warren);
     bigwig->cache_ = cache_;
@@ -562,13 +563,8 @@ void Bigwig::start_() {
       cache_ = fluffle_->cache;
       fluffle_->lock.unlock();
       warrens_valid_ = true;
-    } else if (cache_ == nullptr) {
-      fluffle_->lock.lock();
-      if (fluffle_->cache == nullptr)
-        fluffle_->cache = std::make_shared<FluffleCache>();
-      cache_ = fluffle_->cache;
-      fluffle_->lock.unlock();
     }
+    assert(cache_ != nullptr);
     cache = cache_;
   }
   idx_ = BigwigIdx::make(warrens_, cache);
