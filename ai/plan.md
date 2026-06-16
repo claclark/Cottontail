@@ -1,219 +1,258 @@
-# Goal: Add Hazel Shards To Bigwig Read Snapshots Without Merging
+# Goal: Bigwig/Hazel Directory Sanity And Consolidation Plan
 
-Hazel, Fiver, and Bigwig have been aligned enough to take the next small
-integration step:
+This plan records the next staged direction for integrating Hazel into Bigwig.
+It is a design checkpoint, not automatic authorization to implement every stage
+at once. The user will guide you to implement one step at a time with testing
+done by the user at each step. You do compile-only checks.
 
-- `SimplePosting` is storage only. It no longer manufactures hoppers.
-- `ArrayHopper` binds directly to waitable `SimplePosting` storage.
-- `Owsla` exists as the narrow Warren subclass for posting-capable shards.
-- Fiver and Hazel subclass `Owsla` and expose the same concrete
-  `posting(feature)` operation.
-- Hazel idx cache entries are waitable `SimplePosting`s, not `CacheRecord`s`,
-  and use `OwslaCache`.
+Current alignment already in place:
+
+- `Owsla` is the narrow Warren subclass for posting-capable shards.
+- Fiver and Hazel both subclass `Owsla` and expose
+  `std::shared_ptr<SimplePosting> posting(addr feature)`.
 - Fluffle owns the Bigwig merged-posting cache generation as an `OwslaCache`.
-- A Bigwig start captures both the visible shard snapshot and the current cache
-  generation.
-- The Fluffle cache generation is replaced when a kitten is committed into a
-  visible Fiver, not when the write is merely prepared.
-- `ArrayHopper` has explicit singleton and singleton-interval coverage; Fiver
-  also restores its in-memory singleton fast path.
-- BigwigIdx owns Fiver-only posting composition and caching today. True
-  multi-Fiver cache misses install a closed waitable posting, fill it
-  asynchronously, and return a hopper over that posting.
-- Regression builds and user-run ranking checks passed after the Owsla cache
-  work; measurements are recorded in `ai/hazel-progress.md`.
+- Bigwig is not an `Owsla`; it is the aggregator over a started shard snapshot.
+- Bigwig currently composes Fiver-only postings and caches only normal
+  multi-shard posting merges.
+- `text_chunk_tag` is mergeable, but must not be stored in the generic
+  `OwslaCache`; Bigwig should merge it fresh or delegate through hoppers.
+- User-reported regression measurements are recorded in
+  `ai/hazel-progress.md`.
 
-This plan records the next design checkpoint. It is not authorization to start
-coding without discussion.
+## Core Invariant
 
-## Immediate Goal
-
-Make Bigwig read snapshots include existing Hazel shards as read-only shards,
-without introducing Hazel merge policy or Hazel/Fiver physical merge behavior.
-
-The first mixed view should answer queries over whatever committed Fiver and
-Hazel shards are already present in the Fluffle. It should not:
-
-- convert Fivers to Hazels in the background;
-- merge Hazels together;
-- merge Fivers and Hazels into a new physical shard;
-- choose retention or activation policy;
-- expand the shard lifecycle machinery beyond what query visibility needs.
-
-Think of this as "Hazel is query-visible" rather than "Hazel participates in
-the lifecycle machinery."
-
-This is still a cleanup/alignment step, not new user-visible behavior. The
-main alignment target is that Fiver and Hazel expose the same raw posting
-operation to Bigwig's read snapshot. Bigwig remains the aggregator over that
-snapshot rather than becoming an `Owsla` itself.
-
-## Snapshot And Cache Invariant
-
-The Bigwig feature cache is valid for one logical visible shard snapshot.
-
-Visible means the shards that `Bigwig::start_()` will include in its read view.
-Today this is Fiver-only. In the next step it should include Fiver and Hazel
-shards.
-
-The cache generation must change when the logical visible snapshot changes:
-
-- a kitten being appended to Fluffle does not change the visible snapshot;
-- a kitten becoming a committed Fiver does change the visible snapshot;
-- adding an already-built Hazel to the visible Fluffle view changes the visible
-  snapshot;
-- background consolidation is supposed to preserve query answers. If it changes
-  results, that is a consolidation bug, not a cache policy feature.
-
-Do not move cache invalidation back into `ready()`. That was the source of a
-stale-cache race in `apps/trec-example`: an old visible snapshot could populate
-the new cache generation while the new Fiver was still a kitten.
-
-## Owsla Posting Interface
-
-Use the small common shard interface `Owsla` for the shared operation already
-implemented concretely by Fiver and Hazel:
+The live Bigwig shard set should move toward this logical shape:
 
 ```
-std::shared_ptr<SimplePosting> posting(addr feature)
+[ Hazel prefix ][ Fiver suffix ]
 ```
 
-Keep this interface narrow. It should not become a lifecycle superclass for
-commit, activation, merge policy, text access, or transaction behavior. Its job
-is to say: "given a feature, produce the raw posting on the caller's thread, or
-return `nullptr` if the shard has none."
+All reasoning here is sequence-range reasoning. Directory cleanup and
+consolidation selection should not depend on text ranges, posting contents, or
+physical byte layout.
 
-Fiver and Hazel both implement this operation as `Owsla` subclasses:
-
-- Fiver returns the in-memory `SimplePosting`;
-- Hazel fills or waits on its cached `SimplePosting` synchronously.
-
-Bigwig should not implement `Owsla`. Its idx layer composes postings from the
-started child shard snapshot.
-
-`posting(feature)` is storage composition, not query semantics. It does not
-apply `null_feature` exclusions.
-
-## Bigwig Read View
-
-Current Bigwig read state narrows to:
+The normal visible set has no sequence overlap. The tolerated recovery state is
+shadowing:
 
 ```
-std::vector<std::shared_ptr<Fiver>>
+dead shard *.A.B is covered by living shard *.X.Y when X <= A && B <= Y
 ```
 
-The no-merge Hazel step should change the started view to hold posting-capable
-readable shards. The likely shape is:
+For the current conservative mixed boundary, the important expected case is a
+newly created Hazel shadowing the Fiver it came from. Startup cleanup may remove
+or ignore the dead Fiver if a living Hazel covers the same sequence range.
+
+Any non-shadowed dead shard is a directory sanity failure. Any partial mixed
+Hazel/Fiver overlap that cannot be explained as shadowing should be reported as
+an error rather than silently activated.
+
+## Step 0: Rename Hazel Merge Sidecars
+
+Live Hazel shard names remain:
 
 ```
-std::vector<std::shared_ptr<Owsla>>
+hazel.A.B
 ```
 
-The objects in that vector are still Warrens in practice: Fiver and Hazel.
-Bigwig text composition still needs the public Warren `txt()` interface, so the
-implementation may keep a parallel/read-compatible Warren view or rely on the
-fact that `Owsla` is a Warren. Avoid turning Owsla into a broader abstraction
-just to serve text.
-
-## BigwigTxt
-
-`BigwigTxt` is the easiest part. It currently stores Fivers, but its operations
-already use the public Warren txt interface:
-
-- `warren->txt()->translate(p, q)`
-- `warren->txt()->tokens()`
-- `warren->txt()->range(...)`
-
-The no-merge Hazel step should make `BigwigTxt` store generic Warrens and keep
-that behavior. Do not add text merge logic.
-
-## BigwigIdx
-
-`BigwigIdx` currently owns Fiver-only visible-read posting composition and
-cache fills.
-
-For the no-merge Hazel step, `BigwigIdx` should extend that structure to
-`Owsla` children:
-
-- raw posting composition does the synchronous work on the caller's thread;
-- `hopper(feature)` creates/uses a waitable posting and can start a worker
-  thread for cache misses.
-
-BigwigIdx's raw posting composition should:
-
-1. Scan the started shard view with fast `idx()->count(feature)`.
-2. Return `nullptr` when no shard contributes.
-3. If one shard contributes, delegate to that shard's `posting(feature)`.
-4. If multiple shards contribute, collect the child postings and merge them
-   into one `SimplePosting`.
-
-This makes Hazel query-visible through the same mergepoint that already works
-for Fiver. Nested Bigwigs should not be part of this step.
-
-The Bigwig feature cache belongs at this aggregation layer. It caches merged
-raw postings for the captured visible shard snapshot. Cache only true
-multi-shard posting merges, and use Bigwig's own compressors explicitly rather
-than depending on the first contributing shard for compressor choices.
-
-`text_chunk_tag` is mergeable for query purposes. However, do not store
-`text_chunk_tag` in the generic Bigwig feature cache. That cache is for normal
-feature postings keyed to a sequence snapshot; text chunk postings are part of
-the text-composition path and should be merged fresh or delegated through
-hoppers.
-
-`hopper(feature)` should wrap the raw posting result in an `ArrayHopper`, or
-return `EmptyHopper` when the raw posting is `nullptr`. For asynchronous cache
-fills, the hopper can be returned over a waitable `SimplePosting`, as Hazel
-does today.
-
-## Deletion Semantics
-
-Deletion behavior should remain compositional:
+Hazel merge intermediates should move out of the `hazel` prefix so
+`working->ls("hazel")` sees only live Hazel candidates. Proposed names:
 
 ```
-NotContainedIn(feature_hopper, null_feature_hopper)
+mrg.hazel.A.B
+pst.hazel.A.B
+dct.hazel.A.B
 ```
 
-For the mixed no-merge step, both `feature_hopper` and `null_feature_hopper`
-can be constructed with the same Bigwig posting/hopper composition rules:
+Meanings:
 
-- empty if no shard contributes;
-- direct delegation if one shard contributes at the posting layer;
-- merged raw posting when multiple shards contribute.
+- `mrg.hazel.A.B`: temporary final Hazel output.
+- `pst.hazel.A.B`: resumable idx posting checkpoint.
+- `dct.hazel.A.B`: resumable idx directory checkpoint.
 
-Do not apply exclusions in `posting(feature)`. `null_feature` remains raw data
-there, just like any other feature. The topmost query hopper is responsible for
-`NotContainedIn(feature_hopper, null_feature_hopper)`.
+On successful publication, link or rename `mrg.hazel.A.B` to `hazel.A.B`, then
+remove the associated `mrg`/`pst`/`dct` files.
 
-## Activation
+During the transition, startup cleanup may also recognize and remove old-style
+sidecars:
 
-Bigwig activation currently discovers live Fiver files and unpickles them into
-Fluffle. The next step should additionally discover already-existing Hazel shard
-files and activate them into the same Fluffle read list.
+```
+hazel.A.B.tmp
+hazel.A.B.pst
+hazel.A.B.dct
+```
 
-Keep the first policy conservative:
+once they are known not to be needed.
 
-- only strict shard filenames should be considered;
-- do not let sidecar files or partial checkpoint files become visible;
-- preserve sequence ordering;
-- avoid overlapping visible ranges unless the existing "newer/larger range
-  hides older contained range" policy is intentionally extended to Hazels.
+## Step 1: Replace `fiver_files` With `sanitize`
 
-If activation needs range parsing shared by Fiver and Hazel, prefer a small
-local helper over a broad lifecycle abstraction.
+`fiver_files(...)` should become a directory-normalization pass, tentatively
+named `sanitize(...)`.
 
-## Out Of Scope
+Its purpose is to restore the working directory to a sane, idempotent startup
+state. Activation code should run after `sanitize(...)` and depend on the
+conditions it establishes.
 
-Do not include these in the immediate no-merge Hazel visibility step:
+`sanitize(...)` should:
 
-- background Fiver-to-Hazel conversion;
-- Hazel-to-Hazel merge scheduling;
-- mixed Fiver/Hazel physical shard merge;
-- background cache prewarming or fill work not tied to a requested hopper;
-- Fiver retention policy after Hazel creation;
-- preference policy when both a Fiver and exact Hazel exist;
-- broad lifecycle abstraction beyond the narrow posting-capable Owsla
-  interface.
+- strict-parse live shard names:
+
+  ```
+  fiver.A.B
+  hazel.A.B
+  ```
+
+- build `living` and `dead` lists by sequence range;
+- preserve the current Fiver contained-range cleanup behavior;
+- apply the same living/dead idea independently for Hazels;
+- verify every dead shard is shadowed by a living shard by sequence range:
+
+  ```
+  living.start <= dead.start && dead.end <= living.end
+  ```
+
+- delete known startup garbage such as `kitten*` and `temp*`;
+- scan Hazel merge sidecars under `mrg`, `pst`, and `dct`;
+- remove associated merge sidecars when the final `hazel.A.B` already exists;
+- keep resumable Hazel merge checkpoints only when their source Hazel group can
+  be determined from living Hazels;
+- delete sidecars for in-flight Hazel merges whose source group cannot be
+  determined;
+- return the sanitized live inventory that activation should use.
+
+For an in-flight Hazel merge `hazel.A.B`, the source group should be a
+contiguous group of living Hazels whose sequence ranges cover `A..B`. If that
+group cannot be identified, the sidecars are not resumable and should be
+deleted.
+
+Postconditions:
+
+- strict live Fiver and Hazel names are the only live shard candidates;
+- no dead shard remains unless a living shard shadows its sequence range;
+- resumable Hazel merge sidecars are associated with identifiable living Hazel
+  sources;
+- activation can build a coherent snapshot without reinterpreting filesystem
+  leftovers.
+
+## Step 2: Activate Hazels With No Hazel Merging
+
+After `sanitize(...)`, Bigwig activation should include live Hazel shards in the
+Fluffle/Bigwig read snapshot.
+
+This step should not add Hazel lifecycle policy:
+
+- no Fiver-to-Hazel conversion;
+- no Hazel-to-Hazel merge scheduling;
+- no mixed physical Fiver/Hazel merge;
+- no Fiver retention policy beyond startup shadow cleanup.
+
+Expected implementation shape:
+
+- Fluffle's visible read list moves from Fiver-only toward
+  `std::vector<std::shared_ptr<Owsla>>`.
+- `BigwigIdx` composes postings from `Owsla` children.
+- `BigwigTxt` uses the public Warren/Txt interface available through `Owsla`.
+- Bigwig caches only true normal multi-shard posting merges in the captured
+  `OwslaCache`.
+- `text_chunk_tag` remains uncached.
+- `posting(feature)` remains raw storage composition and does not apply
+  `null_feature` exclusions.
+
+The cache generation must still change only when the logical visible snapshot
+changes.
+
+## Step 3: Convert Fivers To Hazels
+
+Add one-at-a-time Fiver-to-Hazel conversion at the Hazel/Fiver boundary.
+
+Rules:
+
+- Hazels are always older than Fivers in the live logical order.
+- The boundary Fiver is the oldest live Fiver, immediately after the Hazel
+  prefix.
+- Only a boundary Fiver is eligible for conversion.
+- A converted Hazel may temporarily shadow the source Fiver on disk.
+- Startup `sanitize(...)` resolves that recovery state by making the Hazel
+  visible and treating the shadowed Fiver as dead.
+- Hazels may pile up; this step does not require Hazel-to-Hazel merging.
+
+This advances:
+
+```
+[ Hazel prefix ][ Fiver suffix ]
+```
+
+without introducing arbitrary mixed physical merges.
+
+## Step 4: Consolidation Worker Policy
+
+Merge/consolidation workers must constantly respect `fluffle->merging`.
+Selection should scan for available work rather than stop at the first blocked
+candidate.
+
+Eligibility:
+
+- Candidate sources must be adjacent/sequential by sequence range.
+- Every source Warren in the candidate range must not already be in
+  `fluffle->merging`.
+- Source Warrens must be marked in `fluffle->merging` while holding the Fluffle
+  lock, before the worker releases the lock and starts work.
+- If an early candidate is blocked by `fluffle->merging`, keep scanning for
+  another eligible candidate.
+
+Hazel merging should be capped simply. Before doing any Hazel merge work, ask:
+
+```
+Are fewer than N Hazel shards currently in fluffle->merging?
+```
+
+If the Hazel cap is reached, skip both resumed Hazel merges and new
+Hazel/Hazel merges. The worker may still do Fiver work.
+
+Worker priority:
+
+1. If Hazel merging is currently allowed, consult the sanitized list of
+   in-flight Hazel merges left over from the past. If a resumable merge has
+   available source Hazels, claim it and continue it.
+2. Merge tiny Fivers, as current Bigwig consolidation does.
+3. If the boundary Fiver is over the conversion limit, convert it to Hazel.
+4. Merge the smallest available adjacent Fiver/Fiver pair not considered tiny.
+5. If Hazel merging is currently allowed, merge the smallest available adjacent
+   Hazel/Hazel pair.
+6. If every pass finds no eligible work, quit.
+
+The ordering favors fast transactions and hot-suffix cleanup over long cold
+Hazel compaction. Hazel merge recovery comes first only when the Hazel cap
+allows it.
+
+Publication rules:
+
+- A completed operation replaces the visible Fluffle shard set atomically under
+  the Fluffle lock.
+- A changed visible shard set publishes a new empty `OwslaCache` generation.
+- Background consolidation is query-semantics preserving. If consolidation
+  changes query answers, that is a consolidation bug, not a cache policy issue.
+
+## Step 5: Survive `apps/trec-example`
+
+The user will run this and all other testing. You only run compiles.
+
+`apps/trec-example.cc` is the stress model for the eventual behavior:
+
+- many writer clones ingest and annotate files;
+- ranking clones repeatedly `start()` / rank / `end()` while writes continue;
+- eraser clones delete old file ranges through transactions;
+- commits publish new visible snapshots while rankers are active;
+- the filesystem sees kittens, temp files, Fivers, Hazels, sidecars, and
+  consolidation products.
+
+The end-state goal is that the filesystem may be busy, but:
+
+- every started reader sees a coherent snapshot;
+- every commit that changes visibility publishes a fresh cache generation;
+- restart converges through `sanitize(...)`;
+- no sequence range is double-counted;
+- no sequence range is lost when dead files are removed;
+- leftover Hazel merge sidecars are either resumable or deleted.
 
 ## Verification
 
@@ -234,14 +273,13 @@ unless explicitly requested.
 
 ## Useful Starting Points
 
-- `src/bigwig.cc`
-- `src/bigwig.h`
-- `src/fluffle.h`
-- `src/fiver.cc`
-- `src/fiver.h`
-- `src/hazel.cc`
-- `src/hazel.h`
-- `src/vector_hopper.cc`
-- `src/owsla.h`
-- `apps/fiver2hazel.cc`
-- `test/hazel.cc`
+- `src/bigwig.cc`: current `fiver_files(...)`, activation, start snapshots, and
+  merge workers.
+- `src/fluffle.h`: visible shard list, merge state, cache generation.
+- `src/hazel.cc`: Hazel merge sidecar names, checkpoint repair, and publication.
+- `src/owsla.h`: `Owsla`, `OwslaCache`, Hazel/Fiver shared naming helpers.
+- `src/fiver.cc` / `src/fiver.h`: Fiver activation, merge, conversion source.
+- `apps/fiver2hazel.cc`: strict shard-name parsing and existing Hazel merge
+  command behavior.
+- `apps/trec-example.cc`: concurrent write/read/delete stress model.
+- `test/hazel.cc`: focused Hazel regression coverage.
