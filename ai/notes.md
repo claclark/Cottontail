@@ -104,6 +104,10 @@
   without eviction.
 - `Hazel::merge(...)` merges compatible Hazel shards into a canonical
   `hazel.<start>.<end>` shard.
+- Hazel merge sidecars now live beside the final shard as
+  `mrg.hazel.<start>.<end>`, `pst.hazel.<start>.<end>`, and
+  `dct.hazel.<start>.<end>`. The merge path still cleans old-style
+  `hazel.<start>.<end>.*` sidecars as a transition aid.
 - Hazel merge async read-ahead was tried and measured on HDD, but the gain was
   only about 1%; details and the recommendation not to carry that complexity
   forward are recorded in `ai/hazel-progress.md`.

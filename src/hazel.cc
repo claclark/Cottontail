@@ -236,7 +236,8 @@ public:
 
   static bool merge(const std::vector<std::shared_ptr<HazelIdx>> &idxs,
                     const std::vector<addr> &text_lengths,
-                    addr text_chunk_feature, const std::string &prefix,
+                    addr text_chunk_feature, const std::string &pst_name,
+                    const std::string &dct_name,
                     std::ostream *out, std::string *error = nullptr);
 
   virtual ~HazelIdx(){};
@@ -654,7 +655,8 @@ bool hazel_copy_checkpoint_bytes(const std::string &filename, addr length,
 
 bool HazelIdx::merge(const std::vector<std::shared_ptr<HazelIdx>> &idxs,
                      const std::vector<addr> &text_lengths,
-                     addr text_chunk_feature, const std::string &prefix,
+                     addr text_chunk_feature, const std::string &pst_name,
+                     const std::string &dct_name,
                      std::ostream *out, std::string *error) {
   if (idxs.size() < 2) {
     safe_error(error) = "HazelIdx merge needs at least two indexes";
@@ -668,8 +670,8 @@ bool HazelIdx::merge(const std::vector<std::shared_ptr<HazelIdx>> &idxs,
     safe_error(error) = "HazelIdx merge got bad text chunk feature";
     return false;
   }
-  if (prefix == "") {
-    safe_error(error) = "HazelIdx merge got empty checkpoint prefix";
+  if (pst_name == "" || dct_name == "") {
+    safe_error(error) = "HazelIdx merge got empty checkpoint name";
     return false;
   }
   if (out == nullptr) {
@@ -692,8 +694,6 @@ bool HazelIdx::merge(const std::vector<std::shared_ptr<HazelIdx>> &idxs,
   }
 
   std::shared_ptr<SimplePostingFactory> factory = idxs[0]->posting_factory_;
-  const std::string pst_name = prefix + ".pst";
-  const std::string dct_name = prefix + ".dct";
   const addr header_length = hazel_idx_header_length();
 
   std::vector<addr> text_bases;
@@ -1410,6 +1410,27 @@ struct HazelMergeOutput {
   }
 };
 
+struct HazelMergeSidecars {
+  std::string mrg;
+  std::string pst;
+  std::string dct;
+};
+
+std::string hazel_sidecar_name(const std::string &dst,
+                               const std::string &prefix) {
+  std::filesystem::path target(dst);
+  std::filesystem::path directory = target.parent_path();
+  std::filesystem::path sidecar = prefix + "." + target.filename().string();
+  if (directory.empty())
+    return sidecar.string();
+  return (directory / sidecar).string();
+}
+
+HazelMergeSidecars hazel_merge_sidecars(const std::string &dst) {
+  return {hazel_sidecar_name(dst, "mrg"), hazel_sidecar_name(dst, "pst"),
+          hazel_sidecar_name(dst, "dct")};
+}
+
 bool hazel_path_exists(const std::string &filename, bool *exists,
                        std::string *error) {
   std::error_code ec;
@@ -1482,6 +1503,16 @@ bool hazel_cleanup_prefix_files(const std::string &prefix,
     }
   }
   return true;
+}
+
+bool hazel_cleanup_merge_sidecars(const std::string &dst,
+                                  const HazelMergeSidecars &sidecars,
+                                  std::string *error) {
+  if (!hazel_remove_if_exists(sidecars.mrg, error) ||
+      !hazel_remove_if_exists(sidecars.pst, error) ||
+      !hazel_remove_if_exists(sidecars.dct, error))
+    return false;
+  return hazel_cleanup_prefix_files(dst, error);
 }
 
 bool normalize_dna_for_activated_hazel_merge(
@@ -1650,11 +1681,11 @@ bool Hazel::merge(
   bool exists;
   if (!hazel_path_exists(dst, &exists, error))
     return false;
+  HazelMergeSidecars sidecars = hazel_merge_sidecars(dst);
   if (exists)
-    return hazel_cleanup_prefix_files(dst, error);
+    return hazel_cleanup_merge_sidecars(dst, sidecars, error);
 
-  std::string tempname = dst + ".tmp";
-  if (!hazel_remove_if_exists(tempname, error))
+  if (!hazel_remove_if_exists(sidecars.mrg, error))
     return false;
 
   std::vector<std::shared_ptr<HazelIdx>> idxs;
@@ -1749,17 +1780,17 @@ bool Hazel::merge(
   HazelMergeOutput output;
   auto remove_temp = [&]() {
     output.out.close();
-    hazel_remove_if_exists(tempname, nullptr);
+    hazel_remove_if_exists(sidecars.mrg, nullptr);
   };
 
-  if (!output.open(tempname, dna, error)) {
+  if (!output.open(sidecars.mrg, dna, error)) {
     remove_temp();
     return false;
   }
 
   output.blobs[0].offset = (addr)output.out.tellp();
-  if (!HazelIdx::merge(idxs, text_lengths, text_chunk_feature, dst, &output.out,
-                       error)) {
+  if (!HazelIdx::merge(idxs, text_lengths, text_chunk_feature, sidecars.pst,
+                       sidecars.dct, &output.out, error)) {
     remove_temp();
     return false;
   }
@@ -1787,13 +1818,13 @@ bool Hazel::merge(
     return false;
   }
 
-  if (link(tempname.c_str(), dst.c_str()) != 0) {
+  if (link(sidecars.mrg.c_str(), dst.c_str()) != 0) {
     if (!hazel_path_exists(dst, &exists, error)) {
       remove_temp();
       return false;
     }
     if (exists) {
-      if (!hazel_cleanup_prefix_files(dst, error)) {
+      if (!hazel_cleanup_merge_sidecars(dst, sidecars, error)) {
         remove_temp();
         return false;
       }
@@ -1804,7 +1835,7 @@ bool Hazel::merge(
     return false;
   }
 
-  return hazel_cleanup_prefix_files(dst, error);
+  return hazel_cleanup_merge_sidecars(dst, sidecars, error);
 }
 
 std::shared_ptr<Warren> Hazel::make(const std::string &filename,

@@ -16,6 +16,9 @@ Current alignment already in place:
   multi-shard posting merges.
 - `text_chunk_tag` is mergeable, but must not be stored in the generic
   `OwslaCache`; Bigwig should merge it fresh or delegate through hoppers.
+- Hazel merge sidecars now use the `mrg`/`pst`/`dct` prefixes so
+  `working->ls("hazel")` sees only live Hazel candidates and transitional
+  old-style sidecar cleanup remains in the merge path.
 - User-reported regression measurements are recorded in
   `ai/hazel-progress.md`.
 
@@ -54,8 +57,8 @@ Live Hazel shard names remain:
 hazel.A.B
 ```
 
-Hazel merge intermediates should move out of the `hazel` prefix so
-`working->ls("hazel")` sees only live Hazel candidates. Proposed names:
+Hazel merge intermediates have moved out of the `hazel` prefix so
+`working->ls("hazel")` sees only live Hazel candidates. Current names:
 
 ```
 mrg.hazel.A.B

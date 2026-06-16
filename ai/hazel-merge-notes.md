@@ -48,12 +48,13 @@ Build a Hazel merge operation that can be safely retried after interruption.
 The important behavior is now:
 
 - if the final destination already exists, report success after deleting
-  `dst.*` intermediates;
-- if `dst.tmp` exists without the final destination, discard it;
-- resume the long idx posting merge from `dst.pst` and `dst.dct`;
-- assemble a fresh `dst.tmp` using activated Hazel objects;
+  associated intermediates;
+- if `mrg.<dst-name>` exists without the final destination, discard it;
+- resume the long idx posting merge from `pst.<dst-name>` and
+  `dct.<dst-name>`;
+- assemble a fresh `mrg.<dst-name>` using activated Hazel objects;
 - publish the completed Hazel with a final hard link to `dst`;
-- clean up `dst.*` intermediates after success.
+- clean up associated intermediates after success.
 
 Only the idx side has durable checkpoint files. The txt side is short and
 deterministic: it directly copies already-compressed text chunks into the final
@@ -66,11 +67,13 @@ These assumptions are intentional for this first implementation.
 - One process owns directory mutation for the burrow. In practice, one Fluffle
   is managing the directory. There is no directory-level lock yet; later work
   should make this invariant real.
-- The caller chooses `dst` as a unique prefix for this merge attempt. Files
-  named `dst.*` belong to this merge and do not collide with unrelated work.
+- The caller chooses `dst` as the unique final name for this merge attempt.
+  The associated `mrg.`, `pst.`, and `dct.` sidecars belong to this merge and
+  do not collide with unrelated work.
 - Existing idx checkpoint files with this prefix are trusted to be
   continuations of the same requested merge. There is no separate manifest
-  proving that `dst.pst` and `dst.dct` match the input Hazel list.
+  proving that `pst.<dst-name>` and `dct.<dst-name>` match the input Hazel
+  list.
 - The merge does not require explicit flush or fsync checkpoints. It streams
   checkpoint bytes and recovers by trusting only complete directory records
   whose referenced posting bytes are actually present.
@@ -155,45 +158,44 @@ Fluffle policy.
 
 ## File State Protocol
 
-The destination name is also the merge prefix.
-
 Known files:
 
 - `dst`: final published Hazel;
-- `dst.tmp`: final assembly temp;
-- `dst.pst`: growing merged idx posting payload bytes;
-- `dst.dct`: growing merged idx directory records.
+- `mrg.<dst-name>`: final assembly temp;
+- `pst.<dst-name>`: growing merged idx posting payload bytes;
+- `dct.<dst-name>`: growing merged idx directory records.
 
 Startup behavior:
 
-1. If `dst` exists, the merge is already complete. Delete `dst.*`
-   intermediates and report success.
-2. If `dst.tmp` exists but `dst` does not, delete `dst.tmp`. A temp assembly
-   file is never trusted.
+1. If `dst` exists, the merge is already complete. Delete associated
+   intermediates and report success. Transitional cleanup also removes
+   old-style `dst.*` sidecars.
+2. If `mrg.<dst-name>` exists but `dst` does not, delete `mrg.<dst-name>`. A
+   temp assembly file is never trusted.
 3. Validate activated Hazel inputs and compute merged DNA.
-4. Create a fresh `dst.tmp`, write the file header, merged DNA, and placeholder
-   blob dictionary.
-5. Call `HazelIdx::merge(...)` to repair/resume `dst.pst` / `dst.dct` and
-   append a complete idx blob.
+4. Create a fresh `mrg.<dst-name>`, write the file header, merged DNA, and
+   placeholder blob dictionary.
+5. Call `HazelIdx::merge(...)` to repair/resume `pst.<dst-name>` /
+   `dct.<dst-name>` and append a complete idx blob.
 6. Call `HazelTxt::merge(...)` to append a complete txt blob by copying
    compressed chunks.
-7. Patch the top-level blob dictionary, close `dst.tmp`, link it to `dst`, and
-   delete `dst.*` intermediates.
+7. Patch the top-level blob dictionary, close `mrg.<dst-name>`, link it to
+   `dst`, and delete associated intermediates.
 
-If any step before linking fails, remove `dst.tmp` and return failure. Do not
-delete `dst.pst` or `dst.dct` merely because assembly failed; those files are
-the resumable idx work product. A later retry should discard `dst.tmp`, repair
-the idx checkpoint files, and assemble again.
+If any step before linking fails, remove `mrg.<dst-name>` and return failure.
+Do not delete `pst.<dst-name>` or `dct.<dst-name>` merely because assembly
+failed; those files are the resumable idx work product. A later retry should
+discard `mrg.<dst-name>`, repair the idx checkpoint files, and assemble again.
 
 ## Dct/Pst Checkpointing
 
-`dst.dct` is the real checkpoint for the long idx merge.
+`dct.<dst-name>` is the real checkpoint for the long idx merge.
 
 Each completed output posting is committed in this order:
 
-1. append its encoded posting bytes to `dst.pst`, unless the output directory
-   entry is an inline singleton;
-2. append one complete Hazel posting directory record to `dst.dct`.
+1. append its encoded posting bytes to `pst.<dst-name>`, unless the output
+   directory entry is an inline singleton;
+2. append one complete Hazel posting directory record to `dct.<dst-name>`.
 
 The on-disk directory record is three serialized `addr` values:
 
@@ -213,41 +215,43 @@ hazel_idx_magic.size() + 3 * sizeof(addr)
 
 On resume, `HazelIdx::merge`:
 
-1. truncates `dst.dct` to a multiple of `3 * sizeof(addr)`;
+1. truncates `dct.<dst-name>` to a multiple of `3 * sizeof(addr)`;
 2. reads the complete directory records, if any;
-3. inspects the actual size of `dst.pst`;
-4. computes `covered_end = idx_header_length + dst.pst.size()`;
-5. keeps the largest prefix of `dst.dct` whose records are sane, strictly
+3. inspects the actual size of `pst.<dst-name>`;
+4. computes `covered_end = idx_header_length + pst.<dst-name>.size()`;
+5. keeps the largest prefix of `dct.<dst-name>` whose records are sane, strictly
    increasing by feature, non-decreasing by `end`, and covered by
    `covered_end`;
-6. truncates `dst.dct` to that surviving prefix;
-7. truncates `dst.pst` to the surviving last `end - idx_header_length`, or to
-   zero if no directory records survive;
+6. truncates `dct.<dst-name>` to that surviving prefix;
+7. truncates `pst.<dst-name>` to the surviving last
+   `end - idx_header_length`, or to zero if no directory records survive;
 8. resumes at the first feature greater than the last committed feature.
 
-If there is no complete directory record, `dst.pst` is treated as empty.
+If there is no complete directory record, `pst.<dst-name>` is treated as empty.
 
 If interruption happens after posting bytes are appended but before the
 directory record is fully appended, the posting bytes are uncommitted and will
 be trimmed. If interruption leaves a directory record whose posting bytes are
-not fully present in `dst.pst`, that directory record and any later records are
-trimmed. The recovery/truncation process is idempotent and restartable.
+not fully present in `pst.<dst-name>`, that directory record and any later
+records are trimmed. The recovery/truncation process is idempotent and
+restartable.
 
 ## Idx Merge Ownership
 
 The resumable idx merge lives in a static internal helper on `HazelIdx`:
 
 ```
-HazelIdx::merge(idxs, text_lengths, text_chunk_feature, prefix, out, error)
+HazelIdx::merge(idxs, text_lengths, text_chunk_feature, pst, dct, out, error)
 ```
 
 Current ownership:
 
-- `HazelIdx::merge` knows about `prefix + ".pst"` and `prefix + ".dct"`;
+- `HazelIdx::merge` receives the explicit `pst.<dst-name>` and
+  `dct.<dst-name>` checkpoint filenames;
 - it performs dct/pst cleanup, truncation, validation, and resume;
 - it merges idx postings and commits each output feature through dct/pst;
 - after the checkpoint pair is complete, it writes the Hazel idx blob header
-  and copies `prefix.pst` and `prefix.dct` into the open output stream.
+  and copies the checkpoint files into the open output stream.
 
 The `null_feature` erasure posting does not need a separate control file.
 Because it is feature zero, it is part of the processing invariant. Before the
@@ -295,18 +299,18 @@ It is intentionally boring:
 Implemented high-level flow:
 
 1. handle idempotent `dst` success and cleanup;
-2. remove any stale `dst.tmp`;
+2. remove any stale `mrg.<dst-name>`;
 3. validate activated input Hazels, downcast idx/txt components, and compute
    merged DNA metadata;
-4. create `dst.tmp`;
+4. create `mrg.<dst-name>`;
 5. write the Cottontail file header, merged DNA, and placeholder blob
    dictionary;
 6. append the idx blob through `HazelIdx::merge(...)`;
 7. append the txt blob through `HazelTxt::merge(...)`;
 8. patch the top-level blob dictionary;
-9. close `dst.tmp`;
-10. link `dst.tmp` to `dst`;
-11. delete `dst.*` intermediates.
+9. close `mrg.<dst-name>`;
+10. link `mrg.<dst-name>` to `dst`;
+11. delete associated intermediates.
 
 The Hazel envelope does not require blobs to appear in a fixed physical order.
 The current activated-Hazel merge writes idx first and txt second, and the

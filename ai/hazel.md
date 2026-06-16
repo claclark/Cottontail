@@ -252,18 +252,20 @@ There are two `Hazel::merge(...)` surfaces in `src/hazel.cc` / `src/hazel.h`:
   activated overload with a null parameter pointer.
 - `Hazel::merge(hazels, dst, parameters, error)` is the real implementation.
   The caller supplies activated Hazel objects and a final destination path
-  `dst`, which is also the prefix for merge sidecars.
+  `dst`. Merge sidecars live beside `dst` with `mrg.`, `pst.`, and `dct.`
+  prefixes.
 
-The activated merge assembles a complete `dst.tmp`, publishes it by hard-linking
-that temp file to `dst`, and then deletes `dst.*` intermediates. Startup is
-idempotent: if `dst` already exists, the merge reports success after deleting
-sidecars; if `dst.tmp` exists without `dst`, the temp assembly is discarded.
+The activated merge assembles a complete `mrg.<dst-name>`, publishes it by
+hard-linking that temp file to `dst`, and then deletes associated sidecars.
+Startup is idempotent: if `dst` already exists, the merge reports success after
+deleting sidecars; if `mrg.<dst-name>` exists without `dst`, the temp assembly
+is discarded. Transitional cleanup also removes old-style `dst.*` sidecars.
 
-Only the idx merge is checkpointed. `HazelIdx::merge(...)` owns `dst.pst` and
-`dst.dct`:
+Only the idx merge is checkpointed. `HazelIdx::merge(...)` owns
+`pst.<dst-name>` and `dct.<dst-name>`:
 
-- `dst.pst` stores merged posting payload bytes.
-- `dst.dct` stores three-`addr` directory records for completed output
+- `pst.<dst-name>` stores merged posting payload bytes.
+- `dct.<dst-name>` stores three-`addr` directory records for completed output
   features.
 - On restart, the dictionary is truncated to a record boundary, structurally
   validated as a prefix with increasing features and sane end offsets, clipped
