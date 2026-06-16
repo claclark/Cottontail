@@ -404,6 +404,95 @@ Fiver::make(std::shared_ptr<Working> working,
   return fiver;
 }
 
+namespace {
+
+bool normalize_shards(const std::string &kind, std::vector<OwslaShard> *found,
+                      std::vector<OwslaShard> *living,
+                      std::vector<OwslaShard> *dead, std::string *error) {
+  std::sort(found->begin(), found->end(),
+            [](const auto &a, const auto &b) -> bool {
+              return a.start < b.start || (a.start == b.start && a.end > b.end);
+            });
+  living->clear();
+  dead->clear();
+  for (auto &shard : *found) {
+    if (living->empty() || living->back().end < shard.start) {
+      living->push_back(shard);
+    } else if (living->back().end >= shard.end) {
+      dead->push_back(shard);
+    } else {
+      safe_error(error) = "Filename sequence error for " + kind + ": " +
+                          shard.name;
+      return false;
+    }
+  }
+  return true;
+}
+
+bool shadowed_by_living(const OwslaShard &dead,
+                        const std::vector<OwslaShard> &living) {
+  for (auto &live : living)
+    if (owsla_range_contains(live, dead))
+      return true;
+  return false;
+}
+
+bool verify_dead_shards(const std::string &kind,
+                        const std::vector<OwslaShard> &living,
+                        const std::vector<OwslaShard> &dead,
+                        std::string *error) {
+  for (auto &shard : dead)
+    if (!shadowed_by_living(shard, living)) {
+      safe_error(error) = "Unshadowed dead " + kind + " shard: " + shard.name;
+      return false;
+    }
+  return true;
+}
+
+bool remove_names(std::shared_ptr<Working> working,
+                  const std::vector<std::string> &names, std::string *error) {
+  for (auto &name : names)
+    if (!working->remove(name, error))
+      return false;
+  return true;
+}
+
+} // namespace
+
+bool Fiver::sanitize(std::shared_ptr<Working> working,
+                     std::vector<OwslaShard> *fivers, std::string *error) {
+  if (fivers != nullptr)
+    fivers->clear();
+  if (working == nullptr)
+    return true;
+
+  std::vector<OwslaShard> found;
+  for (auto &name : working->ls("fiver")) {
+    OwslaShard shard;
+    if (!owsla_parse_shard_name(name, "fiver", &shard)) {
+      safe_error(error) = "Filename format error for fiver: " + name;
+      return false;
+    }
+    found.push_back(shard);
+  }
+
+  std::vector<OwslaShard> living;
+  std::vector<OwslaShard> dead;
+  if (!normalize_shards("fiver", &found, &living, &dead, error) ||
+      !verify_dead_shards("fiver", living, dead, error))
+    return false;
+
+  if (!remove_names(working, working->ls("kitten"), error))
+    return false;
+  for (auto &shard : dead)
+    if (!working->remove(shard.name, error))
+      return false;
+
+  if (fivers != nullptr)
+    *fivers = living;
+  return true;
+}
+
 std::shared_ptr<Fiver>
 Fiver::merge(const std::vector<std::shared_ptr<Fiver>> &fivers,
              std::string *error, std::shared_ptr<Compressor> posting_compressor,

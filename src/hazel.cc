@@ -1515,6 +1515,128 @@ bool hazel_cleanup_merge_sidecars(const std::string &dst,
   return hazel_cleanup_prefix_files(dst, error);
 }
 
+bool has_suffix(const std::string &name, const std::string &suffix) {
+  return name.size() >= suffix.size() &&
+         name.compare(name.size() - suffix.size(), suffix.size(), suffix) == 0;
+}
+
+bool parse_old_hazel_sidecar(const std::string &name, OwslaShard *target) {
+  for (const char *suffix : {".tmp", ".pst", ".dct"}) {
+    if (!has_suffix(name, suffix))
+      continue;
+    std::string base = name.substr(0, name.size() - std::strlen(suffix));
+    return owsla_parse_shard_name(base, "hazel", target);
+  }
+  return false;
+}
+
+bool parse_hazel_sidecar(const std::string &name, const std::string &prefix,
+                         OwslaShard *target) {
+  std::string full_prefix = prefix + ".";
+  if (name.compare(0, full_prefix.size(), full_prefix) != 0)
+    return false;
+  return owsla_parse_shard_name(name.substr(full_prefix.size()), "hazel",
+                                target);
+}
+
+bool normalize_hazel_shards(std::vector<OwslaShard> *found,
+                            std::vector<OwslaShard> *living,
+                            std::vector<OwslaShard> *dead,
+                            std::string *error) {
+  std::sort(found->begin(), found->end(),
+            [](const auto &a, const auto &b) -> bool {
+              return a.start < b.start || (a.start == b.start && a.end > b.end);
+            });
+  living->clear();
+  dead->clear();
+  for (auto &shard : *found) {
+    if (living->empty() || living->back().end < shard.start) {
+      living->push_back(shard);
+    } else if (living->back().end >= shard.end) {
+      dead->push_back(shard);
+    } else {
+      safe_error(error) = "Filename sequence error for hazel: " + shard.name;
+      return false;
+    }
+  }
+  return true;
+}
+
+bool shadowed_by_living_hazel(const OwslaShard &dead,
+                              const std::vector<OwslaShard> &living) {
+  for (auto &live : living)
+    if (owsla_range_contains(live, dead))
+      return true;
+  return false;
+}
+
+bool verify_dead_hazels(const std::vector<OwslaShard> &living,
+                        const std::vector<OwslaShard> &dead,
+                        std::string *error) {
+  for (auto &shard : dead)
+    if (!shadowed_by_living_hazel(shard, living)) {
+      safe_error(error) = "Unshadowed dead hazel shard: " + shard.name;
+      return false;
+    }
+  return true;
+}
+
+bool same_range(const OwslaShard &shard, addr start, addr end) {
+  return shard.start == start && shard.end == end;
+}
+
+bool has_hazel(const std::vector<OwslaShard> &hazels, addr start, addr end) {
+  for (auto &hazel : hazels)
+    if (same_range(hazel, start, end))
+      return true;
+  return false;
+}
+
+bool hazel_source_group(const std::vector<OwslaShard> &hazels, addr start,
+                        addr end, std::vector<OwslaShard> *sources) {
+  if (sources != nullptr)
+    sources->clear();
+  for (size_t i = 0; i < hazels.size(); i++) {
+    if (hazels[i].start != start)
+      continue;
+    std::vector<OwslaShard> group;
+    addr next = start;
+    for (size_t j = i; j < hazels.size(); j++) {
+      if (hazels[j].start != next || hazels[j].end > end)
+        break;
+      group.push_back(hazels[j]);
+      if (hazels[j].end == end) {
+        if (group.size() < 2)
+          return false;
+        if (sources != nullptr)
+          *sources = group;
+        return true;
+      }
+      if (hazels[j].end == maxfinity)
+        break;
+      next = hazels[j].end + 1;
+    }
+  }
+  return false;
+}
+
+bool remove_working_names(std::shared_ptr<Working> working,
+                          const std::vector<std::string> &names,
+                          std::string *error) {
+  for (auto &name : names)
+    if (!working->remove(name, error))
+      return false;
+  return true;
+}
+
+struct HazelRecoverySidecars {
+  OwslaShard target;
+  bool mrg = false;
+  bool pst = false;
+  bool dct = false;
+  std::vector<std::string> names;
+};
+
 bool normalize_dna_for_activated_hazel_merge(
     const std::map<std::string, std::string> &input, std::string *normalized,
     std::string *error) {
@@ -1663,6 +1785,103 @@ bool Hazel::merge(std::shared_ptr<Working> working,
   std::string final_name = hazel_default_name(first_start, last_end);
   std::string final_filename = working->make_name(final_name);
   return Hazel::merge(activated, final_filename, nullptr, error);
+}
+
+bool Hazel::sanitize(std::shared_ptr<Working> working,
+                     std::vector<OwslaShard> *hazels,
+                     std::vector<HazelMergeRecovery> *recoveries,
+                     std::string *error) {
+  if (hazels != nullptr)
+    hazels->clear();
+  if (recoveries != nullptr)
+    recoveries->clear();
+  if (working == nullptr)
+    return true;
+
+  std::vector<OwslaShard> found;
+  std::vector<std::string> old_sidecars;
+  for (auto &name : working->ls("hazel")) {
+    OwslaShard shard;
+    if (owsla_parse_shard_name(name, "hazel", &shard)) {
+      found.push_back(shard);
+      continue;
+    }
+    if (parse_old_hazel_sidecar(name, &shard)) {
+      old_sidecars.push_back(name);
+      continue;
+    }
+    safe_error(error) = "Filename format error for hazel: " + name;
+    return false;
+  }
+
+  std::vector<OwslaShard> living;
+  std::vector<OwslaShard> dead;
+  if (!normalize_hazel_shards(&found, &living, &dead, error) ||
+      !verify_dead_hazels(living, dead, error))
+    return false;
+
+  std::map<std::pair<addr, addr>, HazelRecoverySidecars> sidecars;
+  auto add_sidecars = [&](const std::string &prefix) {
+    for (auto &name : working->ls(prefix)) {
+      OwslaShard target;
+      if (!parse_hazel_sidecar(name, prefix, &target))
+        continue;
+      auto key = std::make_pair(target.start, target.end);
+      auto &sidecar = sidecars[key];
+      sidecar.target = target;
+      if (prefix == "mrg")
+        sidecar.mrg = true;
+      else if (prefix == "pst")
+        sidecar.pst = true;
+      else if (prefix == "dct")
+        sidecar.dct = true;
+      sidecar.names.push_back(name);
+    }
+  };
+  add_sidecars("mrg");
+  add_sidecars("pst");
+  add_sidecars("dct");
+
+  std::vector<HazelMergeRecovery> restartable;
+  for (auto &item : sidecars) {
+    HazelRecoverySidecars &sidecar = item.second;
+    if (has_hazel(living, sidecar.target.start, sidecar.target.end)) {
+      if (!remove_working_names(working, sidecar.names, error))
+        return false;
+      continue;
+    }
+    for (auto &name : sidecar.names)
+      if (name.compare(0, 4, "mrg.") == 0)
+        if (!working->remove(name, error))
+          return false;
+    std::vector<OwslaShard> sources;
+    if (sidecar.pst && sidecar.dct &&
+        hazel_source_group(living, sidecar.target.start, sidecar.target.end,
+                           &sources)) {
+      HazelMergeRecovery recovery;
+      recovery.target = sidecar.target;
+      recovery.sources = sources;
+      restartable.push_back(recovery);
+      continue;
+    }
+    for (auto &name : sidecar.names)
+      if (name.compare(0, 4, "mrg.") != 0)
+        if (!working->remove(name, error))
+          return false;
+  }
+
+  for (auto &shard : dead)
+    if (!working->remove(shard.name, error))
+      return false;
+  if (!remove_working_names(working, old_sidecars, error))
+    return false;
+  std::sort(restartable.begin(), restartable.end());
+
+  if (hazels != nullptr)
+    *hazels = living;
+  if (recoveries != nullptr)
+    *recoveries = restartable;
+  return true;
 }
 
 bool Hazel::merge(

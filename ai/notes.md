@@ -136,6 +136,20 @@
   not part of the visible read snapshot.
 - Static indexes reuse the same cache generation across `end()` -> `start()`
   cycles until a visible commit changes the logical snapshot.
+- Constructing a `Working` object now removes generic `temp.*` files, covering
+  both new and existing burrows.
+- Bigwig directory startup now runs `sanitize(...)` in `src/bigwig.cc`.
+  Communication records `OwslaShard` and `HazelMergeRecovery` live in
+  `src/owsla.h`. `Fiver::sanitize(...)` owns strict Fiver parsing,
+  same-type contained-shard cleanup, and `kitten*` removal.
+  `Hazel::sanitize(...)` owns strict Hazel parsing, same-type contained-shard
+  cleanup, old sidecar cleanup, private merge sidecar cleanup, and returning
+  logical restartable Hazel merge records.
+- Bigwig's sanitizer coordinator combines the inventories into the required
+  `[ Hazel prefix ][ Fiver suffix ]` shape. The final Hazel may shadow leading
+  Fivers at the boundary; those Fivers are deleted so the Hazel wins. Any other
+  mixed Hazel/Fiver overlap or out-of-order Fiver-before-Hazel relationship is
+  rejected. Hazel activation is the next wiring step.
 - `BigwigIdx` is still Fiver-only. Its multi-Fiver path now handles empty and
   single-shard cases directly, merges `text_chunk_tag` postings fresh without
   caching, and uses the captured `OwslaCache` only for true normal

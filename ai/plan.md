@@ -19,6 +19,13 @@ Current alignment already in place:
 - Hazel merge sidecars now use the `mrg`/`pst`/`dct` prefixes so
   `working->ls("hazel")` sees only live Hazel candidates and transitional
   old-style sidecar cleanup remains in the merge path.
+- Bigwig startup now runs `sanitize(...)` instead of the old Fiver-only
+  `fiver_files(...)` pass. Shared startup inventory records live in `Owsla`;
+  `Working` owns generic `temp.*` cleanup, Fiver owns Fiver/kittens cleanup,
+  Hazel owns Hazel shard and merge
+  recovery cleanup, and Bigwig coordinates the combined inventory. Current
+  activation still consumes only the Fiver list until the no-merge Hazel
+  visibility step lands.
 - User-reported regression measurements are recorded in
   `ai/hazel-progress.md`.
 
@@ -88,14 +95,14 @@ once they are known not to be needed.
 
 ## Step 1: Replace `fiver_files` With `sanitize`
 
-`fiver_files(...)` should become a directory-normalization pass, tentatively
-named `sanitize(...)`.
+`fiver_files(...)` has become a directory-normalization pass named
+`sanitize(...)`.
 
 Its purpose is to restore the working directory to a sane, idempotent startup
 state. Activation code should run after `sanitize(...)` and depend on the
 conditions it establishes.
 
-`sanitize(...)` should:
+`sanitize(...)` coordinates:
 
 - strict-parse live shard names:
 
@@ -104,23 +111,30 @@ conditions it establishes.
   hazel.A.B
   ```
 
-- build `living` and `dead` lists by sequence range;
-- preserve the current Fiver contained-range cleanup behavior;
-- apply the same living/dead idea independently for Hazels;
+- build `living` and `dead` lists by sequence range inside each shard type;
+- preserve the current Fiver contained-range cleanup behavior in
+  `Fiver::sanitize(...)`;
+- apply the same living/dead idea independently for Hazels in
+  `Hazel::sanitize(...)`;
 - verify every dead shard is shadowed by a living shard by sequence range:
 
   ```
   living.start <= dead.start && dead.end <= living.end
   ```
 
-- delete known startup garbage such as `kitten*` and `temp*`;
-- scan Hazel merge sidecars under `mrg`, `pst`, and `dct`;
-- remove associated merge sidecars when the final `hazel.A.B` already exists;
-- keep resumable Hazel merge checkpoints only when their source Hazel group can
-  be determined from living Hazels;
-- delete sidecars for in-flight Hazel merges whose source group cannot be
-  determined;
-- return the sanitized live inventory that activation should use.
+- delete known Fiver startup garbage such as `kitten*`; generic `temp.*`
+  cleanup happens when `Working` is constructed;
+- ask Hazel to clean its private merge recovery state and return logical
+  `HazelMergeRecovery` records;
+- combine the Fiver and Hazel inventories into the required
+  `[ Hazel prefix ][ Fiver suffix ]` shape;
+- allow the boundary recovery case where the last Hazel shadows one or more
+  leading Fivers, deleting those Fivers so the Hazel wins;
+- reject any other mixed Hazel/Fiver overlap or out-of-order Fiver-before-Hazel
+  relationship;
+- return the sanitized live inventory that activation should use. In the
+  current intermediate checkpoint, activation still uses only
+  `inventory.fivers`.
 
 For an in-flight Hazel merge `hazel.A.B`, the source group should be a
 contiguous group of living Hazels whose sequence ranges cover `A..B`. If that

@@ -1,6 +1,7 @@
 #ifndef COTTONTAIL_SRC_WORKING_H_
 #define COTTONTAIL_SRC_WORKING_H_
 
+#include <cerrno>
 #include <cassert>
 #include <cstdio>
 #include <fstream>
@@ -98,9 +99,9 @@ public:
       // TODO: Replace with direct function calls. Maybe boost can do this?
       std::string mkdir_command = "/bin/mkdir -p " + working;
       system(mkdir_command.c_str());
-      std::string cleanup_command = "/bin/rm -f " + working + "/temp.*";
-      system(cleanup_command.c_str());
     }
+    std::string cleanup_command = "/bin/rm -f " + working + "/temp.*";
+    system(cleanup_command.c_str());
   }
   std::string make_name(const std::string &name) {
     return working_ + "/" + name;
@@ -120,11 +121,14 @@ public:
     lock_.unlock();
     return make_name(ss.str());
   };
-  void remove(const std::string &name) {
-    lock_.lock();
+  bool remove(const std::string &name, std::string *error = nullptr) {
+    std::lock_guard<std::mutex> lock(lock_);
     std::string fullname = make_name(name);
-    std::remove(fullname.c_str());
-    lock_.unlock();
+    errno = 0;
+    if (std::remove(fullname.c_str()) == 0 || errno == ENOENT)
+      return true;
+    safe_error(error) = "Could not remove: " + fullname;
+    return false;
   };
   void load(const std::string &name) {
     lock_.lock();

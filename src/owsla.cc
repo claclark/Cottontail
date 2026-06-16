@@ -1,5 +1,6 @@
 #include "src/owsla.h"
 
+#include <exception>
 #include <sstream>
 
 namespace cottontail {
@@ -22,6 +23,58 @@ std::string seq2str(addr sequence) {
 
 std::string hazel_default_name(addr sequence_start, addr sequence_end) {
   return "hazel." + seq2str(sequence_start) + "." + seq2str(sequence_end);
+}
+
+std::string owsla_shard_name(const std::string &prefix, addr sequence_start,
+                             addr sequence_end) {
+  return prefix + "." + seq2str(sequence_start) + "." + seq2str(sequence_end);
+}
+
+namespace {
+
+bool all_digits(const std::string &s) {
+  if (s.empty())
+    return false;
+  for (char c : s)
+    if (c < '0' || c > '9')
+      return false;
+  return true;
+}
+
+} // namespace
+
+bool owsla_parse_shard_name(const std::string &name,
+                            const std::string &prefix, OwslaShard *shard) {
+  std::string full_prefix = prefix + ".";
+  if (name.compare(0, full_prefix.size(), full_prefix) != 0)
+    return false;
+  size_t dot = name.find('.', full_prefix.size());
+  if (dot == std::string::npos)
+    return false;
+  std::string start_string =
+      name.substr(full_prefix.size(), dot - full_prefix.size());
+  std::string end_string = name.substr(dot + 1);
+  if (!all_digits(start_string) || !all_digits(end_string))
+    return false;
+  try {
+    addr start = std::stoll(start_string);
+    addr end = std::stoll(end_string);
+    if (start < 0 || end < start)
+      return false;
+    if (shard != nullptr)
+      *shard = OwslaShard(start, end, name);
+    return true;
+  } catch (const std::exception &) {
+    return false;
+  }
+}
+
+bool owsla_ranges_overlap(const OwslaShard &a, const OwslaShard &b) {
+  return a.start <= b.end && b.start <= a.end;
+}
+
+bool owsla_range_contains(const OwslaShard &outer, const OwslaShard &inner) {
+  return outer.start <= inner.start && inner.end <= outer.end;
 }
 
 namespace {

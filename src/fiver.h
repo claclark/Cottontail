@@ -3,6 +3,7 @@
 
 #include <map>
 #include <string>
+#include <vector>
 
 #include "src/annotator.h"
 #include "src/appender.h"
@@ -31,6 +32,9 @@ public:
         std::shared_ptr<Compressor> posting_compressor = nullptr,
         std::shared_ptr<Compressor> fvalue_compressor = nullptr,
         std::shared_ptr<Compressor> text_compressor = nullptr);
+  static bool sanitize(std::shared_ptr<Working> working,
+                       std::vector<OwslaShard> *fivers,
+                       std::string *error = nullptr);
   bool pickle(const std::string &filename, std::string *error = nullptr);
   bool pickle(std::string *error = nullptr);
   bool discard(std::string *error = nullptr);

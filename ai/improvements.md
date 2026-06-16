@@ -15,6 +15,15 @@ Especially don't do these things without discussion and approval from the user.
 - Clean-up should include deleting partial Hazel merges, since we are assuming
   a hard crash, rather than a clean shutdown.
 
+## Working File Operations
+
+- Audit file operations on working-directory contents and route them through
+  `Working` where possible.
+- `Working` should remain the place that owns path-name construction,
+  temporary-name conventions, working-directory cleanup, and checked removal.
+- Keep arbitrary full-path or non-working-directory operations separate, so the
+  boundary stays clear.
+
 ## Txt Wrapping
 
 - Revisit `Txt::wrap(...)` and the general wrapper model.

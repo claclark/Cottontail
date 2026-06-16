@@ -28,6 +28,10 @@ public:
         const std::string &dst,
         std::shared_ptr<std::map<std::string, std::string>> parameters,
         std::string *error = nullptr);
+  static bool sanitize(std::shared_ptr<Working> working,
+                       std::vector<OwslaShard> *hazels,
+                       std::vector<HazelMergeRecovery> *recoveries,
+                       std::string *error = nullptr);
   std::shared_ptr<SimplePosting> posting(addr feature) final;
 
   virtual ~Hazel(){};

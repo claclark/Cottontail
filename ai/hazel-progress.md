@@ -177,6 +177,26 @@ Interpretation:
 - The merged Hazel path remains consistent with earlier merged-Hazel ranking
   checks and preserves the same MRR/query-count profile.
 
+Follow-up regression checks after the Bigwig startup `sanitize(...)` refactor:
+
+- `a.meadow/` with three Fivers and no Hazel files: max worker ranking-loop
+  time `9382` ms, wall `1:18.99`, max RSS `21817452` KB,
+  `MRR @10: 0.18975923272843034`, `QueriesRanked: 6980`.
+- `b.meadow/` with one Fiver covering `0..58`: max worker ranking-loop time
+  `6671` ms, wall `1:14.29`, max RSS `21598504` KB,
+  `MRR @10: 0.1896242666120888`, `QueriesRanked: 6980`.
+- `c.meadow/save3` as a standalone merged Hazel comparison: max worker
+  ranking-loop time `12571` ms, wall `0:14.07`, max RSS `5988696` KB,
+  `MRR @10: 0.18975923272843034`, `QueriesRanked: 6980`.
+- After running ranking until Fiver consolidation occurred and restarting
+  several times, `a.meadow/` contained only `fiver.0.37` and `fiver.38.58`
+  (with zero-padded names), no Hazel or temporary sidecars, and ranked with
+  max worker ranking-loop time `9079` ms, wall `1:13.09`, max RSS
+  `23907236` KB, `MRR @10: 0.18975923272843034`, `QueriesRanked: 6980`.
+- Interpretation: for clean Fiver-only directories, the sanitizer refactor
+  preserves the previous activation and Fiver-to-Fiver merge behavior. Hazel
+  activation remains the next wiring step.
+
 ## 2026-06-13: Repeated Restart Hazel Merge Smoke
 
 Context:

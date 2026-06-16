@@ -42,9 +42,37 @@ struct HazelTextEntry {
   addr compressed_byte_end;
 };
 
+struct OwslaShard {
+  OwslaShard() = default;
+  OwslaShard(addr start, addr end, const std::string &name)
+      : start(start), end(end), name(name){};
+  addr start = 0;
+  addr end = 0;
+  std::string name;
+  bool operator<(const OwslaShard &other) const {
+    return start < other.start ||
+           (start == other.start &&
+            (end < other.end || (end == other.end && name < other.name)));
+  }
+};
+
+struct HazelMergeRecovery {
+  OwslaShard target;
+  std::vector<OwslaShard> sources;
+  bool operator<(const HazelMergeRecovery &other) const {
+    return target < other.target;
+  }
+};
+
 std::string seq2str(addr sequence);
 std::string hazel_default_name(addr sequence_start, addr sequence_end);
 std::string hazel_blob_dictionary(const std::vector<HazelBlob> &blobs);
+std::string owsla_shard_name(const std::string &prefix, addr sequence_start,
+                             addr sequence_end);
+bool owsla_parse_shard_name(const std::string &name,
+                            const std::string &prefix, OwslaShard *shard);
+bool owsla_ranges_overlap(const OwslaShard &a, const OwslaShard &b);
+bool owsla_range_contains(const OwslaShard &outer, const OwslaShard &inner);
 
 class Owsla : public Warren {
 public:

@@ -17,6 +17,7 @@
 #include "src/core.h"
 #include "src/featurizer.h"
 #include "src/fluffle.h"
+#include "src/hazel.h"
 #include "src/hopper.h"
 #include "src/recipe.h"
 #include "src/warren.h"
@@ -266,67 +267,71 @@ private:
 };
 
 namespace {
-bool fiver_files(std::shared_ptr<Working> working,
-                 std::vector<std::string> *name, std::string *error) {
-  if (working == nullptr) {
-    if (name != nullptr)
-      name->clear();
+struct SanitizedInventory {
+  std::vector<OwslaShard> fivers;
+  std::vector<OwslaShard> hazels;
+  std::vector<HazelMergeRecovery> hazel_merges;
+};
+
+bool verify_shard_order(const std::string &kind,
+                        const std::vector<OwslaShard> &shards,
+                        std::string *error) {
+  for (size_t i = 0; i < shards.size(); i++) {
+    if (shards[i].start < 0 || shards[i].end < shards[i].start) {
+      safe_error(error) = "Bad " + kind + " shard range: " + shards[i].name;
+      return false;
+    }
+    if (i > 0 && shards[i - 1].end >= shards[i].start) {
+      safe_error(error) = "Overlapping " + kind + " shards around: " +
+                          shards[i].name;
+      return false;
+    }
+  }
+  return true;
+}
+
+bool combine_shards(std::shared_ptr<Working> working,
+                    SanitizedInventory *inventory, std::string *error) {
+  if (inventory == nullptr)
     return true;
-  }
-  std::vector<std::string> fivers = working->ls("fiver");
-  struct FiverFile {
-    FiverFile(addr start, cottontail::addr end, const std::string &name)
-        : start(start), end(end), name(name){};
-    addr start;
-    addr end;
-    std::string name;
-  };
-  std::vector<FiverFile> found;
-  for (auto &fiver : fivers) {
-    std::string suffix = fiver.substr(fiver.find(".") + 1);
-    try {
-      addr start = std::stol(suffix.substr(0, suffix.find(".")));
-      addr end = std::stol(suffix.substr(suffix.find(".") + 1));
-      if (start < 0 || end < 0 || start > end) {
-        safe_error(error) = "Filename range error for fiver: " + fiver;
-        return false;
-      }
-      found.emplace_back(start, end, fiver);
-    } catch (const std::invalid_argument &e) {
-      safe_error(error) = "Filename format error for fiver: " + fiver;
+  if (!verify_shard_order("fiver", inventory->fivers, error) ||
+      !verify_shard_order("hazel", inventory->hazels, error))
+    return false;
+  if (inventory->fivers.empty() || inventory->hazels.empty())
+    return true;
+
+  OwslaShard last_hazel = inventory->hazels.back();
+  while (!inventory->fivers.empty() &&
+         owsla_ranges_overlap(last_hazel, inventory->fivers.front())) {
+    OwslaShard fiver = inventory->fivers.front();
+    if (!owsla_range_contains(last_hazel, fiver)) {
+      safe_error(error) = "Mixed fiver/hazel sequence error around: " +
+                          fiver.name + " and " + last_hazel.name;
       return false;
     }
-  }
-  std::sort(found.begin(), found.end(),
-            [](const auto &a, const auto &b) -> bool {
-              return a.start < b.start || (a.start == b.start && a.end > b.end);
-            });
-  std::vector<FiverFile> living;
-  std::vector<FiverFile> dead;
-  for (auto &fiver : found)
-    if (living.empty() || living.back().end < fiver.start) {
-      living.emplace_back(fiver);
-    } else if (living.back().end >= fiver.end) {
-      dead.emplace_back(fiver);
-    } else {
-      safe_error(error) = "Filename sequence error for fiver: " + fiver.name;
+    if (working != nullptr && !working->remove(fiver.name, error))
       return false;
-    }
-  // can't see a situation when it isn't okay to remove
-  // uncommited transactions ("kittens")
-  std::vector<std::string> kittens = working->ls("kitten");
-  for (auto &kitten : kittens)
-    std::remove(working->make_name(kitten).c_str());
-  std::vector<std::string> temps = working->ls("temp");
-  for (auto &temp : temps)
-    std::remove(working->make_name(temp).c_str());
-  for (auto &fiver : dead)
-    std::remove(working->make_name(fiver.name).c_str());
-  if (name != nullptr) {
-    name->clear();
-    for (auto &fiver : living)
-      name->push_back(working->make_name(fiver.name));
+    inventory->fivers.erase(inventory->fivers.begin());
   }
+
+  if (!inventory->fivers.empty() &&
+      inventory->fivers.front().end < last_hazel.start) {
+    safe_error(error) = "Fiver shard precedes Hazel prefix: " +
+                        inventory->fivers.front().name;
+    return false;
+  }
+  return true;
+}
+
+bool sanitize(std::shared_ptr<Working> working, SanitizedInventory *inventory,
+              std::string *error) {
+  SanitizedInventory found;
+  if (!Fiver::sanitize(working, &found.fivers, error) ||
+      !Hazel::sanitize(working, &found.hazels, &found.hazel_merges, error) ||
+      !combine_shards(working, &found, error))
+    return false;
+  if (inventory != nullptr)
+    *inventory = found;
   return true;
 }
 
@@ -471,11 +476,12 @@ std::shared_ptr<Bigwig> Bigwig::make(const std::string &burrow,
   std::shared_ptr<Fluffle> fluffle = Fluffle::make();
   (*fluffle->parameters) = extra_parameters;
   fluffle->merge = (do_merge == "" || okay(do_merge));
-  std::vector<std::string> fivernames;
-  if (!fiver_files(working, &fivernames, error))
+  SanitizedInventory inventory;
+  if (!sanitize(working, &inventory, error))
     return nullptr;
   std::vector<std::shared_ptr<Fiver>> fivers;
-  for (auto &fivername : fivernames) {
+  for (auto &fiverfile : inventory.fivers) {
+    std::string fivername = working->make_name(fiverfile.name);
     std::shared_ptr<Fiver> fiver =
         Fiver::unpickle(fivername, working, featurizer, tokenizer, error,
                         posting_compressor, fvalue_compressor, text_compressor);
