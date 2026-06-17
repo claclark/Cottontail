@@ -205,11 +205,11 @@ template <typename Work> void async(Work work) {
 
 class HazelIdx final : public Idx {
 public:
-  static std::shared_ptr<Idx> make(const std::string &recipe,
-                                   const std::string &filename,
-                                   std::shared_ptr<HazelFile> file,
-                                   const HazelBlob &blob,
-                                   std::string *error = nullptr) {
+  static std::shared_ptr<HazelIdx> make(const std::string &recipe,
+                                        const std::string &filename,
+                                        std::shared_ptr<HazelFile> file,
+                                        const HazelBlob &blob,
+                                        std::string *error = nullptr) {
     std::shared_ptr<HazelIdx> idx = std::shared_ptr<HazelIdx>(new HazelIdx());
     idx->therecipe_ = recipe;
     idx->file_ = file;
@@ -273,6 +273,12 @@ public:
     else
       entry->wait();
     return entry;
+  }
+
+  addr estimated_size() const {
+    addr posting_bytes =
+        directory_.empty() ? postings_start_ : directory_.back().end;
+    return posting_bytes + (addr)directory_.size() * 3 * sizeof(addr);
   }
 
 private:
@@ -929,12 +935,12 @@ struct HazelTextCacheEntry {
 
 class HazelTxt final : public Txt {
 public:
-  static std::shared_ptr<Txt> make(const std::string &recipe,
-                                   const std::string &filename,
-                                   addr blob_offset, addr blob_length,
-                                   std::shared_ptr<Tokenizer> tokenizer,
-                                   std::unique_ptr<Hopper> hopper,
-                                   std::string *error = nullptr) {
+  static std::shared_ptr<HazelTxt> make(const std::string &recipe,
+                                        const std::string &filename,
+                                        addr blob_offset, addr blob_length,
+                                        std::shared_ptr<Tokenizer> tokenizer,
+                                        std::unique_ptr<Hopper> hopper,
+                                        std::string *error = nullptr) {
     std::shared_ptr<HazelTxt> txt = std::shared_ptr<HazelTxt>(new HazelTxt());
     txt->therecipe_ = recipe;
     txt->read_gate_ = ReadGate::make(filename, error, 16);
@@ -959,6 +965,7 @@ public:
   static bool merge(const std::vector<std::shared_ptr<HazelTxt>> &txts,
                     std::ostream *out, std::string *error = nullptr);
   addr raw_text_length() const { return raw_text_length_; }
+  addr estimated_size() const { return estimated_size_; }
 
 private:
   HazelTxt(){};
@@ -1099,6 +1106,7 @@ private:
         safe_error(error) = "Hazel got bad empty txt directory";
         return false;
       }
+      estimated_size_ = header_length;
       return true;
     }
 
@@ -1131,6 +1139,8 @@ private:
     }
     cache_ = std::unique_ptr<HazelTextCacheEntry[]>(
         new HazelTextCacheEntry[map_.size()]);
+    estimated_size_ = header_length + map_.back().compressed_byte_end +
+                      (addr)map_.size() * 2 * sizeof(addr);
     return true;
   }
 
@@ -1229,6 +1239,7 @@ private:
   addr chunk_space_start_;
   addr raw_text_length_;
   addr target_chunk_size_;
+  addr estimated_size_ = 0;
   std::vector<HazelTextEntry> map_;
   std::unique_ptr<HazelTextCacheEntry[]> cache_;
   std::shared_ptr<Tokenizer> tokenizer_;
@@ -2109,31 +2120,35 @@ std::shared_ptr<Warren> Hazel::make(const std::string &filename,
   std::shared_ptr<HazelFile> file = HazelFile::make(filename, error);
   if (file == nullptr)
     return nullptr;
-  std::shared_ptr<Idx> idx =
+  std::shared_ptr<HazelIdx> hazel_idx =
       HazelIdx::make(idx_recipe, filename, file, idx_blob->second, error);
-  if (idx == nullptr)
+  if (hazel_idx == nullptr)
     return nullptr;
   std::unique_ptr<Hopper> text_chunk_hopper =
-      idx->hopper(featurizer->featurize(text_chunk_tag));
+      hazel_idx->hopper(featurizer->featurize(text_chunk_tag));
   if (text_chunk_hopper == nullptr) {
     safe_error(error) = "Hazel can't make text chunk hopper";
     return nullptr;
   }
+  std::shared_ptr<HazelTxt> hazel_txt =
+      HazelTxt::make(txt_recipe, filename, txt_blob->second.offset,
+                     txt_blob->second.length, tokenizer,
+                     std::move(text_chunk_hopper), error);
+  if (hazel_txt == nullptr)
+    return nullptr;
   std::shared_ptr<Txt> txt =
-      Txt::wrap(txt_recipe,
-                HazelTxt::make(txt_recipe, filename, txt_blob->second.offset,
-                               txt_blob->second.length, tokenizer,
-                               std::move(text_chunk_hopper), error),
-                error);
+      Txt::wrap(txt_recipe, hazel_txt, error);
   if (txt == nullptr)
     return nullptr;
 
   std::shared_ptr<Hazel> hazel =
-      std::shared_ptr<Hazel>(new Hazel(featurizer, tokenizer, idx, txt));
+      std::shared_ptr<Hazel>(new Hazel(featurizer, tokenizer, hazel_idx, txt));
   hazel->name_ = "hazel";
   hazel->filename_ = filename;
   hazel->dna_ = dna;
   hazel->parameters_ = parameters;
+  hazel->estimated_size_ =
+      hazel_idx->estimated_size() + hazel_txt->estimated_size();
   hazel->annotator_ = NullAnnotator::make("", error);
   if (hazel->annotator_ == nullptr)
     return nullptr;
@@ -2172,6 +2187,7 @@ std::shared_ptr<Warren> Hazel::clone_(std::string *error) {
   hazel->filename_ = filename_;
   hazel->dna_ = dna_;
   hazel->parameters_ = parameters_;
+  hazel->estimated_size_ = estimated_size_;
   hazel->default_container_ = default_container_;
   hazel->stemmer_ = stemmer_;
   hazel->annotator_ = annotator_;

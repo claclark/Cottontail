@@ -9,10 +9,12 @@ Current alignment already in place:
 
 - `Owsla` is the narrow Warren subclass for posting-capable shards.
 - Fiver and Hazel both subclass `Owsla` and expose
-  `std::shared_ptr<SimplePosting> posting(addr feature)`.
+  `std::shared_ptr<SimplePosting> posting(addr feature)` plus a cheap cached
+  `addr estimated_size()`.
 - Fluffle owns the Bigwig merged-posting cache generation as an `OwslaCache`.
+- Fluffle owns sanitized pending Hazel merge recoveries as `hazel_merges`.
 - Bigwig is not an `Owsla`; it is the aggregator over a started shard snapshot.
-- Bigwig currently composes Fiver-only postings and caches only normal
+- Bigwig composes postings from visible `Owsla` shards and caches only normal
   multi-shard posting merges.
 - `text_chunk_tag` is mergeable, but must not be stored in the generic
   `OwslaCache`; Bigwig should merge it fresh or delegate through hoppers.
@@ -23,9 +25,8 @@ Current alignment already in place:
   `fiver_files(...)` pass. Shared startup inventory records live in `Owsla`;
   `Working` owns generic `temp.*` cleanup, Fiver owns Fiver/kittens cleanup,
   Hazel owns Hazel shard and merge
-  recovery cleanup, and Bigwig coordinates the combined inventory. Current
-  activation still consumes only the Fiver list until the no-merge Hazel
-  visibility step lands.
+  recovery cleanup, and Bigwig coordinates the combined inventory. Activation
+  now consumes sanitized Hazels followed by sanitized Fivers.
 - User-reported regression measurements are recorded in
   `ai/hazel-progress.md`.
 
@@ -154,6 +155,10 @@ Postconditions:
 
 After `sanitize(...)`, Bigwig activation should include live Hazel shards in the
 Fluffle/Bigwig read snapshot.
+
+Status: landed. Bigwig startup activates the sanitized Hazel prefix and Fiver
+suffix into Fluffle, and started Bigwig readers capture the visible snapshot as
+`std::vector<std::shared_ptr<Owsla>>`.
 
 This step should not add Hazel lifecycle policy:
 

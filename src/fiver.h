@@ -55,8 +55,11 @@ public:
   void set_sequence(addr number);
   void get_sequence(addr *start, addr *end);
   std::shared_ptr<SimplePosting> posting(addr feature) final;
-  addr get_storage_estimate() {
+  addr estimated_size() const final {
     return storage_estimate_;
+  }
+  addr get_storage_estimate() const {
+    return estimated_size();
   }
 
   virtual ~Fiver(){};

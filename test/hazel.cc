@@ -428,6 +428,7 @@ void run_hazel_merge_regression(cottontail::addr chunk_size,
   ASSERT_EQ(fivers.size(), filenames.size());
 
   std::vector<std::string> hazels;
+  std::vector<cottontail::addr> source_hazel_estimates;
   for (auto &shard : fivers) {
     std::string error;
     std::shared_ptr<cottontail::Fiver> fiver = cottontail::Fiver::unpickle(
@@ -441,6 +442,12 @@ void run_hazel_merge_regression(cottontail::addr chunk_size,
     std::shared_ptr<cottontail::Warren> hazel =
         open_started(working->make_name(hazel_name));
     ASSERT_NE(hazel, nullptr);
+    std::shared_ptr<cottontail::Owsla> hazel_owsla =
+        std::dynamic_pointer_cast<cottontail::Owsla>(hazel);
+    ASSERT_NE(hazel_owsla, nullptr);
+    cottontail::addr source_hazel_estimate = hazel_owsla->estimated_size();
+    EXPECT_GT(source_hazel_estimate, 0) << hazel_name;
+    source_hazel_estimates.push_back(source_hazel_estimate);
     expect_warrens_eq(fiver, hazel);
     hazel->end();
     fiver->end();
@@ -460,13 +467,60 @@ void run_hazel_merge_regression(cottontail::addr chunk_size,
   ASSERT_NE(source, nullptr);
   std::shared_ptr<cottontail::Warren> merged = open_started(standalone_path);
   ASSERT_NE(merged, nullptr);
+  std::shared_ptr<cottontail::Owsla> merged_owsla =
+      std::dynamic_pointer_cast<cottontail::Owsla>(merged);
+  ASSERT_NE(merged_owsla, nullptr);
+  cottontail::addr merged_hazel_estimate = merged_owsla->estimated_size();
+  EXPECT_GT(merged_hazel_estimate, 0) << final_name;
+  for (size_t i = 0; i < source_hazel_estimates.size(); i++)
+    EXPECT_GT(merged_hazel_estimate, source_hazel_estimates[i])
+        << final_name << " <= " << hazels[i];
   expect_warrens_eq(source, merged);
   expect_gcl_eq(source, merged, "\"Let me count the ways\"", true);
   expect_started_clone_eq(source, merged);
   source->end();
 }
 
+void run_bigwig_hazel_activation_regression(
+    const CompressorProfile &compressors) {
+  std::string root = test_root();
+  std::string label = "bigwig_hazel_activation_" + compressors.label;
+  std::string burrow = root + "/" + label + ".burrow";
+  std::vector<std::string> filenames = write_corpus(root, label);
+  std::shared_ptr<cottontail::Bigwig> source =
+      build_bigwig(burrow, filenames, compressors);
+  ASSERT_NE(source, nullptr);
+  source->start();
+
+  std::shared_ptr<cottontail::Working> working =
+      cottontail::Working::make(burrow);
+  ASSERT_NE(working, nullptr);
+  std::vector<ShardName> fivers = fiver_shards(working);
+  ASSERT_EQ(fivers.size(), filenames.size());
+
+  std::string error;
+  std::shared_ptr<cottontail::Fiver> fiver = cottontail::Fiver::unpickle(
+      fivers.front().name, working, source->featurizer(), source->tokenizer(),
+      &error, compressors.posting, compressors.fvalue, compressors.text);
+  ASSERT_NE(fiver, nullptr) << error;
+  fiver->start();
+  ASSERT_TRUE(fiver->hazel(&error, false, 16, "")) << error;
+  fiver->end();
+  ASSERT_TRUE(working->remove(fivers.front().name, &error)) << error;
+
+  std::shared_ptr<cottontail::Warren> mixed = open_started(burrow);
+  ASSERT_NE(mixed, nullptr);
+  expect_warrens_eq(source, mixed);
+  mixed->end();
+  source->end();
+}
+
 } // namespace
+
+TEST(BigwigHazelActivation, PreservesHazelPrefixFiverSuffix) {
+  run_bigwig_hazel_activation_regression(
+      compressor_profile("real", "post", "zlib", "zlib"));
+}
 
 TEST(HazelMerge, PreservesBigwigBehaviorSmallChunks) {
   run_hazel_merge_regression(

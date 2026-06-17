@@ -33,6 +33,7 @@ public:
                        std::vector<HazelMergeRecovery> *recoveries,
                        std::string *error = nullptr);
   std::shared_ptr<SimplePosting> posting(addr feature) final;
+  addr estimated_size() const final { return estimated_size_; }
 
   virtual ~Hazel(){};
   Hazel(const Hazel &) = delete;
@@ -55,6 +56,7 @@ private:
   std::string filename_;
   std::string dna_;
   std::map<std::string, std::string> parameters_;
+  addr estimated_size_ = 0;
 };
 
 } // namespace cottontail

@@ -30,8 +30,9 @@ struct Fluffle {
   size_t max_workers;
   addr address = 0;
   addr sequence = 0;
-  std::set<std::shared_ptr<Warren>> merging;
-  std::vector<std::shared_ptr<Warren>> warrens;
+  std::set<std::shared_ptr<Owsla>> merging;
+  std::vector<std::shared_ptr<Owsla>> warrens;
+  std::vector<HazelMergeRecovery> hazel_merges;
   std::shared_ptr<std::map<std::string, std::string>> parameters;
   std::shared_ptr<OwslaCache> cache;
 };

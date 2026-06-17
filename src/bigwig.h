@@ -70,7 +70,7 @@ private:
   std::shared_ptr<Fluffle> fluffle_;
   std::mutex warrens_lock_;
   bool warrens_valid_ = false;
-  std::vector<std::shared_ptr<Fiver>> warrens_;
+  std::vector<std::shared_ptr<Owsla>> warrens_;
   std::shared_ptr<OwslaCache> cache_;
   std::shared_ptr<Compressor> posting_compressor_;
   std::shared_ptr<Compressor> fvalue_compressor_;

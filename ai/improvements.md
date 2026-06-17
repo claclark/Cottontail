@@ -24,6 +24,16 @@ Especially don't do these things without discussion and approval from the user.
 - Keep arbitrary full-path or non-working-directory operations separate, so the
   boundary stays clear.
 
+## Concurrent Shard Activation
+
+- Bigwig startup currently activates sanitized shards serially.
+- Consider activating independent Hazel/Fiver shards concurrently after
+  `sanitize(...)` has established the visible shard order and recovery
+  invariants.
+- Preserve deterministic Fluffle ordering: concurrent workers may open/start
+  shards in parallel, but publication into `fluffle->warrens` should follow the
+  sanitized `[ Hazel prefix ][ Fiver suffix ]` inventory order.
+
 ## Txt Wrapping
 
 - Revisit `Txt::wrap(...)` and the general wrapper model.

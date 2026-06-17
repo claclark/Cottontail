@@ -91,9 +91,10 @@ private:
 class BigwigIdx final : public Idx {
 public:
   static std::shared_ptr<Idx>
-  make(const std::vector<std::shared_ptr<Fiver>> &warrens,
+  make(const std::vector<std::shared_ptr<Owsla>> &warrens,
        std::shared_ptr<OwslaCache> cache,
-       std::shared_ptr<SimplePostingFactory> posting_factory) {
+       std::shared_ptr<SimplePostingFactory> posting_factory,
+       addr text_chunk_feature) {
     std::shared_ptr<BigwigIdx> idx =
         std::shared_ptr<BigwigIdx>(new BigwigIdx());
     assert(idx != nullptr);
@@ -103,6 +104,7 @@ public:
     idx->cache_ = cache;
     assert(posting_factory != nullptr);
     idx->posting_factory_ = posting_factory;
+    idx->text_chunk_feature_ = text_chunk_feature;
     idx->erasing_ = false;
     for (auto &&warren : warrens)
       if (warren->idx()->count(null_feature)) {
@@ -143,8 +145,8 @@ private:
         n += warren->idx()->vocab();
     return n;
   }
-  std::vector<std::shared_ptr<Fiver>> contributors(addr feature) {
-    std::vector<std::shared_ptr<Fiver>> contributing;
+  std::vector<std::shared_ptr<Owsla>> contributors(addr feature) {
+    std::vector<std::shared_ptr<Owsla>> contributing;
     for (auto &warren : warrens_)
       if (warren != nullptr && warren->idx()->count(feature) > 0)
         contributing.push_back(warren);
@@ -154,7 +156,7 @@ private:
   static void
   fill_posting(std::shared_ptr<SimplePosting> posting,
                std::shared_ptr<SimplePostingFactory> posting_factory,
-               std::vector<std::shared_ptr<Fiver>> contributing, addr feature) {
+               std::vector<std::shared_ptr<Owsla>> contributing, addr feature) {
     std::vector<std::shared_ptr<SimplePosting>> postings;
     addr n = 0;
     for (auto &warren : contributing) {
@@ -177,12 +179,12 @@ private:
   }
 
   std::unique_ptr<Hopper> raw_hopper(addr feature) {
-    std::vector<std::shared_ptr<Fiver>> contributing = contributors(feature);
+    std::vector<std::shared_ptr<Owsla>> contributing = contributors(feature);
     if (contributing.size() == 0)
       return std::make_unique<EmptyHopper>();
     if (contributing.size() == 1)
       return contributing[0]->idx()->hopper(feature);
-    if (feature == contributing[0]->featurizer()->featurize(text_chunk_tag)) {
+    if (feature == text_chunk_feature_) {
       std::shared_ptr<SimplePosting> posting =
           posting_factory_->posting_from_feature(feature);
       fill_posting(posting, posting_factory_, contributing, feature);
@@ -203,14 +205,15 @@ private:
 
   std::shared_ptr<OwslaCache> cache_;
   std::shared_ptr<SimplePostingFactory> posting_factory_;
-  std::vector<std::shared_ptr<Fiver>> warrens_;
+  std::vector<std::shared_ptr<Owsla>> warrens_;
+  addr text_chunk_feature_;
   bool erasing_;
 };
 
 class BigwigTxt final : public Txt {
 public:
   static std::shared_ptr<Txt>
-  make(const std::vector<std::shared_ptr<Fiver>> &warrens) {
+  make(const std::vector<std::shared_ptr<Owsla>> &warrens) {
     std::shared_ptr<BigwigTxt> txt =
         std::shared_ptr<BigwigTxt>(new BigwigTxt());
     assert(txt != nullptr);
@@ -263,7 +266,7 @@ private:
       *q = q0;
     return true;
   };
-  std::vector<std::shared_ptr<Fiver>> warrens_;
+  std::vector<std::shared_ptr<Owsla>> warrens_;
 };
 
 namespace {
@@ -479,7 +482,22 @@ std::shared_ptr<Bigwig> Bigwig::make(const std::string &burrow,
   SanitizedInventory inventory;
   if (!sanitize(working, &inventory, error))
     return nullptr;
-  std::vector<std::shared_ptr<Fiver>> fivers;
+  fluffle->hazel_merges = inventory.hazel_merges;
+  std::vector<std::shared_ptr<Owsla>> visible;
+  for (auto &hazelfile : inventory.hazels) {
+    std::string hazelname = working->make_name(hazelfile.name);
+    std::shared_ptr<Warren> warren = Warren::make(hazelname, error);
+    if (warren == nullptr)
+      return nullptr;
+    std::shared_ptr<Hazel> hazel = std::dynamic_pointer_cast<Hazel>(warren);
+    if (hazel == nullptr) {
+      safe_error(error) = "Bigwig got non-Hazel shard: " + hazelfile.name;
+      return nullptr;
+    }
+    hazel->start();
+    visible.push_back(hazel);
+    fluffle->warrens.push_back(hazel);
+  }
   for (auto &fiverfile : inventory.fivers) {
     std::string fivername = working->make_name(fiverfile.name);
     std::shared_ptr<Fiver> fiver =
@@ -488,21 +506,24 @@ std::shared_ptr<Bigwig> Bigwig::make(const std::string &burrow,
     if (fiver == nullptr)
       return nullptr;
     fiver->start();
-    fivers.push_back(fiver);
+    visible.push_back(fiver);
     fluffle->warrens.push_back(fiver);
   }
   addr address = 0;
   addr sequence = 0;
-  if (fivers.size() > 0) {
+  if (visible.size() > 0) {
     addr p, q;
-    for (size_t i = fivers.size(); i > 0; --i) {
-      if (fivers[i - 1]->txt()->range(&p, &q)) {
+    for (size_t i = visible.size(); i > 0; --i) {
+      if (visible[i - 1]->txt()->range(&p, &q)) {
         address = q + 1;
         break;
       }
     }
-    fivers.back()->get_sequence(&p, &q);
-    sequence = q + 1;
+    if (!inventory.fivers.empty()) {
+      sequence = inventory.fivers.back().end + 1;
+    } else {
+      sequence = inventory.hazels.back().end + 1;
+    }
   }
   fluffle->address = address;
   fluffle->sequence = sequence;
@@ -628,8 +649,9 @@ void Bigwig::start_() {
       fluffle_->lock.lock();
       warrens_.clear();
       for (auto &warren : fluffle_->warrens)
-        if (warren != nullptr && warren->name() == "fiver")
-          warrens_.push_back(std::static_pointer_cast<Fiver>(warren));
+        if (warren != nullptr &&
+            (warren->name() == "hazel" || warren->name() == "fiver"))
+          warrens_.push_back(warren);
       if (fluffle_->cache == nullptr)
         fluffle_->cache = std::make_shared<OwslaCache>();
       cache_ = fluffle_->cache;
@@ -639,7 +661,8 @@ void Bigwig::start_() {
     assert(cache_ != nullptr);
     cache = cache_;
   }
-  idx_ = BigwigIdx::make(warrens_, cache, posting_factory_);
+  idx_ = BigwigIdx::make(warrens_, cache, posting_factory_,
+                         featurizer_->featurize(text_chunk_tag));
   assert(idx_ != nullptr);
   txt_ = Txt::wrap(txt_recipe_, BigwigTxt::make(warrens_));
   assert(txt_ != nullptr);
@@ -793,8 +816,8 @@ bool find_smallest_pair(const std::vector<addr> a, size_t *start, size_t *end) {
 void merge_worker(std::shared_ptr<Fluffle> fluffle) {
   for (;;) {
     std::vector<std::shared_ptr<Fiver>> fivers;
-    std::shared_ptr<Warren> start_warren;
-    std::shared_ptr<Warren> end_warren;
+    std::shared_ptr<Owsla> start_warren;
+    std::shared_ptr<Owsla> end_warren;
     {
       std::lock_guard<std::mutex> _(fluffle->lock);
       bool cleanup = false;
@@ -804,7 +827,7 @@ void merge_worker(std::shared_ptr<Fluffle> fluffle) {
           break;
         }
       if (cleanup) {
-        std::vector<std::shared_ptr<Warren>> warrens;
+        std::vector<std::shared_ptr<Owsla>> warrens;
         for (auto &warren : fluffle->warrens)
           if (warren->name() != "remove")
             warrens.push_back(warren);
@@ -819,9 +842,7 @@ void merge_worker(std::shared_ptr<Fluffle> fluffle) {
             fluffle->warrens[i]->name() == "fiver" &&
             fluffle->merging.find(fluffle->warrens[i]) ==
                 fluffle->merging.end()) {
-          std::shared_ptr<Fiver> fiver =
-              std::static_pointer_cast<Fiver>(fluffle->warrens[i]);
-          addr n = fiver->get_storage_estimate();
+          addr n = fluffle->warrens[i]->estimated_size();
           small.push_back(n < 4 * 1024 * 1024); // arbitrary
           storage.push_back(n);
         } else {
@@ -862,7 +883,7 @@ void merge_worker(std::shared_ptr<Fluffle> fluffle) {
       fiver->discard();
     {
       std::lock_guard<std::mutex> _(fluffle->lock);
-      std::vector<std::shared_ptr<Warren>> warrens;
+      std::vector<std::shared_ptr<Owsla>> warrens;
       size_t i;
       for (i = 0;
            i < fluffle->warrens.size() && fluffle->warrens[i] != start_warren;

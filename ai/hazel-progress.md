@@ -197,6 +197,212 @@ Follow-up regression checks after the Bigwig startup `sanitize(...)` refactor:
   preserves the previous activation and Fiver-to-Fiver merge behavior. Hazel
   activation remains the next wiring step.
 
+Follow-up regression checks after Bigwig activation of a single live Hazel:
+
+```
+./rank.sh a.meadow/hazel.00000000000000000000.00000000000000000058
+```
+
+- Directory context: `a.meadow/` contained `dna` and the single live Hazel
+  `hazel.00000000000000000000.00000000000000000058`.
+- Max worker ranking-loop time: `12274` ms.
+- Wall time: `0:13.76`.
+- User time: `200.41`.
+- System time: `9.32`.
+- CPU: `1523%`.
+- Max RSS: `5988576` KB.
+- Major page faults: `6`.
+- Minor page faults: `1918048`.
+- `MRR @10: 0.18975923272843034`.
+- `QueriesRanked: 6980`.
+- Fake result topics: `645252`, `970152`.
+
+```
+./rank.sh a.meadow
+```
+
+- Max worker ranking-loop time: `12318` ms.
+- Wall time: `0:13.85`.
+- User time: `201.22`.
+- System time: `9.37`.
+- CPU: `1520%`.
+- Max RSS: `5949596` KB.
+- Major page faults: `1`.
+- Minor page faults: `1903865`.
+- `MRR @10: 0.18975923272843034`.
+- `QueriesRanked: 6980`.
+- Fake result topics: `645252`, `970152`.
+
+Interpretation:
+
+- Bigwig activation of a directory containing a single live Hazel preserves the
+  standalone Hazel ranking results exactly on this MARCO dev-small check.
+- The Bigwig wrapper adds no obvious ranking-loop, wall-time, or memory
+  overhead in the single-Hazel case.
+
+Follow-up regression check after Bigwig activation of three live Hazels:
+
+```
+./rank.sh a.meadow
+```
+
+- Directory context: `a.meadow/` contained `dna` and three live Hazels covering
+  `0..11`, `12..37`, and `38..58`.
+- Max worker ranking-loop time: `15860` ms.
+- Wall time: `0:17.73`.
+- User time: `234.48`.
+- System time: `14.30`.
+- CPU: `1402%`.
+- Max RSS: `9489280` KB.
+- Major page faults: `0`.
+- Minor page faults: `2913686`.
+- `MRR @10: 0.18975923272843034`.
+- `QueriesRanked: 6980`.
+- Fake result topics: `645252`, `970152`.
+
+Interpretation:
+
+- Bigwig activation of the three-Hazel prefix preserves the same MARCO
+  dev-small MRR/query-count profile as the merged Hazel.
+- The three-Hazel Bigwig read path is heavier than the single merged Hazel
+  path (`15860` ms vs. `12318` ms ranking-loop time, `9489280` KB vs.
+  `5949596` KB max RSS), which is consistent with multi-shard posting
+  composition remaining active until Hazel-to-Hazel merging is wired in.
+
+Follow-up boundary-shadow cleanup check:
+
+```
+./rank.sh a.meadow
+```
+
+- Initial directory context: `a.meadow/` contained `dna`, the three live Hazels
+  covering `0..11`, `12..37`, and `38..58`, plus a redundant
+  `fiver.00000000000000000038.00000000000000000058` shadowed by the final
+  Hazel.
+- Max worker ranking-loop time: `15842` ms.
+- Wall time: `0:17.83`.
+- User time: `235.20`.
+- System time: `14.57`.
+- CPU: `1400%`.
+- Max RSS: `9415300` KB.
+- Major page faults: `0`.
+- Minor page faults: `2896386`.
+- `MRR @10: 0.18975923272843034`.
+- `QueriesRanked: 6980`.
+- Fake result topics: `645252`, `970152`.
+- After the run, `a.meadow/` contained only `dna` and the three live Hazels;
+  the shadowed suffix Fiver was removed.
+
+Interpretation:
+
+- Startup sanitization accepted the expected boundary-shadow recovery state,
+  made the Hazel visible, removed the covered Fiver, and preserved the same
+  MARCO dev-small MRR/query-count profile.
+- Timing and memory are effectively the same as the clean three-Hazel run,
+  which is consistent with the redundant Fiver being excluded from the visible
+  snapshot rather than double-counted.
+
+Follow-up mixed Hazel-prefix/Fiver-suffix activation check:
+
+```
+./rank.sh a.meadow
+```
+
+- Directory context: `a.meadow/` contained `dna`, two live Hazels covering
+  `0..11` and `12..37`, and one live Fiver covering `38..58`.
+- Max worker ranking-loop time: `14367` ms.
+- Wall time: `0:30.98`.
+- User time: `235.37`.
+- System time: `13.26`.
+- CPU: `802%`.
+- Max RSS: `12377640` KB.
+- Major page faults: `0`.
+- Minor page faults: `3755057`.
+- `MRR @10: 0.18975923272843034`.
+- `QueriesRanked: 6980`.
+- Fake result topics: `645252`, `970152`.
+
+Interpretation:
+
+- Bigwig activation of the intended mixed shape
+  `[ Hazel prefix ][ Fiver suffix ]` preserved the same MARCO dev-small
+  MRR/query-count profile as the all-Hazel and merged-Hazel checks.
+- The ranking-loop time was between the single merged Hazel and the clean
+  three-Hazel run, while max RSS was higher than both. The high elapsed time and
+  lower CPU utilization in this run should be treated as an observed data
+  point rather than a firm performance conclusion.
+
+Follow-up mixed one-Hazel/two-Fiver activation check:
+
+```
+./rank.sh a.meadow
+```
+
+- Directory context: `a.meadow/` contained `dna`, one live Hazel covering
+  `0..11`, and two live Fivers covering `12..37` and `38..58`.
+- Max worker ranking-loop time: `11318` ms.
+- Wall time: `1:04.11`.
+- User time: `242.93`.
+- System time: `16.04`.
+- CPU: `403%`.
+- Max RSS: `18811416` KB.
+- Major page faults: `0`.
+- Minor page faults: `6217335`.
+- `MRR @10: 0.18975923272843034`.
+- `QueriesRanked: 6980`.
+- Fake result topics: `645252`, `970152`.
+
+Interpretation:
+
+- Bigwig activation of another intended mixed shape
+  `[ Hazel prefix ][ Fiver suffix ]` preserved the same MARCO dev-small
+  MRR/query-count profile as the all-Hazel, merged-Hazel, and prior mixed
+  checks.
+- The ranking-loop time was lower than the two-Hazel/one-Fiver case, but wall
+  time, CPU utilization, and max RSS were much worse. Treat this as a semantic
+  validation point and a noisy performance observation until repeated under
+  controlled conditions.
+
+Follow-up mixed suffix-Fiver consolidation check:
+
+```
+./bazel-bin/apps/fluffy --burrow a.meadow/
+>> "to be or not to be that is the"
+```
+
+- Initial directory context: `a.meadow/` contained `dna`, one live Hazel
+  covering `0..11`, and two live Fivers covering `12..37` and `38..58`.
+- The interactive phrase query returned expected-looking text snippets from the
+  mixed Bigwig.
+- After the `fluffy` session, `a.meadow/` contained `dna`, the same Hazel
+  covering `0..11`, and a consolidated Fiver covering `12..58`.
+
+```
+./rank.sh a.meadow
+```
+
+- Max worker ranking-loop time: `8821` ms.
+- Wall time: `0:59.92`.
+- User time: `215.36`.
+- System time: `11.91`.
+- CPU: `379%`.
+- Max RSS: `16308632` KB.
+- Major page faults: `0`.
+- Minor page faults: `5381867`.
+- `MRR @10: 0.18975923272843034`.
+- `QueriesRanked: 6980`.
+- Fake result topics: `645252`, `970152`.
+
+Interpretation:
+
+- The existing Fiver merge path can operate with Hazels present in the
+  activated shard set: it consolidated the adjacent Fiver suffix while leaving
+  the Hazel prefix intact.
+- The resulting `[ Hazel prefix ][ Fiver suffix ]` snapshot preserved the same
+  MARCO dev-small MRR/query-count profile.
+- Performance remains noisy in these mixed manual runs, but the ranking-loop
+  time improved relative to the pre-consolidation `[H,F,F]` observation.
+
 ## 2026-06-13: Repeated Restart Hazel Merge Smoke
 
 Context:

@@ -149,11 +149,17 @@
   `[ Hazel prefix ][ Fiver suffix ]` shape. The final Hazel may shadow leading
   Fivers at the boundary; those Fivers are deleted so the Hazel wins. Any other
   mixed Hazel/Fiver overlap or out-of-order Fiver-before-Hazel relationship is
-  rejected. Hazel activation is the next wiring step.
-- `BigwigIdx` is still Fiver-only. Its multi-Fiver path now handles empty and
-  single-shard cases directly, merges `text_chunk_tag` postings fresh without
-  caching, and uses the captured `OwslaCache` only for true normal
-  multi-Fiver posting merges.
+  rejected.
+- Bigwig startup activates sanitized Hazels before sanitized Fivers, adds both
+  to the Fluffle visible list, and captures started read snapshots as
+  `std::vector<std::shared_ptr<Owsla>>`.
+- Fluffle owns the sanitized pending Hazel merge recovery list as
+  `hazel_merges`; startup copies it from `SanitizedInventory` for future
+  consolidation-worker restart handling.
+- `BigwigIdx` composes postings from visible `Owsla` children. Its multi-shard
+  path handles empty and single-shard cases directly, merges `text_chunk_tag`
+  postings fresh without caching, and uses the captured `OwslaCache` only for
+  true normal multi-shard posting merges.
 - When deletions exist, `BigwigIdx` caches raw feature and `null_feature`
   merges separately and composes their hoppers with `NotContainedIn`.
 - `CacheGate` is a one-way completion gate. `CacheRecord` starts closed and
@@ -169,7 +175,11 @@
   inherits from `enable_shared_from_this`; callers construct `ArrayHopper`s
   explicitly from known non-empty or deferred-known-non-empty postings.
 - `Owsla` is the narrow Warren subclass for shards that expose
-  `posting(feature)`. Fiver and Hazel both subclass `Owsla`.
+  `posting(feature)` and a cheap cached `estimated_size()`. Fiver and Hazel
+  both subclass `Owsla`.
+- Fiver's `estimated_size()` returns its existing logical storage estimate.
+  Hazel caches its estimate at activation from loaded Hazel idx/txt directory
+  metadata, avoiding filesystem access under the Fluffle lock.
 - The old feature-level `Fiver::merge(...)` hopper helper has been removed.
   `Fiver::merge(...)` now refers only to physical Fiver-to-Fiver shard merge;
   BigwigIdx owns visible-read feature posting composition and caching.
