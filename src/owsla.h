@@ -78,6 +78,7 @@ class Owsla : public Warren {
 public:
   virtual std::shared_ptr<SimplePosting> posting(addr feature) = 0;
   virtual addr estimated_size() const = 0;
+  virtual void get_sequence(addr *start, addr *end) const = 0;
 
   virtual ~Owsla(){};
   Owsla(const Owsla &) = delete;

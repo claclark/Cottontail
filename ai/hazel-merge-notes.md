@@ -21,19 +21,23 @@ Hazel::merge(hazels, dst, parameters, error)
 where the concrete declaration is:
 
 ```
-static bool merge(
+static std::shared_ptr<Hazel> merge(
     const std::vector<std::shared_ptr<Hazel>> &hazels,
     const std::string &dst,
     std::shared_ptr<std::map<std::string, std::string>> parameters,
     std::string *error = nullptr);
 ```
 
+On success, the activated-Hazel overload returns the activated but unstarted
+output Hazel for `dst`.
+
 The old `Hazel::merge(working, hazel_names, parameters, error)` surface is
 still present for callers, but its old file-parsing merge implementation has
 been removed. It is now a thin compatibility adapter: parse the old Hazel shard
 names, activate each Hazel file with `Warren::make(...)`, downcast to `Hazel`,
 verify filename/DNA sequence agreement when sequence metadata is present, and
-call the activated-Hazel overload with a null parameter pointer.
+call the activated-Hazel overload with a null parameter pointer, reporting
+success when it returns a non-null output Hazel.
 
 As of 2026-06-13, repeated manual-interruption smoke checks on `a.meadow`
 completed successfully. A final Hazel produced after three interrupted
@@ -99,6 +103,8 @@ The active merge shape is object-assisted and file-published:
   blob to the open temp stream;
 - `HazelTxt::merge` appends a complete txt blob to the open temp stream by
   copying compressed chunks.
+- on success, the top-level activated merge opens and returns the output Hazel
+  without calling `start()`.
 
 The helpers require at least two inputs. Calling either helper with zero or one
 input is treated as a caller error.

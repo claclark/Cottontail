@@ -615,7 +615,7 @@ void Fiver::set_sequence(addr number) {
   sequence_start_ = sequence_end_ = number;
 };
 
-void Fiver::get_sequence(addr *start, addr *end) {
+void Fiver::get_sequence(addr *start, addr *end) const {
   *start = sequence_start_;
   *end = sequence_end_;
 }
@@ -1130,34 +1130,51 @@ bool hazel_write_txt_blob(std::fstream *out, std::shared_ptr<Idx> idx,
   return true;
 }
 
+std::shared_ptr<Hazel> activate_hazel(const std::string &filename,
+                                      std::string *error) {
+  std::shared_ptr<Warren> warren = Warren::make(filename, error);
+  if (warren == nullptr)
+    return nullptr;
+  std::shared_ptr<Hazel> hazel = std::dynamic_pointer_cast<Hazel>(warren);
+  if (hazel == nullptr) {
+    safe_error(error) = "Fiver got non-Hazel shard: " + filename;
+    return nullptr;
+  }
+  return hazel;
+}
+
 } // namespace
 
-bool Fiver::hazel(std::string *error, bool discard, addr text_chunk_size,
-                  const std::string &parameters) {
+std::shared_ptr<Hazel> Fiver::hazel(std::string *error, bool discard,
+                                    addr text_chunk_size,
+                                    const std::string &parameters) {
   if (working() == nullptr) {
     safe_error(error) = "Fiver needs a working directory for default Hazel name";
-    return false;
+    return nullptr;
   }
   if (text_chunk_size <= 0) {
     safe_error(error) = "Hazel text chunk size must be positive";
-    return false;
+    return nullptr;
   }
   std::string tempname = working()->make_temp("hazel");
   if (!hazel(tempname, error, false, text_chunk_size, parameters)) {
     std::remove(tempname.c_str());
-    return false;
+    return nullptr;
   }
   std::string hazelname =
       working()->make_name(hazel_default_name(sequence_start_, sequence_end_));
   if (link(tempname.c_str(), hazelname.c_str()) != 0) {
     safe_error(error) = "Fiver can't link Hazel shard: " + hazelname;
     std::remove(tempname.c_str());
-    return false;
+    return nullptr;
   }
   std::remove(tempname.c_str());
-  if (discard)
-    return Fiver::discard(error);
-  return true;
+  std::shared_ptr<Hazel> hazel = activate_hazel(hazelname, error);
+  if (hazel == nullptr)
+    return nullptr;
+  if (discard && !Fiver::discard(error))
+    return nullptr;
+  return hazel;
 }
 
 bool Fiver::hazel(const std::string &filename, std::string *error,

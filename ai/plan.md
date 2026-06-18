@@ -10,7 +10,7 @@ Current alignment already in place:
 - `Owsla` is the narrow Warren subclass for posting-capable shards.
 - Fiver and Hazel both subclass `Owsla` and expose
   `std::shared_ptr<SimplePosting> posting(addr feature)` plus a cheap cached
-  `addr estimated_size()`.
+  `addr estimated_size()` and sequence-range access.
 - Fluffle owns the Bigwig merged-posting cache generation as an `OwslaCache`.
 - Fluffle owns sanitized pending Hazel merge recoveries as `hazel_merges`.
 - Bigwig is not an `Owsla`; it is the aggregator over a started shard snapshot.

@@ -93,6 +93,9 @@
 - Standalone Hazel files can be opened by `Warren::make(...)`, parse idx/txt
   blobs, construct hoppers from posting blobs, translate text through cached
   decompressed text chunks, and shallow-clone the Hazel Warren.
+- Hazel sequence metadata is optional for standalone Hazel files. Activation
+  validates it when present and caches `-1, -1` for `get_sequence(...)` when it
+  is absent.
 - Hazel idx activation uses `OwslaCache`-backed waitable `SimplePosting` cache
   entries. Non-inline posting hoppers share cached postings; query-time cache
   fills use a 16-reader `ReadGate`, run in a background thread, and publish
@@ -175,8 +178,8 @@
   inherits from `enable_shared_from_this`; callers construct `ArrayHopper`s
   explicitly from known non-empty or deferred-known-non-empty postings.
 - `Owsla` is the narrow Warren subclass for shards that expose
-  `posting(feature)` and a cheap cached `estimated_size()`. Fiver and Hazel
-  both subclass `Owsla`.
+  `posting(feature)`, a cheap cached `estimated_size()`, and sequence-range
+  access. Fiver and Hazel both subclass `Owsla`.
 - Fiver's `estimated_size()` returns its existing logical storage estimate.
   Hazel caches its estimate at activation from loaded Hazel idx/txt directory
   metadata, avoiding filesystem access under the Fluffle lock.
@@ -273,16 +276,20 @@
 
 - Hazel writer, standalone activation, Hazel-to-Hazel merge, conversion tools,
   and dedicated Hazel regression coverage are in place.
-- Bigwig's started view still narrows live shards to `Fiver`. The next planned
-  step is to make Bigwig query already-existing Hazel shards too, without
-  merging Fiver and Hazel postings physically.
+- The default working-directory `Fiver::hazel(...)` overload returns an
+  activated but unstarted `Hazel` on success; the explicit-filename overload is
+  still a bool-returning writer.
+- The activated-source `Hazel::merge(hazels, dst, ...)` overload returns an
+  activated but unstarted output `Hazel`; the working/name adapter remains
+  bool-returning for existing callers.
 - Fiver and Hazel are now both `Owsla` subclasses with concrete
-  `posting(feature)` accessors. The mixed Fiver/Hazel physical merge path
-  remains separate from the no-merge visibility step.
-- The no-merge Hazel visibility step should use public Warren APIs where
-  possible. `BigwigTxt` already only needs public txt methods; `BigwigIdx`
-  already owns posting composition/caching for the Fiver-only view and should
-  extend that mergepoint to `Owsla` children for the mixed Hazel/Fiver view.
+  `posting(feature)` accessors, cheap cached `estimated_size()` values, and
+  `get_sequence(...)`; Hazels without DNA sequence metadata report `-1, -1`.
+- Bigwig startup activates the sanitized Hazel prefix before the Fiver suffix,
+  and started Bigwig readers compose visible `Owsla` shards.
+- The mixed Fiver/Hazel physical merge path remains separate from visibility;
+  the next worker work is to separate merge policy from merge execution before
+  changing Hazel lifecycle policy.
 - Fluffle cache lifetime is no longer an open design question for the current
   code: the cache generation is shared across starts and invalidated when the
   visible logical snapshot changes through commit publication.

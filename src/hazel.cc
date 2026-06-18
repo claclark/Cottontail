@@ -1732,6 +1732,19 @@ bool merged_activated_hazel_dna(
   return true;
 }
 
+std::shared_ptr<Hazel> activate_hazel(const std::string &filename,
+                                      std::string *error) {
+  std::shared_ptr<Warren> warren = Warren::make(filename, error);
+  if (warren == nullptr)
+    return nullptr;
+  std::shared_ptr<Hazel> hazel = std::dynamic_pointer_cast<Hazel>(warren);
+  if (hazel == nullptr) {
+    safe_error(error) = "Hazel merge got non-Hazel output: " + filename;
+    return nullptr;
+  }
+  return hazel;
+}
+
 } // namespace
 
 bool Hazel::merge(std::shared_ptr<Working> working,
@@ -1795,7 +1808,7 @@ bool Hazel::merge(std::shared_ptr<Working> working,
 
   std::string final_name = hazel_default_name(first_start, last_end);
   std::string final_filename = working->make_name(final_name);
-  return Hazel::merge(activated, final_filename, nullptr, error);
+  return Hazel::merge(activated, final_filename, nullptr, error) != nullptr;
 }
 
 bool Hazel::sanitize(std::shared_ptr<Working> working,
@@ -1895,28 +1908,31 @@ bool Hazel::sanitize(std::shared_ptr<Working> working,
   return true;
 }
 
-bool Hazel::merge(
+std::shared_ptr<Hazel> Hazel::merge(
     const std::vector<std::shared_ptr<Hazel>> &hazels, const std::string &dst,
     std::shared_ptr<std::map<std::string, std::string>> parameters,
     std::string *error) {
   if (hazels.size() < 2) {
     safe_error(error) = "Hazel merge needs at least two shards";
-    return false;
+    return nullptr;
   }
   if (dst == "") {
     safe_error(error) = "Hazel merge got empty destination";
-    return false;
+    return nullptr;
   }
 
   bool exists;
   if (!hazel_path_exists(dst, &exists, error))
-    return false;
+    return nullptr;
   HazelMergeSidecars sidecars = hazel_merge_sidecars(dst);
-  if (exists)
-    return hazel_cleanup_merge_sidecars(dst, sidecars, error);
+  if (exists) {
+    if (!hazel_cleanup_merge_sidecars(dst, sidecars, error))
+      return nullptr;
+    return activate_hazel(dst, error);
+  }
 
   if (!hazel_remove_if_exists(sidecars.mrg, error))
-    return false;
+    return nullptr;
 
   std::vector<std::shared_ptr<HazelIdx>> idxs;
   std::vector<std::shared_ptr<HazelTxt>> txts;
@@ -1934,34 +1950,34 @@ bool Hazel::merge(
     auto hazel = hazels[i];
     if (hazel == nullptr) {
       safe_error(error) = "Hazel merge got null shard";
-      return false;
+      return nullptr;
     }
     if (hazel->featurizer_ == nullptr || hazel->idx_ == nullptr ||
         hazel->txt_ == nullptr) {
       safe_error(error) = "Hazel merge got incomplete shard";
-      return false;
+      return nullptr;
     }
 
     auto idx = std::dynamic_pointer_cast<HazelIdx>(hazel->idx_);
     if (idx == nullptr) {
       safe_error(error) = "Hazel merge got non-Hazel idx";
-      return false;
+      return nullptr;
     }
     auto txt = std::dynamic_pointer_cast<HazelTxt>(hazel->txt_);
     if (txt == nullptr) {
       safe_error(error) = "Hazel merge got non-Hazel txt";
-      return false;
+      return nullptr;
     }
 
     std::string current;
     if (!normalize_dna_for_activated_hazel_merge(hazel->parameters_, &current,
                                                  error))
-      return false;
+      return nullptr;
     if (i == 0)
       normalized = current;
     else if (current != normalized) {
       safe_error(error) = "Hazel merge got incompatible DNA";
-      return false;
+      return nullptr;
     }
 
     bool current_sequence_present;
@@ -1970,7 +1986,7 @@ bool Hazel::merge(
     if (!hazel_sequence_range(hazel->parameters_, &current_sequence_present,
                               &current_sequence_start,
                               &current_sequence_end, error))
-      return false;
+      return nullptr;
     if (i == 0) {
       sequence_present = current_sequence_present;
       if (sequence_present) {
@@ -1981,13 +1997,13 @@ bool Hazel::merge(
     } else {
       if (current_sequence_present != sequence_present) {
         safe_error(error) = "Hazel merge got inconsistent sequence metadata";
-        return false;
+        return nullptr;
       }
       if (sequence_present) {
         if (previous_sequence_end == maxfinity ||
             current_sequence_start != previous_sequence_end + 1) {
           safe_error(error) = "Hazel merge got non-contiguous shards";
-          return false;
+          return nullptr;
         }
         sequence_end = current_sequence_end;
         previous_sequence_end = current_sequence_end;
@@ -2004,9 +2020,10 @@ bool Hazel::merge(
           hazels.front()->parameters_, hazels.back()->parameters_,
           sequence_present, sequence_start, sequence_end, parameters, &dna,
           error))
-    return false;
+    return nullptr;
 
-  addr text_chunk_feature = hazels.front()->featurizer_->featurize(text_chunk_tag);
+  addr text_chunk_feature =
+      hazels.front()->featurizer_->featurize(text_chunk_tag);
   HazelMergeOutput output;
   auto remove_temp = [&]() {
     output.out.close();
@@ -2015,57 +2032,59 @@ bool Hazel::merge(
 
   if (!output.open(sidecars.mrg, dna, error)) {
     remove_temp();
-    return false;
+    return nullptr;
   }
 
   output.blobs[0].offset = (addr)output.out.tellp();
   if (!HazelIdx::merge(idxs, text_lengths, text_chunk_feature, sidecars.pst,
                        sidecars.dct, &output.out, error)) {
     remove_temp();
-    return false;
+    return nullptr;
   }
   output.blobs[0].length = (addr)output.out.tellp() - output.blobs[0].offset;
   if (output.out.fail() || output.blobs[0].length < 0) {
     safe_error(error) = "Hazel merge failed to write idx blob";
     remove_temp();
-    return false;
+    return nullptr;
   }
 
   output.blobs[1].offset = (addr)output.out.tellp();
   if (!HazelTxt::merge(txts, &output.out, error)) {
     remove_temp();
-    return false;
+    return nullptr;
   }
   output.blobs[1].length = (addr)output.out.tellp() - output.blobs[1].offset;
   if (output.out.fail() || output.blobs[1].length < 0) {
     safe_error(error) = "Hazel merge failed to write txt blob";
     remove_temp();
-    return false;
+    return nullptr;
   }
 
   if (!output.close(error)) {
     remove_temp();
-    return false;
+    return nullptr;
   }
 
   if (link(sidecars.mrg.c_str(), dst.c_str()) != 0) {
     if (!hazel_path_exists(dst, &exists, error)) {
       remove_temp();
-      return false;
+      return nullptr;
     }
     if (exists) {
       if (!hazel_cleanup_merge_sidecars(dst, sidecars, error)) {
         remove_temp();
-        return false;
+        return nullptr;
       }
-      return true;
+      return activate_hazel(dst, error);
     }
     safe_error(error) = "Hazel merge can't link shard: " + dst;
     remove_temp();
-    return false;
+    return nullptr;
   }
 
-  return hazel_cleanup_merge_sidecars(dst, sidecars, error);
+  if (!hazel_cleanup_merge_sidecars(dst, sidecars, error))
+    return nullptr;
+  return activate_hazel(dst, error);
 }
 
 std::shared_ptr<Warren> Hazel::make(const std::string &filename,
@@ -2099,6 +2118,12 @@ std::shared_ptr<Warren> Hazel::make(const std::string &filename,
     safe_error(error) = "Hazel DNA has non-Hazel txt: " + txt_name;
     return nullptr;
   }
+  bool sequence_present;
+  addr sequence_start = -1;
+  addr sequence_end = -1;
+  if (!hazel_sequence_range(parameters, &sequence_present, &sequence_start,
+                            &sequence_end, error))
+    return nullptr;
 
   std::shared_ptr<Featurizer> featurizer =
       Featurizer::make(featurizer_name, featurizer_recipe, error);
@@ -2147,6 +2172,8 @@ std::shared_ptr<Warren> Hazel::make(const std::string &filename,
   hazel->filename_ = filename;
   hazel->dna_ = dna;
   hazel->parameters_ = parameters;
+  hazel->sequence_start_ = sequence_start;
+  hazel->sequence_end_ = sequence_end;
   hazel->estimated_size_ =
       hazel_idx->estimated_size() + hazel_txt->estimated_size();
   hazel->annotator_ = NullAnnotator::make("", error);
@@ -2180,6 +2207,11 @@ std::shared_ptr<SimplePosting> Hazel::posting(addr feature) {
   return idx->posting(feature);
 }
 
+void Hazel::get_sequence(addr *start, addr *end) const {
+  *start = sequence_start_;
+  *end = sequence_end_;
+}
+
 std::shared_ptr<Warren> Hazel::clone_(std::string *error) {
   std::shared_ptr<Hazel> hazel =
       std::shared_ptr<Hazel>(new Hazel(featurizer_, tokenizer_, idx_, txt_));
@@ -2188,6 +2220,8 @@ std::shared_ptr<Warren> Hazel::clone_(std::string *error) {
   hazel->dna_ = dna_;
   hazel->parameters_ = parameters_;
   hazel->estimated_size_ = estimated_size_;
+  hazel->sequence_start_ = sequence_start_;
+  hazel->sequence_end_ = sequence_end_;
   hazel->default_container_ = default_container_;
   hazel->stemmer_ = stemmer_;
   hazel->annotator_ = annotator_;

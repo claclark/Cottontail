@@ -2,6 +2,7 @@
 #define COTTONTAIL_SRC_FIVER_H_
 
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -17,6 +18,8 @@
 #include "src/working.h"
 
 namespace cottontail {
+
+class Hazel;
 
 class Fiver final : public Owsla {
 public:
@@ -38,9 +41,10 @@ public:
   bool pickle(const std::string &filename, std::string *error = nullptr);
   bool pickle(std::string *error = nullptr);
   bool discard(std::string *error = nullptr);
-  bool hazel(std::string *error = nullptr, bool discard = false,
-             addr text_chunk_size = 64 * 1024,
-             const std::string &parameters = "");
+  std::shared_ptr<Hazel> hazel(std::string *error = nullptr,
+                               bool discard = false,
+                               addr text_chunk_size = 64 * 1024,
+                               const std::string &parameters = "");
   bool hazel(const std::string &filename, std::string *error = nullptr,
              bool discard = false, addr text_chunk_size = 64 * 1024,
              const std::string &parameters = "");
@@ -53,7 +57,7 @@ public:
            std::shared_ptr<Compressor> text_compressor = nullptr);
   addr relocate(addr where);
   void set_sequence(addr number);
-  void get_sequence(addr *start, addr *end);
+  void get_sequence(addr *start, addr *end) const final;
   std::shared_ptr<SimplePosting> posting(addr feature) final;
   addr estimated_size() const final {
     return storage_estimate_;

@@ -252,14 +252,15 @@ There are two `Hazel::merge(...)` surfaces in `src/hazel.cc` / `src/hazel.h`:
   activated overload with a null parameter pointer.
 - `Hazel::merge(hazels, dst, parameters, error)` is the real implementation.
   The caller supplies activated Hazel objects and a final destination path
-  `dst`. Merge sidecars live beside `dst` with `mrg.`, `pst.`, and `dct.`
-  prefixes.
+  `dst`; on success it returns the activated but unstarted output Hazel. Merge
+  sidecars live beside `dst` with `mrg.`, `pst.`, and `dct.` prefixes.
 
 The activated merge assembles a complete `mrg.<dst-name>`, publishes it by
 hard-linking that temp file to `dst`, and then deletes associated sidecars.
-Startup is idempotent: if `dst` already exists, the merge reports success after
-deleting sidecars; if `mrg.<dst-name>` exists without `dst`, the temp assembly
-is discarded. Transitional cleanup also removes old-style `dst.*` sidecars.
+Startup is idempotent: if `dst` already exists, the merge deletes sidecars and
+returns the activated existing output; if `mrg.<dst-name>` exists without
+`dst`, the temp assembly is discarded. Transitional cleanup also removes
+old-style `dst.*` sidecars.
 
 Only the idx merge is checkpointed. `HazelIdx::merge(...)` owns
 `pst.<dst-name>` and `dct.<dst-name>`:
