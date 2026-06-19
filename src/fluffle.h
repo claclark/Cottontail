@@ -35,6 +35,7 @@ struct Fluffle {
   std::vector<HazelMergeRecovery> hazel_merges;
   std::shared_ptr<std::map<std::string, std::string>> parameters;
   std::shared_ptr<OwslaCache> cache;
+  std::shared_ptr<Working> working;
 };
 
 } // namespace cottontail
