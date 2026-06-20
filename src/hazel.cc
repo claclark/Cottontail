@@ -2212,6 +2212,13 @@ void Hazel::get_sequence(addr *start, addr *end) const {
   *end = sequence_end_;
 }
 
+bool Hazel::discard(std::string *error) {
+  (void)error;
+  if (filename_ != "")
+    std::remove(filename_.c_str());
+  return true;
+}
+
 std::shared_ptr<Warren> Hazel::clone_(std::string *error) {
   std::shared_ptr<Hazel> hazel =
       std::shared_ptr<Hazel>(new Hazel(featurizer_, tokenizer_, idx_, txt_));

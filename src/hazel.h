@@ -35,6 +35,7 @@ public:
   std::shared_ptr<SimplePosting> posting(addr feature) final;
   addr estimated_size() const final { return estimated_size_; }
   void get_sequence(addr *start, addr *end) const final;
+  bool discard(std::string *error = nullptr) final;
 
   virtual ~Hazel(){};
   Hazel(const Hazel &) = delete;

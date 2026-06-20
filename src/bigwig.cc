@@ -814,8 +814,62 @@ bool find_smallest_pair(const std::vector<addr> a, size_t *start, size_t *end) {
   return found;
 }
 
+bool hazel_merge_okay(std::shared_ptr<Fluffle> fluffle) {
+#if 1
+  size_t merging_hazels = 0;
+  for (auto &warren : fluffle->merging)
+    if (warren != nullptr && warren->name() == "hazel")
+      merging_hazels++;
+  return merging_hazels + 1 < fluffle->max_workers;
+#endif
+  return false;
+}
+
+bool find_fiver_conversion(std::shared_ptr<Fluffle> fluffle, size_t *start,
+                           size_t *end) {
+  const addr fiver_conversion_threshold = 128 * 1024 * 1024;
+  size_t hazels = 0;
+  size_t fivers = 0;
+  size_t boundary = 0;
+  bool found_boundary = false;
+  for (size_t i = 0; i < fluffle->warrens.size(); i++) {
+    auto warren = fluffle->warrens[i];
+    if (warren == nullptr)
+      return false;
+    if (warren->name() == "hazel") {
+      if (found_boundary)
+        return false;
+      hazels++;
+    } else if (warren->name() == "fiver") {
+      if (!found_boundary) {
+        found_boundary = true;
+        boundary = i;
+      }
+      fivers++;
+    } else {
+      return false;
+    }
+  }
+  if (!found_boundary ||
+      fluffle->merging.find(fluffle->warrens[boundary]) !=
+          fluffle->merging.end())
+    return false;
+  if (fluffle->warrens[boundary]->estimated_size() <
+          fiver_conversion_threshold &&
+      (hazels == 0 || fivers != 1))
+    return false;
+  if (start && end) {
+    *start = boundary;
+    *end = boundary;
+  }
+  return true;
+}
+
 bool find_merge_action(std::shared_ptr<Fluffle> fluffle, size_t *start,
                        size_t *end) {
+  bool hazel_merge = hazel_merge_okay(fluffle);
+  if (hazel_merge && find_fiver_conversion(fluffle, start, end))
+    return true;
   std::vector<bool> small;
   std::vector<addr> storage;
   for (size_t i = 0; i < fluffle->warrens.size(); i++) {
@@ -835,12 +889,31 @@ bool find_merge_action(std::shared_ptr<Fluffle> fluffle, size_t *start,
     return true;
   if (find_smallest_pair(storage, start, end))
     return true;
+  if (hazel_merge) {
+    storage.clear();
+    for (size_t i = 0; i < fluffle->warrens.size(); i++) {
+      if (fluffle->warrens[i] != nullptr &&
+          fluffle->warrens[i]->name() == "hazel" &&
+          fluffle->merging.find(fluffle->warrens[i]) ==
+              fluffle->merging.end()) {
+        storage.push_back(fluffle->warrens[i]->estimated_size());
+      } else {
+        storage.push_back(-1);
+      }
+    }
+    if (find_smallest_pair(storage, start, end))
+      return true;
+  }
   return false;
 }
 
 enum class MergeAction { none, fiver_merge, hazel_merge, fiver_to_hazel };
 
 void merge_worker(std::shared_ptr<Fluffle> fluffle) {
+  auto retire = [&fluffle]() {
+    assert(fluffle->workers > 0);
+    --fluffle->workers;
+  };
   for (;;) {
     MergeAction action = MergeAction::none;
     std::vector<std::shared_ptr<Fiver>> fivers;
@@ -869,10 +942,14 @@ void merge_worker(std::shared_ptr<Fluffle> fluffle) {
       }
       size_t start;
       size_t end;
-      if (!find_merge_action(fluffle, &start, &end))
-        break;
-      if (start > end || end >= fluffle->warrens.size())
-        break;
+      if (!find_merge_action(fluffle, &start, &end)) {
+        retire();
+        return;
+      }
+      if (start > end || end >= fluffle->warrens.size()) {
+        retire();
+        return;
+      }
       bool bad = false;
       for (size_t i = start; i <= end; i++) {
         auto warren = fluffle->warrens[i];
@@ -883,8 +960,10 @@ void merge_worker(std::shared_ptr<Fluffle> fluffle) {
         }
         selected.push_back(warren);
       }
-      if (bad || selected.size() == 0)
-        break;
+      if (bad || selected.size() == 0) {
+        retire();
+        return;
+      }
 
       bool all_fivers = true;
       bool all_hazels = true;
@@ -954,8 +1033,10 @@ void merge_worker(std::shared_ptr<Fluffle> fluffle) {
         }
       }
 
-      if (action == MergeAction::none)
-        break;
+      if (action == MergeAction::none) {
+        retire();
+        return;
+      }
       for (auto &warren : selected)
         fluffle->merging.insert(warren);
       if (fluffle->workers < fluffle->max_workers) {
@@ -971,8 +1052,6 @@ void merge_worker(std::shared_ptr<Fluffle> fluffle) {
       std::shared_ptr<Fiver> merged = Fiver::merge(fivers);
       if (merged != nullptr) {
         merged->pickle();
-        for (auto &fiver : fivers)
-          fiver->discard();
         output = merged;
       }
     } else if (action == MergeAction::hazel_merge) {
@@ -981,7 +1060,7 @@ void merge_worker(std::shared_ptr<Fluffle> fluffle) {
                             &error);
     } else if (action == MergeAction::fiver_to_hazel) {
       std::string error;
-      output = fiver_to_hazel->hazel(&error, true, 64 * 1024,
+      output = fiver_to_hazel->hazel(&error, 64 * 1024,
                                      fiver_hazel_parameters);
     }
     {
@@ -989,7 +1068,8 @@ void merge_worker(std::shared_ptr<Fluffle> fluffle) {
       if (output == nullptr) {
         for (auto &warren : selected)
           fluffle->merging.erase(warren);
-        break;
+        retire();
+        return;
       }
       std::vector<std::shared_ptr<Owsla>> warrens;
       size_t i;
@@ -1000,7 +1080,8 @@ void merge_worker(std::shared_ptr<Fluffle> fluffle) {
       if (i >= fluffle->warrens.size()) {
         for (auto &warren : selected)
           fluffle->merging.erase(warren);
-        break;
+        retire();
+        return;
       }
       output->start();
       warrens.push_back(output);
@@ -1011,18 +1092,16 @@ void merge_worker(std::shared_ptr<Fluffle> fluffle) {
         output->end();
         for (auto &warren : selected)
           fluffle->merging.erase(warren);
-        break;
+        retire();
+        return;
       }
       fluffle->merging.erase(fluffle->warrens[i]);
       for (i++; i < fluffle->warrens.size(); i++)
         warrens.push_back(fluffle->warrens[i]);
       fluffle->warrens = warrens;
     }
-  }
-  {
-    std::lock_guard<std::mutex> _(fluffle->lock);
-    assert(fluffle->workers > 0);
-    --fluffle->workers;
+    for (auto &warren : selected)
+      warren->discard();
   }
 }
 } // namespace

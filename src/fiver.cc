@@ -1145,8 +1145,7 @@ std::shared_ptr<Hazel> activate_hazel(const std::string &filename,
 
 } // namespace
 
-std::shared_ptr<Hazel> Fiver::hazel(std::string *error, bool discard,
-                                    addr text_chunk_size,
+std::shared_ptr<Hazel> Fiver::hazel(std::string *error, addr text_chunk_size,
                                     const std::string &parameters) {
   if (working() == nullptr) {
     safe_error(error) = "Fiver needs a working directory for default Hazel name";
@@ -1157,7 +1156,7 @@ std::shared_ptr<Hazel> Fiver::hazel(std::string *error, bool discard,
     return nullptr;
   }
   std::string tempname = working()->make_temp("hazel");
-  if (!hazel(tempname, error, false, text_chunk_size, parameters)) {
+  if (!hazel(tempname, error, text_chunk_size, parameters)) {
     std::remove(tempname.c_str());
     return nullptr;
   }
@@ -1172,14 +1171,11 @@ std::shared_ptr<Hazel> Fiver::hazel(std::string *error, bool discard,
   std::shared_ptr<Hazel> hazel = activate_hazel(hazelname, error);
   if (hazel == nullptr)
     return nullptr;
-  if (discard && !Fiver::discard(error))
-    return nullptr;
   return hazel;
 }
 
 bool Fiver::hazel(const std::string &filename, std::string *error,
-                  bool discard, addr text_chunk_size,
-                  const std::string &parameters) {
+                  addr text_chunk_size, const std::string &parameters) {
   if (idx_ == nullptr || txt_ == nullptr || index_ == nullptr ||
       text_ == nullptr) {
     safe_error(error) = "Fiver must have Idx and Txt before writing Hazel";
@@ -1233,8 +1229,6 @@ bool Fiver::hazel(const std::string &filename, std::string *error,
     return false;
   }
   out.close();
-  if (discard)
-    return Fiver::discard(error);
   return true;
 }
 

@@ -105,8 +105,10 @@
 - Hazel txt activation loads the text map, uses a 16-reader `ReadGate`, keeps a
   mutex-protected `text_chunk_tag` hopper, and caches decompressed chunks
   without eviction.
-- `Hazel::merge(...)` merges compatible Hazel shards into a canonical
-  `hazel.<start>.<end>` shard.
+- `Hazel::merge(...)` merges compatible activated Hazel shards into a
+  caller-supplied destination and returns an activated but unstarted output
+  Hazel. Working/name adapters preserve the existing bool-returning command
+  surfaces.
 - Hazel merge sidecars now live beside the final shard as
   `mrg.hazel.<start>.<end>`, `pst.hazel.<start>.<end>`, and
   `dct.hazel.<start>.<end>`. The merge path still cleans old-style
@@ -178,8 +180,8 @@
   inherits from `enable_shared_from_this`; callers construct `ArrayHopper`s
   explicitly from known non-empty or deferred-known-non-empty postings.
 - `Owsla` is the narrow Warren subclass for shards that expose
-  `posting(feature)`, a cheap cached `estimated_size()`, and sequence-range
-  access. Fiver and Hazel both subclass `Owsla`.
+  `posting(feature)`, a cheap cached `estimated_size()`, sequence-range access,
+  and `discard(...)`. Fiver and Hazel both subclass `Owsla`.
 - Fiver's `estimated_size()` returns its existing logical storage estimate.
   Hazel caches its estimate at activation from loaded Hazel idx/txt directory
   metadata, avoiding filesystem access under the Fluffle lock.
@@ -256,48 +258,46 @@
   single-Fiver `b.meadow` path stayed stable at `6706` ms and unchanged
   MRR/query count.
 
-## Active Mid-Flight Plan
-
-- `ai/plan.md` may describe Hazel integration work that is intentionally in
-  progress across multiple coding steps. Do not assume every item in the plan
-  is unimplemented; compare the plan with `ai/log.md`, current code, and this
-  notes file.
-- The current Hazel/Bigwig integration direction is a conservative
-  Fiver/Hazel blend. The next implementation step is narrower than full
-  lifecycle integration: include already-existing Hazel shards in Bigwig read
-  snapshots without physical merging, background conversion, or retention
-  policy.
-- Some prerequisites may already be complete while later steps remain gated for
-  discussion or approval.
-- Before implementing from `ai/plan.md`, honor any explicit discussion gate in
-  the plan and confirm the intended next step with the user.
-
-## Current Hazel/Bigwig Integration Status
+## Current Bigwig/Hazel Integration Checkpoint
 
 - Hazel writer, standalone activation, Hazel-to-Hazel merge, conversion tools,
   and dedicated Hazel regression coverage are in place.
-- The default working-directory `Fiver::hazel(...)` overload returns an
-  activated but unstarted `Hazel` on success; the explicit-filename overload is
-  still a bool-returning writer.
-- The activated-source `Hazel::merge(hazels, dst, ...)` overload returns an
-  activated but unstarted output `Hazel`; the working/name adapter remains
+- Fiver and Hazel are both `Owsla` subclasses with concrete
+  `posting(feature)` accessors, cheap cached `estimated_size()` values,
+  `get_sequence(...)`, and `discard(...)`. Hazels without DNA sequence metadata
+  report `-1, -1`.
+- Bigwig startup sanitizes the working directory, activates the sanitized Hazel
+  prefix before the Fiver suffix, and exposes visible children as
+  `std::vector<std::shared_ptr<Owsla>>`.
+- Fluffle owns the visible shard vector, merge-in-progress set, working
+  context, shared `OwslaCache` generation, Warren parameters, and pending
+  sanitized Hazel merge recovery records.
+- `Fiver::hazel(...)` in working-directory form now returns an activated but
+  unstarted Hazel. Its explicit-filename overload remains a bool-returning
+  writer and no longer owns source deletion.
+- `Hazel::merge(hazels, dst, ...)` in activated-source form now returns an
+  activated but unstarted output Hazel. The working/name adapter remains
   bool-returning for existing callers.
-- Fiver and Hazel are now both `Owsla` subclasses with concrete
-  `posting(feature)` accessors, cheap cached `estimated_size()` values, and
-  `get_sequence(...)`; Hazels without DNA sequence metadata report `-1, -1`.
-- Bigwig startup activates the sanitized Hazel prefix before the Fiver suffix,
-  and started Bigwig readers compose visible `Owsla` shards.
-- The mixed Fiver/Hazel physical merge path remains separate from visibility;
-  the next worker work is to separate merge policy from merge execution before
-  changing Hazel lifecycle policy.
-- Fluffle cache lifetime is no longer an open design question for the current
-  code: the cache generation is shared across starts and invalidated when the
-  visible logical snapshot changes through commit publication.
-- Background lifecycle policy remains separate: creation timing, Fiver
-  retention, activation preference, Fluffle mixed-range representation, and
-  safe background publication still require discussion.
-- See `ai/plan.md` for the concrete review checkpoint and `ai/hazel.md` for the
-  Hazel format/activation/merge reference.
+- `merge_worker(...)` has a single policy extraction point:
+  `find_merge_action(fluffle, &start, &end)`. The worker validates and
+  classifies the recommendation under the Fluffle lock, claims selected shards
+  in `fluffle->merging`, performs work unlocked, publishes the replacement
+  shard under the lock, and discards selected sources only after successful
+  publication.
+- Current policy order is boundary Fiver-to-Hazel conversion when Hazel work is
+  allowed, old small-Fiver run merge, old smallest adjacent Fiver/Fiver merge,
+  then smallest adjacent Hazel/Hazel merge when Hazel work is allowed.
+- Worker retirement now decrements `fluffle->workers` while still holding the
+  lock that observed no usable work or a terminal failure, avoiding a
+  lost-worker race with `try_merge()`.
+- User-reported regression/ranking checks passed across single-Hazel,
+  multi-Hazel, mixed Hazel/Fiver, boundary-shadow cleanup, background suffix
+  consolidation, repeated `build.sh`, repeated create loops, and create-plus
+  forage loops. One intermittent create-ready failure did not reproduce; if it
+  reappears, capture the working-directory file list before running any
+  follow-up command.
+- See `ai/plan.md` for the current checkpoint and next likely follow-ups;
+  `ai/hazel.md` remains the Hazel format/activation/merge reference.
 
 ## Current Local Worktree Notes
 

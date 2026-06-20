@@ -439,7 +439,7 @@ void run_hazel_merge_regression(cottontail::addr chunk_size,
     std::string hazel_name = shard_name("hazel", shard.start, shard.end);
     hazels.push_back(hazel_name);
     std::shared_ptr<cottontail::Warren> hazel =
-        fiver->hazel(&error, false, chunk_size, "");
+        fiver->hazel(&error, chunk_size, "");
     ASSERT_NE(hazel, nullptr) << error;
     hazel->start();
     std::shared_ptr<cottontail::Owsla> hazel_owsla =
@@ -505,7 +505,7 @@ void run_bigwig_hazel_activation_regression(
   ASSERT_NE(fiver, nullptr) << error;
   fiver->start();
   std::shared_ptr<cottontail::Hazel> hazel =
-      fiver->hazel(&error, false, 16, "");
+      fiver->hazel(&error, 16, "");
   ASSERT_NE(hazel, nullptr) << error;
   fiver->end();
   ASSERT_TRUE(working->remove(fivers.front().name, &error)) << error;

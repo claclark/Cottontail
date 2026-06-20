@@ -384,7 +384,7 @@ int main(int argc, char **argv) {
       }
       fiver->start();
       cottontail::addr t0 = cottontail::now();
-      if (fiver->hazel(&error, false, text_chunk_size, warren_parameters) ==
+      if (fiver->hazel(&error, text_chunk_size, warren_parameters) ==
           nullptr) {
         std::cerr << program_name << ": " << error << "\n";
         fiver->end();

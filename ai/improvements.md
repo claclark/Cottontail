@@ -50,6 +50,9 @@ Especially don't do these things without discussion and approval from the user.
 - Consider making `safe_error(...)` also log to stderr when it records an
   error, then add a separate helper for invariant/deep-format failures that
   should be visible even when assertions are disabled.
+- Preserve lower-level `ready_()` / publication errors instead of collapsing
+  them to only `"Transaction cannot be commited."`, especially around dynamic
+  Bigwig/Fiver transaction readiness.
 - Hazel cache loading should eventually use this for corrupted posting reads or
   decode failures before returning structured bogus fallback data.
 - Replace failsafe NullAppender/NullAnnotator with error logging equivalents.

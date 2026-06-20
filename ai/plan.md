@@ -1,307 +1,111 @@
-# Goal: Bigwig/Hazel Directory Sanity And Consolidation Plan
+# Bigwig/Hazel Integration Checkpoint
 
-This plan records the next staged direction for integrating Hazel into Bigwig.
-It is a design checkpoint, not automatic authorization to implement every stage
-at once. The user will guide you to implement one step at a time with testing
-done by the user at each step. You do compile-only checks.
+This file records the current Hazel integration state after the 2026-06-20
+merge-worker policy work. It is a checkpoint, not blanket authorization for the
+next coding step. The user will continue to choose the next change.
 
-Current alignment already in place:
+## Current State
 
-- `Owsla` is the narrow Warren subclass for posting-capable shards.
-- Fiver and Hazel both subclass `Owsla` and expose
-  `std::shared_ptr<SimplePosting> posting(addr feature)` plus a cheap cached
-  `addr estimated_size()` and sequence-range access.
-- Fluffle owns the Bigwig merged-posting cache generation as an `OwslaCache`.
-- Fluffle owns sanitized pending Hazel merge recoveries as `hazel_merges`.
-- Bigwig is not an `Owsla`; it is the aggregator over a started shard snapshot.
-- Bigwig composes postings from visible `Owsla` shards and caches only normal
-  multi-shard posting merges.
-- `text_chunk_tag` is mergeable, but must not be stored in the generic
-  `OwslaCache`; Bigwig should merge it fresh or delegate through hoppers.
-- Hazel merge sidecars now use the `mrg`/`pst`/`dct` prefixes so
-  `working->ls("hazel")` sees only live Hazel candidates and transitional
-  old-style sidecar cleanup remains in the merge path.
-- Bigwig startup now runs `sanitize(...)` instead of the old Fiver-only
-  `fiver_files(...)` pass. Shared startup inventory records live in `Owsla`;
-  `Working` owns generic `temp.*` cleanup, Fiver owns Fiver/kittens cleanup,
-  Hazel owns Hazel shard and merge
-  recovery cleanup, and Bigwig coordinates the combined inventory. Activation
-  now consumes sanitized Hazels followed by sanitized Fivers.
-- User-reported regression measurements are recorded in
-  `ai/hazel-progress.md`.
-
-## Core Invariant
-
-The live Bigwig shard set should move toward this logical shape:
-
-```
-[ Hazel prefix ][ Fiver suffix ]
-```
-
-All reasoning here is sequence-range reasoning. Directory cleanup and
-consolidation selection should not depend on text ranges, posting contents, or
-physical byte layout.
-
-The normal visible set has no sequence overlap. The tolerated recovery state is
-shadowing:
-
-```
-dead shard *.A.B is covered by living shard *.X.Y when X <= A && B <= Y
-```
-
-For the current conservative mixed boundary, the important expected case is a
-newly created Hazel shadowing the Fiver it came from. Startup cleanup may remove
-or ignore the dead Fiver if a living Hazel covers the same sequence range.
-
-Any non-shadowed dead shard is a directory sanity failure. Any partial mixed
-Hazel/Fiver overlap that cannot be explained as shadowing should be reported as
-an error rather than silently activated.
-
-## Step 0: Rename Hazel Merge Sidecars
-
-Live Hazel shard names remain:
-
-```
-hazel.A.B
-```
-
-Hazel merge intermediates have moved out of the `hazel` prefix so
-`working->ls("hazel")` sees only live Hazel candidates. Current names:
-
-```
-mrg.hazel.A.B
-pst.hazel.A.B
-dct.hazel.A.B
-```
-
-Meanings:
-
-- `mrg.hazel.A.B`: temporary final Hazel output.
-- `pst.hazel.A.B`: resumable idx posting checkpoint.
-- `dct.hazel.A.B`: resumable idx directory checkpoint.
-
-On successful publication, link or rename `mrg.hazel.A.B` to `hazel.A.B`, then
-remove the associated `mrg`/`pst`/`dct` files.
-
-During the transition, startup cleanup may also recognize and remove old-style
-sidecars:
-
-```
-hazel.A.B.tmp
-hazel.A.B.pst
-hazel.A.B.dct
-```
-
-once they are known not to be needed.
-
-## Step 1: Replace `fiver_files` With `sanitize`
-
-`fiver_files(...)` has become a directory-normalization pass named
-`sanitize(...)`.
-
-Its purpose is to restore the working directory to a sane, idempotent startup
-state. Activation code should run after `sanitize(...)` and depend on the
-conditions it establishes.
-
-`sanitize(...)` coordinates:
-
-- strict-parse live shard names:
-
-  ```
-  fiver.A.B
-  hazel.A.B
-  ```
-
-- build `living` and `dead` lists by sequence range inside each shard type;
-- preserve the current Fiver contained-range cleanup behavior in
-  `Fiver::sanitize(...)`;
-- apply the same living/dead idea independently for Hazels in
-  `Hazel::sanitize(...)`;
-- verify every dead shard is shadowed by a living shard by sequence range:
-
-  ```
-  living.start <= dead.start && dead.end <= living.end
-  ```
-
-- delete known Fiver startup garbage such as `kitten*`; generic `temp.*`
-  cleanup happens when `Working` is constructed;
-- ask Hazel to clean its private merge recovery state and return logical
-  `HazelMergeRecovery` records;
-- combine the Fiver and Hazel inventories into the required
-  `[ Hazel prefix ][ Fiver suffix ]` shape;
-- allow the boundary recovery case where the last Hazel shadows one or more
-  leading Fivers, deleting those Fivers so the Hazel wins;
-- reject any other mixed Hazel/Fiver overlap or out-of-order Fiver-before-Hazel
-  relationship;
-- return the sanitized live inventory that activation should use. In the
-  current intermediate checkpoint, activation still uses only
-  `inventory.fivers`.
-
-For an in-flight Hazel merge `hazel.A.B`, the source group should be a
-contiguous group of living Hazels whose sequence ranges cover `A..B`. If that
-group cannot be identified, the sidecars are not resumable and should be
-deleted.
-
-Postconditions:
-
-- strict live Fiver and Hazel names are the only live shard candidates;
-- no dead shard remains unless a living shard shadows its sequence range;
-- resumable Hazel merge sidecars are associated with identifiable living Hazel
-  sources;
-- activation can build a coherent snapshot without reinterpreting filesystem
-  leftovers.
-
-## Step 2: Activate Hazels With No Hazel Merging
-
-After `sanitize(...)`, Bigwig activation should include live Hazel shards in the
-Fluffle/Bigwig read snapshot.
-
-Status: landed. Bigwig startup activates the sanitized Hazel prefix and Fiver
-suffix into Fluffle, and started Bigwig readers capture the visible snapshot as
-`std::vector<std::shared_ptr<Owsla>>`.
-
-This step should not add Hazel lifecycle policy:
-
-- no Fiver-to-Hazel conversion;
-- no Hazel-to-Hazel merge scheduling;
-- no mixed physical Fiver/Hazel merge;
-- no Fiver retention policy beyond startup shadow cleanup.
-
-Expected implementation shape:
-
-- Fluffle's visible read list moves from Fiver-only toward
+- `Owsla` is the common shard interface for posting-capable Bigwig children.
+  Fiver and Hazel both expose `posting(feature)`, cheap cached
+  `estimated_size()`, `get_sequence(...)`, and `discard(...)`.
+- Bigwig startup runs `sanitize(...)`, activates the sanitized Hazel prefix
+  followed by the Fiver suffix, and stores the visible set as
   `std::vector<std::shared_ptr<Owsla>>`.
-- `BigwigIdx` composes postings from `Owsla` children.
-- `BigwigTxt` uses the public Warren/Txt interface available through `Owsla`.
-- Bigwig caches only true normal multi-shard posting merges in the captured
-  `OwslaCache`.
-- `text_chunk_tag` remains uncached.
-- `posting(feature)` remains raw storage composition and does not apply
-  `null_feature` exclusions.
+- Fluffle owns the shared working context, Bigwig cache generation, current
+  visible shard vector, merge-in-progress set, and sanitized pending Hazel
+  merge recovery records.
+- Bigwig read snapshots compose visible `Owsla` children. Normal multi-shard
+  posting merges are cached through `OwslaCache`; `text_chunk_tag` remains
+  mergeable but uncached.
+- The default working-directory `Fiver::hazel(...)` overload writes and
+  activates an unstarted Hazel. The explicit-filename overload remains a
+  bool-returning writer.
+- The activated-source `Hazel::merge(hazels, dst, ...)` overload writes and
+  activates an unstarted output Hazel. The working/name adapter remains
+  bool-returning for existing command-line callers.
+- Source shard deletion is now lifecycle policy in `merge_worker`, not part of
+  Fiver-to-Hazel conversion. After successful Fluffle publication, selected
+  source shards are discarded through `Owsla::discard(...)`.
 
-The cache generation must still change only when the logical visible snapshot
-changes.
+## Merge Worker Shape
 
-## Step 3: Convert Fivers To Hazels
+`merge_worker(...)` is now organized around one policy function:
 
-Add one-at-a-time Fiver-to-Hazel conversion at the Hazel/Fiver boundary.
-
-Rules:
-
-- Hazels are always older than Fivers in the live logical order.
-- The boundary Fiver is the oldest live Fiver, immediately after the Hazel
-  prefix.
-- Only a boundary Fiver is eligible for conversion.
-- A converted Hazel may temporarily shadow the source Fiver on disk.
-- Startup `sanitize(...)` resolves that recovery state by making the Hazel
-  visible and treating the shadowed Fiver as dead.
-- Hazels may pile up; this step does not require Hazel-to-Hazel merging.
-
-This advances:
-
-```
-[ Hazel prefix ][ Fiver suffix ]
+```cpp
+find_merge_action(fluffle, &start, &end)
 ```
 
-without introducing arbitrary mixed physical merges.
+The policy recommends a visible shard range by index. The worker, while holding
+the Fluffle lock, validates the recommendation, classifies it as one of:
 
-## Step 4: Consolidation Worker Policy
+- Fiver/Fiver merge,
+- Hazel/Hazel merge,
+- boundary Fiver-to-Hazel conversion,
 
-Merge/consolidation workers must constantly respect `fluffle->merging`.
-Selection should scan for available work rather than stop at the first blocked
-candidate.
+claims the selected shards in `fluffle->merging`, optionally spawns a friend
+worker, releases the lock, performs the operation, reacquires the lock, and
+publishes the replacement shard.
 
-Eligibility:
+Worker exits that observe no usable work or a terminal publication failure
+decrement `fluffle->workers` while still holding the Fluffle lock. This avoids
+the lost-worker race where `try_merge()` could see a retiring worker counted,
+decline to spawn a replacement, and then have that worker exit.
 
-- Candidate sources must be adjacent/sequential by sequence range.
-- Every source Warren in the candidate range must not already be in
-  `fluffle->merging`.
-- Source Warrens must be marked in `fluffle->merging` while holding the Fluffle
-  lock, before the worker releases the lock and starts work.
-- If an early candidate is blocked by `fluffle->merging`, keep scanning for
-  another eligible candidate.
+## Current Policy
 
-Hazel merging should be capped simply. Before doing any Hazel merge work, ask:
+Hazel-aware policy is currently enabled.
 
-```
-Are fewer than N Hazel shards currently in fluffle->merging?
-```
+Policy order inside `find_merge_action(...)`:
 
-If the Hazel cap is reached, skip both resumed Hazel merges and new
-Hazel/Hazel merges. The worker may still do Fiver work.
+1. Compute `hazel_merge_okay(...)`.
+2. If Hazel work is allowed, try boundary Fiver-to-Hazel conversion first.
+3. Merge a run of small available Fivers, preserving the old Fiver behavior.
+4. Merge the smallest available adjacent Fiver/Fiver pair.
+5. If Hazel work is allowed, merge the smallest available adjacent Hazel/Hazel
+   pair.
+6. Otherwise report no recommendation.
 
-Worker priority:
+The boundary Fiver conversion rule converts the first Fiver after the Hazel
+prefix if it is at least 128 MiB, or if there is at least one Hazel and it is
+the only live Fiver.
 
-1. If Hazel merging is currently allowed, consult the sanitized list of
-   in-flight Hazel merges left over from the past. If a resumable merge has
-   available source Hazels, claim it and continue it.
-2. Merge tiny Fivers, as current Bigwig consolidation does.
-3. If the boundary Fiver is over the conversion limit, convert it to Hazel.
-4. Merge the smallest available adjacent Fiver/Fiver pair not considered tiny.
-5. If Hazel merging is currently allowed, merge the smallest available adjacent
-   Hazel/Hazel pair.
-6. If every pass finds no eligible work, quit.
+The current Hazel work gate is intentionally simple: count Hazel shards already
+in `fluffle->merging`; allow another Hazel-related action only when
+`merging_hazels + 1 < fluffle->max_workers`.
 
-The ordering favors fast transactions and hot-suffix cleanup over long cold
-Hazel compaction. Hazel merge recovery comes first only when the Hazel cap
-allows it.
+## Testing Status
 
-Publication rules:
+The user reported successful regression/ranking checks for:
 
-- A completed operation replaces the visible Fluffle shard set atomically under
-  the Fluffle lock.
-- A changed visible shard set publishes a new empty `OwslaCache` generation.
-- Background consolidation is query-semantics preserving. If consolidation
-  changes query answers, that is a consolidation bug, not a cache policy issue.
+- single live Hazel activated directly and through Bigwig;
+- multiple live Hazels;
+- mixed `[ Hazel prefix ][ Fiver suffix ]` directories;
+- boundary-shadow cleanup where a Hazel covers a redundant suffix Fiver;
+- background Fiver suffix consolidation while a Hazel prefix remains;
+- `build.sh` and `rank.sh` after Hazel policy work, including repeated stress
+  runs that did not reproduce the one intermittent create failure.
 
-## Step 5: Survive `apps/trec-example`
+One intermittent `meadowlark --create --tsv` ready failure was observed during
+policy testing and then did not reproduce across many repeated create/create
+plus forage runs. The practical follow-up if it reappears is to stop before
+running any second command and capture the working-directory file list,
+especially `kitten.*`, `temp.*`, `mrg.hazel.*`, `pst.hazel.*`, `dct.hazel.*`,
+and overlapping shard ranges.
 
-The user will run this and all other testing. You only run compiles.
+Repository rule remains: agents should run compile/build checks only unless the
+user explicitly asks for runtime experiments, ranking runs, evals, or
+benchmarks.
 
-`apps/trec-example.cc` is the stress model for the eventual behavior:
+## Likely Follow-Ups
 
-- many writer clones ingest and annotate files;
-- ranking clones repeatedly `start()` / rank / `end()` while writes continue;
-- eraser clones delete old file ranges through transactions;
-- commits publish new visible snapshots while rankers are active;
-- the filesystem sees kittens, temp files, Fivers, Hazels, sidecars, and
-  consolidation products.
-
-The end-state goal is that the filesystem may be busy, but:
-
-- every started reader sees a coherent snapshot;
-- every commit that changes visibility publishes a fresh cache generation;
-- restart converges through `sanitize(...)`;
-- no sequence range is double-counted;
-- no sequence range is lost when dead files are removed;
-- leftover Hazel merge sidecars are either resumable or deleted.
-
-## Verification
-
-Follow the repository rule: compile/build checks only unless the user
-explicitly asks for runtime experiments, ranking runs, evals, or benchmarks.
-
-Likely compile checks:
-
-```sh
-bazel build //src:cottontail
-bazel build //test:tests
-bazel build //test:hazel_test
-bazel build //apps:trec-example
-```
-
-Do not run `bazel test`, ranking, evals, benchmarks, or `apps/trec-example`
-unless explicitly requested.
-
-## Useful Starting Points
-
-- `src/bigwig.cc`: current `fiver_files(...)`, activation, start snapshots, and
-  merge workers.
-- `src/fluffle.h`: visible shard list, merge state, cache generation.
-- `src/hazel.cc`: Hazel merge sidecar names, checkpoint repair, and publication.
-- `src/owsla.h`: `Owsla`, `OwslaCache`, Hazel/Fiver shared naming helpers.
-- `src/fiver.cc` / `src/fiver.h`: Fiver activation, merge, conversion source.
-- `apps/fiver2hazel.cc`: strict shard-name parsing and existing Hazel merge
-  command behavior.
-- `apps/trec-example.cc`: concurrent write/read/delete stress model.
-- `test/hazel.cc`: focused Hazel regression coverage.
+- Add or refine focused tests around `find_merge_action(...)` and the worker
+  classification/publication paths.
+- Revisit the Hazel work gate if the current shard-count approximation does
+  not give the desired worker mix under heavy concurrency.
+- Decide whether recovered `HazelMergeRecovery` records should be scheduled
+  ahead of new Hazel/Hazel merges.
+- Improve lower-level error propagation from `ready_()` paths so failures do
+  not collapse into only `"Transaction cannot be commited."`
+- Consider concurrent shard activation after `sanitize(...)` has established a
+  deterministic inventory order.
