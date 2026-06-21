@@ -10,8 +10,8 @@
 #include <readline/history.h>
 #include <readline/readline.h>
 
+#include "gcl/mt.h"
 #include "src/cottontail.h"
-#include "src/mt.h"
 
 void usage(std::string program_name) {
   std::cerr << "usage: " << program_name << " [--burrow burrow]\n";

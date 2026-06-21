@@ -19,17 +19,36 @@
 // In 4th Annual Symposium on Document Analysis and Information Retrieval,
 // pages 279–289, Las Vegas, Nevada, April 1995.
 
-#include "src/gcl.h"
+#include "gcl/gcl.h"
 
 #include <algorithm>
 #include <iostream>
 #include <set>
 
+#include "gcl/parse.h"
 #include "src/array_hopper.h"
+#include "src/warren.h"
 
 namespace cottontail {
 
 namespace gcl {
+
+std::unique_ptr<Hopper> hopper(const std::string &query, Warren *warren,
+                               std::string *error) {
+  if (warren == nullptr) {
+    safe_error(error) = "Cannot construct hopper from gcl without Warren";
+    return nullptr;
+  }
+  std::shared_ptr<SExpression> expr = SExpression::from_string(query, error);
+  if (expr == nullptr)
+    return nullptr;
+  expr = expr->expand_phrases(warren->tokenizer());
+  std::unique_ptr<Hopper> hopper =
+      expr->to_hopper(warren->featurizer(), warren->idx());
+  if (hopper == nullptr)
+    safe_error(error) = "Could not construct hopper from valid gcl: " + query;
+  return hopper;
+}
 
 void Combinational::tau_(addr k, addr *p, addr *q, fval *v) {
   *p = L(*q = R(k));

@@ -63,27 +63,16 @@ int main(int argc, char **argv) {
     };
 
     warren->start();
-    std::shared_ptr<cottontail::Featurizer> featurizer = warren->featurizer();
-    std::shared_ptr<cottontail::Tokenizer> tokenizer = warren->tokenizer();
     std::shared_ptr<cottontail::Txt> txt = warren->txt();
-    std::shared_ptr<cottontail::Idx> idx = warren->idx();
-    std::shared_ptr<cottontail::gcl::SExpression> expr =
-        cottontail::gcl::SExpression::from_string(line, &error);
-    if (expr == nullptr) {
+    std::unique_ptr<cottontail::Hopper> fluffy =
+        warren->hopper_from_gcl(line, &error);
+    if (fluffy == nullptr) {
       std::cerr << error << "\n";
       free(line);
       warren->end();
       continue;
     } else {
       free(line);
-    }
-    expr = expr->expand_phrases(tokenizer);
-    std::unique_ptr<cottontail::Hopper> fluffy =
-        expr->to_hopper(featurizer, idx);
-    if (fluffy == nullptr) {
-      std::cerr << "implementation failure\n";
-      warren->end();
-      continue;
     }
     cottontail::addr k = cottontail::minfinity + 1, p, q;
     cottontail::fval v;

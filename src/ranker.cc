@@ -16,10 +16,10 @@
 #include <vector>
 
 #include "src/core.h"
-#include "src/gcl.h"
+#include "gcl/gcl.h"
 #include "src/hopper.h"
 #include "src/parameters.h"
-#include "src/parse.h"
+#include "gcl/parse.h"
 #include "src/ranking.h"
 #include "src/stats.h"
 #include "src/stopwords.h"

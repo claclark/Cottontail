@@ -1,6 +1,6 @@
 #include "gtest/gtest.h"
 
-#include "src/mt.h"
+#include "gcl/mt.h"
 
 #define ASSERT_ERROR_EQ(expected_lit, error_str)                               \
   ASSERT_EQ((error_str).substr(0, sizeof((expected_lit)) - 1), (expected_lit))

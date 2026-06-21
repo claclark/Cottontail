@@ -1,5 +1,5 @@
-#ifndef COTTONTAIL_SRC_MT_H_
-#define COTTONTAIL_SRC_MT_H_
+#ifndef COTTONTAIL_GCL_MT_H_
+#define COTTONTAIL_GCL_MT_H_
 
 #include <string>
 
@@ -24,4 +24,4 @@ private:
 };
 
 } // namespace cottontail
-#endif // COTTONTAIL_SRC_MT_H_
+#endif // COTTONTAIL_GCL_MT_H_

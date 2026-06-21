@@ -7,7 +7,7 @@
 #include <string.h>
 
 #include "src/core.h"
-#include "src/mt.h"
+#include "gcl/mt.h"
 
 namespace cottontail {
 

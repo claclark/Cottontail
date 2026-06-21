@@ -1,4 +1,4 @@
-#include "src/parse.h"
+#include "gcl/parse.h"
 
 #include <iostream>
 #include <map>
@@ -7,7 +7,7 @@
 
 #include "src/core.h"
 #include "src/featurizer.h"
-#include "src/gcl.h"
+#include "gcl/gcl.h"
 #include "src/hopper.h"
 #include "src/idx.h"
 

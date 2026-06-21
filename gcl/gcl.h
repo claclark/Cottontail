@@ -1,14 +1,20 @@
-#ifndef COTTONTAIL_SRC_GCL_H_
-#define COTTONTAIL_SRC_GCL_H_
+#ifndef COTTONTAIL_GCL_GCL_H_
+#define COTTONTAIL_GCL_GCL_H_
 
 #include <memory>
+#include <string>
 
 #include "src/core.h"
 #include "src/hopper.h"
 
 namespace cottontail {
 
+class Warren;
+
 namespace gcl {
+
+std::unique_ptr<Hopper> hopper(const std::string &query, Warren *warren,
+                               std::string *error = nullptr);
 
 class Unary : public Hopper {
 public:
@@ -204,4 +210,4 @@ private:
 
 } // namespace gcl
 } // namespace cottontail
-#endif // COTTONTAIL_SRC_GCL_H_
+#endif // COTTONTAIL_GCL_GCL_H_

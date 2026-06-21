@@ -209,3 +209,6 @@
 2026-06-20T23:53:49+00:00 - Refreshed the AI-facing Hazel/Bigwig checkpoint docs after the final policy/debugging pass, removed the standalone intermittent-crash note, and kept only durable follow-ups in `ai/plan.md`, `ai/notes.md`, and `ai/improvements.md`.
 2026-06-21T00:11:07Z - Consolidated Hazel documentation into `ai/hazel.md`, folded in the finished Bigwig/Hazel plan plus Hazel merge/progress notes, removed the obsolete Hazel side notes and completed plan, and refreshed AI doc pointers.
 2026-06-21T00:14:04Z - Restored `ai/plan.md` as the active minimal plan: talk with the user about query optimization.
+2026-06-21T16:16:42Z - Moved GCL query code from `src/` to top-level `gcl/`, added a GCL-side Warren helper behind `Warren::hopper_from_gcl`, kept GCL in the core `//src:cottontail` library, and verified `bazel build //src:cottontail`.
+2026-06-21T16:22:22Z - Minimized app fallout from the GCL move: `fluffy` now uses `Warren::hopper_from_gcl`, `mt` includes `gcl/mt.h`, and both app targets compile.
+2026-06-21T16:23:55Z - Updated direct GCL test includes after the source-tree split and verified compile-only builds for `//test:tests` and `//test:hazel_test`.

@@ -1,5 +1,5 @@
-#ifndef COTTONTAIL_SRC_VECTOR_HOPPER_H_
-#define COTTONTAIL_SRC_VECTOR_HOPPER_H_
+#ifndef COTTONTAIL_GCL_VECTOR_HOPPER_H_
+#define COTTONTAIL_GCL_VECTOR_HOPPER_H_
 
 #include <memory>
 #include <vector>
@@ -35,4 +35,4 @@ protected:
 } // namespace gcl
 } // namespace cottontail
 
-#endif // COTTONTAIL_SRC_VECTOR_HOPPER_H_
+#endif // COTTONTAIL_GCL_VECTOR_HOPPER_H_

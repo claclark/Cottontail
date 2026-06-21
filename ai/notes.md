@@ -4,6 +4,8 @@
 
 - `src/`: core Cottontail library. Public umbrella header is
   `src/cottontail.h`.
+- `gcl/`: GCL query operators, S-expression parsing, legacy MT parser, and
+  GCL-specific hopper helpers. Built into the core Cottontail library.
 - `meadowlark/`: Meadowlark layer built on top of the core library.
 - `apps/`: CLI binaries, dataset utilities, and short-lived scratch programs.
 - `test/`: Bazel C++ tests. `//test:tests` is the aggregate target;
@@ -36,8 +38,8 @@
   `simple_txt*`, `fastid_txt.*`, `hazel.*`, `fiver.*`, `bigwig.*`.
 - Ingestion/mutation: `builder.*`, `simple_builder.*`, `appender.*`,
   `annotator.*`, `scribe.*`.
-- Query execution: `gcl.*`, `parse.*`, `hopper.*`, `array_hopper.*`,
-  `vector_hopper.*`, `eval.*`, `ranking.*`, `ranker.*`.
+- Query execution: `gcl/*`, `hopper.*`, `array_hopper.*`, `eval.*`,
+  `ranking.*`, `ranker.*`.
 - Text/feature processing: `tokenizer.*`, `ascii_tokenizer.*`,
   `utf8_tokenizer.*`, `featurizer.*`, `hashing_featurizer.*`,
   `json_featurizer.*`, `tagging_featurizer.*`, `vocab_featurizer.*`,
@@ -78,8 +80,8 @@
 
 - `MODULE.bazel` defines the Bazel module with `nlohmann_json`, `googletest`,
   and `rules_cc`.
-- `src/BUILD` exports `//src:cottontail`, including `src/*` and the Meadowlark
-  library.
+- `src/BUILD` exports `//src:cottontail`, including `src/*`, `gcl/*`, and the
+  Meadowlark library.
 - `apps/BUILD` contains standalone `cc_binary` targets.
 - `test/BUILD` contains aggregate `//test:tests` and dedicated
   `//test:hazel_test`.

@@ -5,6 +5,7 @@
 
 #include "gtest/gtest.h"
 
+#include "gcl/parse.h"
 #include "src/cottontail.h"
 
 TEST(GCLTest, E2E) {

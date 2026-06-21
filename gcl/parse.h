@@ -1,5 +1,5 @@
-#ifndef COTTONTAIL_SRC_PARSE_H_
-#define COTTONTAIL_SRC_PARSE_H_
+#ifndef COTTONTAIL_GCL_PARSE_H_
+#define COTTONTAIL_GCL_PARSE_H_
 
 #include <memory>
 #include <string>
@@ -7,7 +7,7 @@
 
 #include "src/core.h"
 #include "src/featurizer.h"
-#include "src/gcl.h"
+#include "gcl/gcl.h"
 #include "src/hopper.h"
 #include "src/idx.h"
 #include "src/tokenizer.h"
@@ -51,4 +51,4 @@ private:
 };
 } // namespace gcl
 } // namespace cottontail
-#endif // COTTONTAIL_SRC_PARSE_H_
+#endif // COTTONTAIL_GCL_PARSE_H_

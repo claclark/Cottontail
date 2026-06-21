@@ -2,8 +2,14 @@ load("@rules_cc//cc:defs.bzl", "cc_library")
 
 cc_library(
     name = "cottontail",
-    srcs = glob(["*.cc"]) + ["//meadowlark:meadowlark_cc"],
-    hdrs = glob(["*.h"])  + ["//meadowlark:meadowlark_h"],
+    srcs = glob(["*.cc"]) + [
+        "//gcl:gcl_cc",
+        "//meadowlark:meadowlark_cc",
+    ],
+    hdrs = glob(["*.h"]) + [
+        "//gcl:gcl_h",
+        "//meadowlark:meadowlark_h",
+    ],
     deps = [
         "@nlohmann_json//:json",
     ],
