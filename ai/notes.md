@@ -114,8 +114,8 @@
   `dct.hazel.<start>.<end>`. The merge path still cleans old-style
   `hazel.<start>.<end>.*` sidecars as a transition aid.
 - Hazel merge async read-ahead was tried and measured on HDD, but the gain was
-  only about 1%; details and the recommendation not to carry that complexity
-  forward are recorded in `ai/hazel-progress.md`.
+  only about 1%; the recommendation is not to carry that complexity forward
+  without stronger evidence of an I/O bottleneck.
 - `test/hazel.cc` is the completed Hazel regression test. It builds a no-merge
   Bigwig from small text files, converts each Fiver to Hazel, compares
   Fiver-vs-Hazel shard behavior, merges Hazels, and compares the merged Hazel
@@ -123,8 +123,8 @@
   also checks that started Hazel clones stay started and remain readable after
   the source Hazel is ended.
 - User ran `bazel test //test:hazel_test` successfully on 2026-05-26.
-- Hazel performance milestones and rank.sh measurements live in
-  `ai/hazel-progress.md`.
+- Consolidated Hazel format, activation, merge, Bigwig integration, and
+  performance-shape notes live in `ai/hazel.md`.
 
 ## Current Bigwig Cache Status
 
@@ -232,7 +232,7 @@
 
 ## Current Ranking Measurements
 
-- `rank.sh` measurements live in `ai/hazel-progress.md`. After 2026-06-07,
+- Consolidated performance-shape notes live in `ai/hazel.md`. After 2026-06-07,
   `Ranking took:` from `apps/rank --verbose` is the max per-worker ranking-loop
   time, not outer `trec(...)` wall time.
 - `a.meadow/` in the repo root currently contains three large Fivers
@@ -296,8 +296,8 @@
   forage loops. One intermittent create-ready failure did not reproduce; if it
   reappears, capture the working-directory file list before running any
   follow-up command.
-- See `ai/plan.md` for the current checkpoint and next likely follow-ups;
-  `ai/hazel.md` remains the Hazel format/activation/merge reference.
+- See `ai/hazel.md` for the consolidated Hazel/Bigwig-Hazel checkpoint and
+  next likely follow-ups.
 
 ## Current Local Worktree Notes
 

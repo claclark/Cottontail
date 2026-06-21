@@ -1,7 +1,8 @@
 # Potential Improvements
 
 Concise list of possible cleanups, design questions, and follow-up work. These
-are not committed plans unless promoted into `ai/plan.md`.
+are not committed plans unless the user promotes them into an active plan or
+explicit coding task.
 
 Especially don't do these things without discussion and approval from the user.
 
