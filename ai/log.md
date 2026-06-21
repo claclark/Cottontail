@@ -212,3 +212,4 @@
 2026-06-21T16:16:42Z - Moved GCL query code from `src/` to top-level `gcl/`, added a GCL-side Warren helper behind `Warren::hopper_from_gcl`, kept GCL in the core `//src:cottontail` library, and verified `bazel build //src:cottontail`.
 2026-06-21T16:22:22Z - Minimized app fallout from the GCL move: `fluffy` now uses `Warren::hopper_from_gcl`, `mt` includes `gcl/mt.h`, and both app targets compile.
 2026-06-21T16:23:55Z - Updated direct GCL test includes after the source-tree split and verified compile-only builds for `//test:tests` and `//test:hazel_test`.
+2026-06-21T16:37:09Z - Reformatted root `AGENTS.md` as Markdown and added an audience note for AI coding assistants and other readers.
