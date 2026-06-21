@@ -25,6 +25,7 @@
 #include <iostream>
 #include <set>
 
+#include "gcl/optimizer.h"
 #include "gcl/parse.h"
 #include "src/array_hopper.h"
 #include "src/warren.h"
@@ -43,6 +44,7 @@ std::unique_ptr<Hopper> hopper(const std::string &query, Warren *warren,
   if (expr == nullptr)
     return nullptr;
   expr = expr->expand_phrases(warren->tokenizer());
+  expr = Optimizer::optimize(expr, warren);
   std::unique_ptr<Hopper> hopper =
       expr->to_hopper(warren->featurizer(), warren->idx());
   if (hopper == nullptr)

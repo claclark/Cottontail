@@ -16,6 +16,8 @@ namespace cottontail {
 
 namespace gcl {
 
+class Optimizer;
+
 enum Operator {
   TERM,
   FIXED,
@@ -31,6 +33,13 @@ enum Operator {
 
 class SExpression final {
 public:
+  SExpression() = default;
+  SExpression(const SExpression &) = delete;
+  SExpression &operator=(const SExpression &) = delete;
+  SExpression(SExpression &&) = delete;
+  SExpression &operator=(SExpression &&) = delete;
+  ~SExpression() = default;
+
   static std::shared_ptr<SExpression> from_string(std::string s,
                                                   std::string *error);
   std::string to_string();
@@ -42,6 +51,7 @@ public:
 
   friend const char *parse_expr(const char *where,
                                 std::shared_ptr<SExpression> expr, bool *okay);
+  friend class Optimizer;
 
 private:
   Operator kind_;

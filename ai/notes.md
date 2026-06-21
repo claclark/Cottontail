@@ -5,7 +5,8 @@
 - `src/`: core Cottontail library. Public umbrella header is
   `src/cottontail.h`.
 - `gcl/`: GCL query operators, S-expression parsing, legacy MT parser, and
-  GCL-specific hopper helpers. Built into the core Cottontail library.
+  GCL-specific optimizer/hopper helpers. Built into the core Cottontail
+  library.
 - `meadowlark/`: Meadowlark layer built on top of the core library.
 - `apps/`: CLI binaries, dataset utilities, and short-lived scratch programs.
 - `test/`: Bazel C++ tests. `//test:tests` is the aggregate target;
