@@ -1,6 +1,8 @@
 #include "src/simple_idx.h"
 
+#if COTTONTAIL_SIMPLE_IDX_CACHE_EJECTION
 #include <algorithm>
+#endif
 #include <cassert>
 #include <fstream>
 #include <memory>
@@ -246,11 +248,13 @@ void SimpleIdx::reset_() {
   assert(pst_map_size == pst_map_.size());
   pst_ = working_->reader(PST_NAME);
   assert(pst_ != nullptr);
+#if COTTONTAIL_SIMPLE_IDX_CACHE_EJECTION
   stamp_ = 0;
   ages_.clear();
+  large_total_ = 0;
+#endif
   cache_.clear();
   counts_.clear();
-  large_total_ = 0;
   cache_lock_.unlock();
 }
 
@@ -306,8 +310,10 @@ std::shared_ptr<CacheRecord> SimpleIdx::load_cache(addr feature) {
   std::map<addr, std::shared_ptr<CacheRecord>>::iterator cached;
   if ((cached = cache_.find(feature)) != cache_.end()) {
     std::shared_ptr<CacheRecord> c = cached->second;
+#if COTTONTAIL_SIMPLE_IDX_CACHE_EJECTION
     if (c->n > large_threshold_)
       ages_[feature] = stamp_++;
+#endif
     cache_lock_.unlock();
     return c;
   }
@@ -333,6 +339,7 @@ std::shared_ptr<CacheRecord> SimpleIdx::load_cache(addr feature) {
   std::thread t(decompress_cache, std::move(storage), posting_compressor_,
                 fvalue_compressor_, c);
   t.detach();
+#if COTTONTAIL_SIMPLE_IDX_CACHE_EJECTION
   if (c->n > large_threshold_) {
     if (large_total_ > large_limit_) {
       std::vector<addr> old;
@@ -352,6 +359,7 @@ std::shared_ptr<CacheRecord> SimpleIdx::load_cache(addr feature) {
     large_total_ += c->n;
     ages_[feature] = stamp_++;
   }
+#endif
   cache_[feature] = c;
   cache_lock_.unlock();
   return c;

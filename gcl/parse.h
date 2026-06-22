@@ -28,7 +28,8 @@ enum Operator {
   CONTAINING,
   NOT_CONTAINED_IN,
   NOT_CONTAINING,
-  LINK
+  LINK,
+  MATERIALIZE
 };
 
 class SExpression final {

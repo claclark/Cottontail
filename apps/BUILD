@@ -146,6 +146,19 @@ cc_binary(
 )
 
 cc_binary(
+    name = "gcl-timing",
+    srcs = [
+      "gcl-timing.cc",
+    ],
+    deps = [
+      "//src:cottontail",
+    ],
+    linkopts = [
+      "-pthread",
+    ],
+)
+
+cc_binary(
     name = "json-examples",
     srcs = [
       "json-examples.cc",

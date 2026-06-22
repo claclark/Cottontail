@@ -1,6 +1,8 @@
 #ifndef COTTONTAIL_SRC_SIMPLE_IDX_H_
 #define COTTONTAIL_SRC_SIMPLE_IDX_H_
 
+#define COTTONTAIL_SIMPLE_IDX_CACHE_EJECTION 0
+
 #include <condition_variable>
 #include <fstream>
 #include <map>
@@ -57,11 +59,13 @@ private:
   std::mutex cache_lock_;
   std::map<addr, std::shared_ptr<CacheRecord>> cache_;
   std::map<addr, addr> counts_;
+#if COTTONTAIL_SIMPLE_IDX_CACHE_EJECTION
   addr stamp_ = 0;
   std::map<addr, addr> ages_;
   addr large_threshold_ = 1024;
   addr large_limit_ = 1024 * 1024 * 1024;
   addr large_total_ = 0;
+#endif
 };
 
 bool interpret_simple_idx_recipe(const std::string &recipe,

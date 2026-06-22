@@ -214,3 +214,28 @@
 2026-06-21T16:23:55Z - Updated direct GCL test includes after the source-tree split and verified compile-only builds for `//test:tests` and `//test:hazel_test`.
 2026-06-21T16:37:09Z - Reformatted root `AGENTS.md` as Markdown and added an audience note for AI coding assistants and other readers.
 2026-06-21T19:45:50Z - Added the initial static-only null GCL `Optimizer` scaffold, friended it to `SExpression`, wired `Optimizer::optimize(expr, warren)` into the post-phrase-expansion query pipeline, and verified compile-only builds.
+2026-06-21T22:17:31Z - Added exploratory `apps/gcl-rewrite` to print GCL S-expression expansion and optimization examples with a numeric mock Warren; verified `bazel build //apps:gcl-rewrite`.
+2026-06-21T22:22:50Z - Added no-rewrite examples to `apps/gcl-rewrite` for non-matching GCL optimizer shapes and verified `bazel build //apps:gcl-rewrite`.
+2026-06-21T22:30:23Z - Replaced exploratory `apps/gcl-rewrite` with dedicated `//test:optimizer_test`, kept optimizer tests out of the slow aggregate glob, and verified compile-only builds.
+2026-06-21T22:36:15Z - Added global `Optimizer::enable()`/`disable()` controls for performance comparisons and verified compile-only builds.
+2026-06-21T22:47:56Z - Added apps/gcl-timing.cc to compare GCL query timings with optimization enabled and disabled across fresh Warren activations.
+2026-06-21T22:51:18Z - Renamed the dedicated optimizer test from optimize to optimizer to match `gcl/optimizer.*`.
+2026-06-21T22:58:59Z - Expanded `apps/gcl-timing` to 32 built-in fixed-window GCL queries for optimizer timing comparisons.
+2026-06-21T23:04:02Z - Revised `apps/gcl-timing` queries to mix rare title terms with frequent function words for clearer optimizer comparisons.
+2026-06-22T00:32:59Z - Changed GCL optimization to default off while preserving explicit enable/disable controls and updated optimizer tests to opt in.
+2026-06-22T00:35:51Z - Added GCL optimization notes capturing the negative long-query timing result and the possible innermost materialization direction.
+2026-06-22T00:38:10Z - Updated `ai/plan.md` with the proposed `both_in` operator and materializing hopper optimization experiment.
+2026-06-22T00:39:29Z - Clarified the `both_in` plan: the optimizer should rewrite directly to the GCL operator expression `(both_in A B C)`.
+2026-06-22T00:45:05Z - Replaced the planned `both_in` optimization with a generic optimizer-generated `materialize` GCL operator.
+2026-06-22T12:33:34Z - Added the GCL `materialize` operator and hopper, and changed the contained-in/all-of optimizer rewrite to materialize each nested level.
+2026-06-22T12:35:37Z - Updated GCL optimizer notes and plan to describe the implemented `gcl/materialize.*` approach.
+2026-06-22T12:36:51Z - Refreshed `ai/plan.md` so the next step is evaluating the implemented materialized rewrite.
+2026-06-22T12:39:48Z - Updated active `apps/gcl-timing` queries from two-term probes to three-term probes by adding the likely highest-frequency omitted term while preserving window sizes.
+2026-06-22T13:30:18Z - Changed active `apps/gcl-timing` probes to six low-cooccurrence three-term queries with window `# 32`; verified `bazel build //apps:gcl-timing`.
+2026-06-22T14:13:47Z - Changed `apps/gcl-timing` to skip warmup and use `the` as the frequent term in all six active wide-window probes; verified `bazel build //apps:gcl-timing`.
+2026-06-22T16:10:54Z - Added `COTTONTAIL_SIMPLE_IDX_CACHE_EJECTION` and compiled out SimpleIdx large-posting eviction bookkeeping by default; verified `bazel build //src:cottontail //apps:gcl-timing`.
+2026-06-22T16:12:35Z - Added an improvement note to revisit SimpleIdx posting-cache policy and consider LRU-style replacement if bounded cache eviction is needed.
+2026-06-22T16:22:31Z - Added an improvement note for optimizer-generated GCL substitute bindings with reusable materialized `($ n)` references.
+2026-06-22T16:26:59Z - Restored the full title-style `apps/gcl-timing` query set headed by `winnie-pooh` and left warmup disabled; verified `bazel build //apps:gcl-timing`.
+2026-06-22T16:58:52Z - Added `ai/gcl-optimizer.md` as a checkpoint for the default-off GCL optimizer/materialize experiment and updated `ai/plan.md` to point future work there.
+2026-06-22T17:00:24Z - Clarified that `apps/gcl-timing.cc` is scratch and made optimizer tests use scoped optimization enablement; verified `bazel build //test:optimizer_test`.

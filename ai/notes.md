@@ -49,6 +49,31 @@
   `tfdf_compressor.*`, `zlib_compressor.*`, `bad_compressor.h`, `stats.*`,
   `df_stats.*`, `idf_stats.*`, `field_stats.*`, `read_gate.h`.
 
+## Current GCL Optimization Notes
+
+- GCL query code lives in `gcl/` and remains part of the core Cottontail
+  library through `//src:cottontail`.
+- `gcl/optimizer.*` currently provides an opt-in S-expression optimizer shell.
+  Optimization defaults off; callers can use `Optimizer::enable()` for
+  experiments and `Optimizer::disable()` to restore the baseline path.
+- The first rewrite experiment reordered and nested
+  `(<< (^ a b c ...) Q)` by estimated term count. On the user's old single
+  SimpleWarren shard containing nearly 1 TB of raw text, this was a negative
+  result: the longer rewritten/title-style `winnie the pooh` query was roughly
+  one minute, while the two-term innermost probe `winnie pooh` with the same
+  window shape was about `46` ms.
+- The current materialization experiment adds optimizer-generated
+  `(materialize X)`, which fully enumerates `X` once into an `ArrayHopper`
+  before passing it outward. The contained-in/all-of rewrite now materializes
+  each nested level. `Link` is the existing precedent for lazy child
+  materialization into an array-backed hopper.
+- `apps/gcl-timing` currently skips warmup and uses the title-style query set
+  headed by `(<< (^ winnie the pooh) (# 3))`; the temporary wide-window
+  low-cooccurrence probes remain commented in the app.
+- `SimpleIdx` posting-cache eviction is currently compiled out with
+  `COTTONTAIL_SIMPLE_IDX_CACHE_EJECTION` set to `0`; cached postings remain for
+  the life of the `SimpleIdx` unless the idx is reset or destroyed.
+
 ## Meadowlark Map
 
 - `meadowlark/meadowlark.*`: Meadowlark lifecycle and ingestion helpers.

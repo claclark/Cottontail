@@ -35,6 +35,34 @@ Especially don't do these things without discussion and approval from the user.
   shards in parallel, but publication into `fluffle->warrens` should follow the
   sanitized `[ Hazel prefix ][ Fiver suffix ]` inventory order.
 
+## SimpleIdx Cache Policy
+
+- Revisit the SimpleIdx posting-cache strategy before making the current
+  disabled eviction path permanent.
+- The old threshold-based large-posting eviction policy can discard expensive
+  decoded postings and depends on size assumptions that do not scale well from
+  smaller indexes to TB-scale shards.
+- If bounded cache behavior is needed, consider replacing the old thresholds
+  with an LRU-style policy or another policy tied more directly to observed
+  memory pressure and reuse.
+
+## GCL Substitute Bindings
+
+- Consider an optimizer-generated GCL operator for staged materialized
+  bindings, tentatively shaped like `(substitute A B C ...)`.
+- Each stage would be evaluated in order and materialized. Later stages can
+  refer to earlier materialized results with `($ 1)`, `($ 2)`, etc.
+- References are reusable bound values, not one-time hoppers passed down a
+  single branch. A materialized result may appear multiple times in later
+  expressions without recomputing the stage.
+- This could express query rewrites such as building a selective
+  `(<< (^ a b) Q)` seed first, then substituting that seed into later
+  refinements, avoiding eager global work on frequent terms inside generic
+  boolean operators.
+- This is a larger design than the current `materialize` wrapper and should be
+  planned before implementation, including reference lifetime, sharing,
+  string/S-expression representation, and how `($ n)` lowers to hoppers.
+
 ## Txt Wrapping
 
 - Revisit `Txt::wrap(...)` and the general wrapper model.

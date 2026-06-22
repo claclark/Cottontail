@@ -2,7 +2,10 @@ load("@rules_cc//cc:defs.bzl", "cc_test")
 
 cc_test(
     name = "tests",
-    srcs = glob(["**/*.cc"], exclude = ["hazel.cc"]) + glob(["**/*.h"]),
+    srcs = glob(["**/*.cc"], exclude = [
+        "hazel.cc",
+        "optimizer.cc",
+    ]) + glob(["**/*.h"]),
     deps = [
         "//src:cottontail",
         "@googletest//:gtest_main",
@@ -28,6 +31,22 @@ cc_test(
     size = "small",
     srcs = [
         "hazel.cc",
+    ],
+    deps = [
+        "//src:cottontail",
+        "@googletest//:gtest_main",
+    ],
+    linkopts = [
+        "-lz",
+        "-pthread",
+    ],
+)
+
+cc_test(
+    name = "optimizer_test",
+    size = "small",
+    srcs = [
+        "optimizer.cc",
     ],
     deps = [
         "//src:cottontail",
