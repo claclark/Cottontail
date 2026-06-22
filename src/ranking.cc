@@ -1,6 +1,7 @@
 #include "src/ranking.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cassert>
 #include <cmath>
 #include <cstdlib>
@@ -12,6 +13,7 @@
 #include <regex>
 #include <set>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "src/cottontail.h"
@@ -304,10 +306,15 @@ top_results(const std::vector<RankingResult> &results0,
 std::vector<RankingResult>
 ssr_ranking(std::shared_ptr<Warren> warren, const std::string &gcl,
             const std::string &container,
-            const std::map<std::string, fval> &parameters, size_t depth) {
+            const std::map<std::string, fval> &parameters, size_t depth,
+            addr start, addr end) {
   fval K = ranking_parameter("ssr", "K", parameters);
   std::vector<RankingResult> top;
   if (depth == 0)
+    return top;
+  if (start == minfinity)
+    start += 1;
+  if (start >= end)
     return top;
   std::string error;
   std::unique_ptr<cottontail::Hopper> hopper =
@@ -320,11 +327,13 @@ ssr_ranking(std::shared_ptr<Warren> warren, const std::string &gcl,
     return top;
   std::vector<RankingResult> current;
   addr p, q, cp, cq;
-  hopper->tau(minfinity + 1, &p, &q);
-  chopper->rho(q, &cp, &cq);
+  chopper->tau(start, &cp, &cq);
+  if (cp >= end)
+    return top;
+  hopper->tau(cp, &p, &q);
   fval score = 0.0;
   fval target = 0.0;
-  while (p < maxfinity && cq < maxfinity) {
+  while (p < maxfinity && cq < maxfinity && cp < end) {
     target = (top.size() == depth ? top[top.size() - 1].score() : 0.0);
     if (p < cp) {
       hopper->tau(cp, &p, &q);
@@ -343,7 +352,7 @@ ssr_ranking(std::shared_ptr<Warren> warren, const std::string &gcl,
       hopper->tau(p + 1, &p, &q);
     }
   }
-  if (score > target)
+  if (score > target && cq < maxfinity && cp < end)
     current.emplace_back(cp, cq, score);
   top = top_results(top, current, depth);
   return top;
@@ -1753,6 +1762,97 @@ bool tf_field_annotations(std::shared_ptr<Warren> warren, std::string *error) {
   if (!warren->set_parameter("statistics", "field", error))
     return false;
   return true;
+}
+
+namespace {
+constexpr addr MINIMUM_PARALLEL_TOKENS = 1000000;
+
+template <typename RankingAlgorithm>
+std::vector<RankingResult>
+parallel_ranking(std::shared_ptr<Warren> warren, const std::string &gcl,
+                 const std::string &container,
+                 const std::map<std::string, fval> &parameters, size_t depth,
+                 size_t threads, RankingAlgorithm ranking_algorithm) {
+  std::vector<RankingResult> top;
+  if (depth == 0)
+    return top;
+  std::string error;
+  std::unique_ptr<Hopper> hopper = warren->hopper_from_gcl(gcl, &error);
+  if (hopper == nullptr)
+    return top;
+  std::unique_ptr<Hopper> chopper = warren->hopper_from_gcl(container, &error);
+  if (chopper == nullptr)
+    return top;
+  addr p, q, z, start, end;
+  chopper->tau(minfinity + 1, &p, &q);
+  if (p == maxfinity)
+    return top;
+  start = p;
+  chopper->ohr(maxfinity - 1, &p, &q);
+  if (p == minfinity)
+    return top;
+  z = (q == maxfinity ? maxfinity : q + 1);
+  if (z <= start)
+    return top;
+  addr span = z - start;
+  threads = allowed_threads(threads);
+  size_t range_threads =
+      std::max<size_t>(1, static_cast<size_t>(span / MINIMUM_PARALLEL_TOKENS));
+  threads = std::min(threads, range_threads);
+  if (threads <= 1)
+    return ranking_algorithm(warren, gcl, container, parameters, depth, start,
+                             z);
+
+  std::vector<std::pair<addr, addr>> ranges;
+  ranges.reserve(threads);
+  for (size_t i = 0; i < threads; i++) {
+    addr n = static_cast<addr>(i);
+    addr d = static_cast<addr>(threads);
+    addr begin = start + (span / d) * n + ((span % d) * n) / d;
+    n++;
+    end = start + (span / d) * n + ((span % d) * n) / d;
+    ranges.emplace_back(begin, end);
+  }
+
+  std::atomic<bool> failed(false);
+  std::vector<std::vector<RankingResult>> rankings(ranges.size());
+  std::vector<std::thread> workers;
+  workers.reserve(ranges.size());
+  for (size_t i = 0; i < ranges.size(); i++)
+    workers.emplace_back(std::thread([&, i] {
+      std::shared_ptr<Warren> local_warren = warren->clone();
+      if (local_warren == nullptr) {
+        failed.store(true, std::memory_order_relaxed);
+        return;
+      }
+      rankings[i] = ranking_algorithm(local_warren, gcl, container, parameters,
+                                      depth, ranges[i].first,
+                                      ranges[i].second);
+      local_warren->end();
+    }));
+  for (auto &worker : workers)
+    worker.join();
+  if (failed.load(std::memory_order_relaxed))
+    return top;
+  for (auto &ranking : rankings)
+    top = top_results(top, ranking, depth);
+  return top;
+}
+} // namespace
+
+std::vector<RankingResult> parallel_ssr(
+    std::shared_ptr<Warren> warren, const std::string &gcl,
+    const std::string &container, const std::map<std::string, fval> &parameters,
+    size_t depth, size_t threads) {
+  return parallel_ranking(
+      warren, gcl, container, parameters, depth, threads,
+      [](std::shared_ptr<Warren> warren, const std::string &gcl,
+         const std::string &container,
+          const std::map<std::string, fval> &parameters, size_t depth,
+          addr start, addr end) {
+        return ssr_ranking(warren, gcl, container, parameters, depth, start,
+                           end);
+      });
 }
 
 } // namespace cottontail

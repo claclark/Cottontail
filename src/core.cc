@@ -5,6 +5,7 @@
 #include <iostream>
 #include <regex>
 #include <string>
+#include <thread>
 
 namespace cottontail {
 bool okay(const std::string &value) {
@@ -33,6 +34,15 @@ addr now() {
   return std::chrono::duration_cast<std::chrono::milliseconds>(
              std::chrono::system_clock::now().time_since_epoch())
       .count();
+}
+
+size_t allowed_threads(size_t desired_threads) {
+  size_t hardware_threads =
+      static_cast<size_t>(std::thread::hardware_concurrency());
+  size_t thread_cap = hardware_threads <= 1 ? 4 : 2 * hardware_threads;
+  if (desired_threads == 0)
+    return thread_cap;
+  return desired_threads < thread_cap ? desired_threads : thread_cap;
 }
 
 std::vector<std::string> split_re(std::string str, std::string pattern) {

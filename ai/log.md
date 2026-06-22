@@ -239,3 +239,10 @@
 2026-06-22T16:26:59Z - Restored the full title-style `apps/gcl-timing` query set headed by `winnie-pooh` and left warmup disabled; verified `bazel build //apps:gcl-timing`.
 2026-06-22T16:58:52Z - Added `ai/gcl-optimizer.md` as a checkpoint for the default-off GCL optimizer/materialize experiment and updated `ai/plan.md` to point future work there.
 2026-06-22T17:00:24Z - Clarified that `apps/gcl-timing.cc` is scratch and made optimizer tests use scoped optimization enablement; verified `bazel build //test:optimizer_test`.
+2026-06-22T21:07:51Z - Added `allowed_threads(...)` in `src/core.*` and changed `trec(...)` to use it before capping workers by query count; verified `bazel build //apps:rank`.
+2026-06-22T21:29:07Z - Added optional `start`/`end` address bounds to `ssr_ranking(...)`, limiting ranked containers by start address while preserving existing defaults; verified `bazel build //apps:rank` and `bazel build //test:tests`.
+2026-06-22T22:00:15Z - Added private `parallel_ranking(...)` range-splitting helper and public `parallel_ssr(...)` wrapper with top-level GCL/container hopper checks and per-thread Warren clones; verified `bazel build //apps:rank` and `bazel build //test:tests`.
+2026-06-22T22:13:36Z - Rewrote scratch `apps/gcl-timing.cc` to run `parallel_ssr(...)` for `(^ black bear attacks)` over `:` containers, report overall ranking time, and print top snippets; verified `bazel build //apps:gcl-timing`.
+2026-06-22T22:22:33Z - Updated scratch `apps/gcl-timing.cc` to run both `(^ black bear attacks)` and `(^ black bear attack)`, printing per-query stdout/stderr headers and per-query ranking timing; verified `bazel build //apps:gcl-timing`.
+2026-06-22T22:27:01Z - Expanded scratch `apps/gcl-timing.cc` with a hot rerun of `(^ black bear attacks)` plus twelve prevention-oriented bear-attack queries; verified `bazel build //apps:gcl-timing`.
+2026-06-22T22:40:00Z - Updated `ai/plan.md` for the next Meadowlark-focused discussion/planning step with no coding until user approval.

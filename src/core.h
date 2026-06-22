@@ -82,6 +82,7 @@ bool okay(const std::string &value);
 std::string okay(bool yes);
 void stamp(std::string label = "");
 addr now();
+size_t allowed_threads(size_t desired_threads);
 std::vector<std::string> split_re(std::string s, std::string pattern = "\\s+");
 std::vector<std::string> split_tsv(const std::string &s,
                                    std::string separator = "\\t");

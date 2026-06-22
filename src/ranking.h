@@ -98,14 +98,31 @@ build_tiers(std::shared_ptr<Warren> warren, const std::string &query,
 std::vector<RankingResult>
 ssr_ranking(std::shared_ptr<Warren> warren, const std::string &gcl,
             const std::string &container,
-            const std::map<std::string, fval> &parameters, size_t depth = 1000);
+            const std::map<std::string, fval> &parameters, size_t depth = 1000,
+            addr start = minfinity, addr end = maxfinity);
 
 inline std::vector<RankingResult> ssr_ranking(std::shared_ptr<Warren> warren,
                                               const std::string &gcl,
                                               const std::string &container,
-                                              size_t depth = 1000) {
+                                              size_t depth = 1000,
+                                              addr start = minfinity,
+                                              addr end = maxfinity) {
   std::map<std::string, fval> parameters;
-  return ssr_ranking(warren, gcl, container, parameters, depth);
+  return ssr_ranking(warren, gcl, container, parameters, depth, start, end);
+}
+
+std::vector<RankingResult> parallel_ssr(
+    std::shared_ptr<Warren> warren, const std::string &gcl,
+    const std::string &container, const std::map<std::string, fval> &parameters,
+    size_t depth = 1000, size_t threads = 0);
+
+inline std::vector<RankingResult> parallel_ssr(std::shared_ptr<Warren> warren,
+                                               const std::string &gcl,
+                                               const std::string &container,
+                                               size_t depth = 1000,
+                                               size_t threads = 0) {
+  std::map<std::string, fval> parameters;
+  return parallel_ssr(warren, gcl, container, parameters, depth, threads);
 }
 
 // Passage ranking based on:

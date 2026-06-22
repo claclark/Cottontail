@@ -376,11 +376,7 @@ bool trec(std::shared_ptr<Warren> warren, const std::string &stats_name,
   std::vector<std::pair<std::string, std::string>> work;
   for (auto &q : queries)
     work.push_back(q);
-  size_t hardware_threads = std::thread::hardware_concurrency();
-  size_t thread_cap = hardware_threads == 0 ? work.size() : 2 * hardware_threads;
-  if (threads == 0)
-    threads = thread_cap;
-  threads = std::min(threads, thread_cap);
+  threads = allowed_threads(threads);
   threads = std::min(threads, work.size());
   bool end_warren = false;
   if (!warren->started()) {
