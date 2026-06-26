@@ -2,6 +2,7 @@
 #define COTTONTAIL_SRC_BUILDER_H_
 
 #include <fstream>
+#include <istream>
 #include <memory>
 #include <queue>
 #include <string>
@@ -123,6 +124,8 @@ bool build_trec(const std::vector<std::string> &text,
                 std::shared_ptr<Builder> builder, std::string *error = nullptr);
 bool build_json(const std::vector<std::string> &text,
                 std::shared_ptr<Builder> builder, std::string *error = nullptr);
+std::unique_ptr<std::istream> maybe_zipped(const std::string &filename,
+                                           std::string *error = nullptr);
 std::shared_ptr<std::string> inhale(const std::string &filename,
                                     std::string *error = nullptr);
 } // namespace cottontail

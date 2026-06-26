@@ -154,7 +154,7 @@ cc_binary(
       "//src:cottontail",
     ],
     linkopts = [
-      "-pthread",
+      "-lreadline -pthread",
     ],
 )
 

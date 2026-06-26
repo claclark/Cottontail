@@ -112,14 +112,14 @@ TEST(Ranking, Algorithms) {
   std::vector<cottontail::RankingResult> results4 =
       cottontail::tiered_ranking(warren, query, container);
   EXPECT_EQ(results4.size(), (size_t) 3);
-  docno->tau(results4[0].p(), &p, &q);
+  docno->tau(results4[0].container_p(), &p, &q);
   topdoc = warren->txt()->translate(p, q);
   EXPECT_EQ(topdoc, "<DOCNO> doc-001 </DOCNO>\n");
   std::string gcl2 = "(^ hello world)";
   std::vector<cottontail::RankingResult> results5 =
       cottontail::ssr_ranking(warren, gcl2, container);
   EXPECT_EQ(results5.size(), (size_t) 1);
-  docno->tau(results5[0].p(), &p, &q);
+  docno->tau(results5[0].container_p(), &p, &q);
   topdoc = warren->txt()->translate(p, q);
   EXPECT_EQ(topdoc, "<DOCNO> doc-001 </DOCNO>\n");
   warren->end();

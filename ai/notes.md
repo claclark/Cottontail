@@ -67,9 +67,10 @@
   before passing it outward. The contained-in/all-of rewrite now materializes
   each nested level. `Link` is the existing precedent for lazy child
   materialization into an array-backed hopper.
-- `apps/gcl-timing` currently skips warmup and uses the title-style query set
-  headed by `(<< (^ winnie the pooh) (# 3))`; the temporary wide-window
-  low-cooccurrence probes remain commented in the app.
+- `apps/gcl-timing` is currently a scratch interactive passage prompt. It opens
+  a burrow, accepts raw GCL/boolean queries, runs `parallel_ssr(...)` over `:`,
+  reports ranking time, and prints 200-token windows with the main cover marked
+  in `<b>...</b>`.
 - `SimpleIdx` posting-cache eviction is currently compiled out with
   `COTTONTAIL_SIMPLE_IDX_CACHE_EJECTION` set to `0`; cached postings remain for
   the life of the `SimpleIdx` unless the idx is reset or destroyed.
@@ -93,6 +94,8 @@
   `--key value` and `--key=value` parameters.
 - `apps/fluffy.cc`: interactive GCL query shell over a burrow or Hazel.
 - `apps/rank.cc`: ranking CLI.
+- `apps/gcl-timing.cc`: scratch interactive ranking/passage prompt; planned to
+  become a server-like passage/query tool.
 - `apps/simple.cc`: build a simple burrow from TREC/MARCO-style corpora.
 - `apps/fiver2hazel.cc`: convert live Fiver shards in a burrow to Hazel shards
   with `--convert`, merge available Hazel shards with `--merge`, and time the
@@ -178,17 +181,22 @@
   `Hazel::sanitize(...)` owns strict Hazel parsing, same-type contained-shard
   cleanup, old sidecar cleanup, private merge sidecar cleanup, and returning
   logical restartable Hazel merge records.
-- Bigwig's sanitizer coordinator combines the inventories into the required
-  `[ Hazel prefix ][ Fiver suffix ]` shape. The final Hazel may shadow leading
-  Fivers at the boundary; those Fivers are deleted so the Hazel wins. Any other
-  mixed Hazel/Fiver overlap or out-of-order Fiver-before-Hazel relationship is
-  rejected.
-- Bigwig startup activates sanitized Hazels before sanitized Fivers, adds both
-  to the Fluffle visible list, and captures started read snapshots as
+- Bigwig's sanitizer coordinator allows mixed Hazel/Fiver order. Fivers covered
+  by Hazels are deleted so the Hazel wins; Fivers containing Hazels and partial
+  mixed overlaps are rejected.
+- Bigwig startup activates sanitized shards in sequence order, adds them to the
+  Fluffle visible list, and captures started read snapshots as
   `std::vector<std::shared_ptr<Owsla>>`.
 - Fluffle owns the sanitized pending Hazel merge recovery list as
-  `hazel_merges`; startup copies it from `SanitizedInventory` for future
-  consolidation-worker restart handling.
+  `hazel_merges`; startup copies it from `SanitizedInventory`. Hazel merge
+  selection reads this list without mutating it, and merge-worker validation
+  clears matching or conflicting recovery records when a Hazel action is
+  accepted.
+- Bigwig merge selection uses a barrier policy. Younger than the barrier it
+  first merges tiny eligible Fiver runs, then oldest eligible adjacent Fiver
+  pairs. Older side, including the barrier, it converts oldest eligible Fivers,
+  then continues recovered Hazel merges or merges the smallest eligible adjacent
+  Hazel pair. Hazel throttling applies only to Hazel actions.
 - `BigwigIdx` composes postings from visible `Owsla` children. Its multi-shard
   path handles empty and single-shard cases directly, merges `text_chunk_tag`
   postings fresh without caching, and uses the captured `OwslaCache` only for
@@ -257,75 +265,15 @@
   With the started-Warren clone invariant, per-thread Warren clones are expected
   to bind to the same read snapshot when cloned from an already-started source
   Warren.
+- SSR-derived ranking results use `p/q` for the best/shortest matching passage
+  and `container_p/container_q` for the ranked container. Wrappers such as
+  `tiered_ranking(...)` must preserve both ranges.
 
-## Current Ranking Measurements
+## Ranking Measurements
 
-- Consolidated performance-shape notes live in `ai/hazel.md`. After 2026-06-07,
-  `Ranking took:` from `apps/rank --verbose` is the max per-worker ranking-loop
-  time, not outer `trec(...)` wall time.
-- `a.meadow/` in the repo root currently contains three large Fivers
-  (`0..11`, `12..37`, `38..58`) plus matching per-Fiver Hazels and merged Hazel
-  `hazel.00000000000000000000.00000000000000000058`.
-- `b.meadow/` currently contains one large Fiver covering `0..58`.
-- User-reported 2026-06-07 MARCO dev small runs with requested `--threads
-  2000`:
-  - merged Hazel from `a.meadow`: max worker ranking loop `12583` ms, wall
-    `0:14.08`, CPU `1523%`, max RSS `5659140` KB, `MRR @10:
-    0.18975923272843034`.
-  - `a.meadow`: max worker ranking loop `25891` ms, wall `1:46.29`, CPU
-    `640%`, max RSS `67673128` KB, same `MRR @10`.
-  - `b.meadow`: max worker ranking loop `6980` ms, wall `1:22.42`, CPU
-    `301%`, max RSS `21804204` KB, `MRR @10: 0.1896242666120888`.
-- These measurements support the Fiver/Hazel blend direction: large Fivers can
-  be very fast once hot but expensive to open and hold in memory; merged Hazel
-  has a slightly slower hot loop on this workload but much lower wall time and
-  memory use.
-- User-reported 2026-06-16 regression/ranking checks after the `OwslaCache`
-  work passed. The three-Fiver `a.meadow` hot ranking loop improved from
-  `25891` ms to about `9.1` seconds with unchanged MRR/query count, while the
-  single-Fiver `b.meadow` path stayed stable at `6706` ms and unchanged
-  MRR/query count.
-
-## Current Bigwig/Hazel Integration Checkpoint
-
-- Hazel writer, standalone activation, Hazel-to-Hazel merge, conversion tools,
-  and dedicated Hazel regression coverage are in place.
-- Fiver and Hazel are both `Owsla` subclasses with concrete
-  `posting(feature)` accessors, cheap cached `estimated_size()` values,
-  `get_sequence(...)`, and `discard(...)`. Hazels without DNA sequence metadata
-  report `-1, -1`.
-- Bigwig startup sanitizes the working directory, activates the sanitized Hazel
-  prefix before the Fiver suffix, and exposes visible children as
-  `std::vector<std::shared_ptr<Owsla>>`.
-- Fluffle owns the visible shard vector, merge-in-progress set, working
-  context, shared `OwslaCache` generation, Warren parameters, and pending
-  sanitized Hazel merge recovery records.
-- `Fiver::hazel(...)` in working-directory form now returns an activated but
-  unstarted Hazel. Its explicit-filename overload remains a bool-returning
-  writer and no longer owns source deletion.
-- `Hazel::merge(hazels, dst, ...)` in activated-source form now returns an
-  activated but unstarted output Hazel. The working/name adapter remains
-  bool-returning for existing callers.
-- `merge_worker(...)` has a single policy extraction point:
-  `find_merge_action(fluffle, &start, &end)`. The worker validates and
-  classifies the recommendation under the Fluffle lock, claims selected shards
-  in `fluffle->merging`, performs work unlocked, publishes the replacement
-  shard under the lock, and discards selected sources only after successful
-  publication.
-- Current policy order is boundary Fiver-to-Hazel conversion when Hazel work is
-  allowed, old small-Fiver run merge, old smallest adjacent Fiver/Fiver merge,
-  then smallest adjacent Hazel/Hazel merge when Hazel work is allowed.
-- Worker retirement now decrements `fluffle->workers` while still holding the
-  lock that observed no usable work or a terminal failure, avoiding a
-  lost-worker race with `try_merge()`.
-- User-reported regression/ranking checks passed across single-Hazel,
-  multi-Hazel, mixed Hazel/Fiver, boundary-shadow cleanup, background suffix
-  consolidation, repeated `build.sh`, repeated create loops, and create-plus
-  forage loops. One intermittent create-ready failure did not reproduce; if it
-  reappears, capture the working-directory file list before running any
-  follow-up command.
-- See `ai/hazel.md` for the consolidated Hazel/Bigwig-Hazel checkpoint and
-  next likely follow-ups.
+- Consolidated historical performance-shape notes live in `ai/hazel.md`.
+- `apps/rank --verbose` reports the max per-worker ranking-loop time, not outer
+  `trec(...)` wall time.
 
 ## Current Local Worktree Notes
 

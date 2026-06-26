@@ -882,7 +882,7 @@ Fiver::unpickle(const std::string &filename, std::shared_ptr<Working> working,
     std::shared_ptr<SimplePosting> posting = factory->posting_from_file(&jar);
     if (posting == nullptr)
       break;
-    total_annotations += sizeof(Annotation) * posting->size();
+    total_annotations += posting->size();
     (*fiver->index_)[posting->feature()] = posting;
   }
   jar.close();

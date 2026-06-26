@@ -1,31 +1,19 @@
 #include <algorithm>
+#include <cstdlib>
 #include <iostream>
 #include <memory>
 #include <string>
 #include <vector>
 
+#include <readline/history.h>
+#include <readline/readline.h>
+
 #include "src/cottontail.h"
 
 namespace {
 
-constexpr cottontail::addr SNIPPET_TOKENS = 100;
-const std::vector<std::string> QUERIES = {
-    "(^ black bear attacks)",
-    "(^ black bear attack)",
-    "(^ black bear attacks)",
-    "(^ prevent black bear attacks)",
-    "(^ preventing black bear attacks)",
-    "(^ avoid black bear attacks)",
-    "(^ bear spray)",
-    "(^ bear spray black bears)",
-    "(^ bear resistant containers)",
-    "(^ bear proof garbage)",
-    "(^ secure garbage bears)",
-    "(^ keep food away from bears)",
-    "(^ store food away from bears)",
-    "(^ avoid surprising bears)",
-    "(^ make noise bears)",
-};
+constexpr cottontail::addr WINDOW_TOKENS = 200;
+constexpr size_t DEPTH = 20;
 const std::string CONTAINER = ":";
 
 void usage(const std::string &program_name) {
@@ -41,16 +29,59 @@ std::shared_ptr<cottontail::Warren> activate(const std::string &burrow,
   return warren;
 }
 
-std::string snippet(std::shared_ptr<cottontail::Warren> warren,
-                    const cottontail::RankingResult &result) {
-  cottontail::addr p = result.container_p();
-  cottontail::addr q = result.container_q();
-  if (p <= q && q - p + 1 > SNIPPET_TOKENS)
-    q = p + SNIPPET_TOKENS - 1;
-  std::string text = warren->txt()->translate(p, q);
+std::string clean_passage(std::string text) {
   std::replace(text.begin(), text.end(), '\n', ' ');
   std::replace(text.begin(), text.end(), '\r', ' ');
   return text;
+}
+
+std::string translate_passage(std::shared_ptr<cottontail::Warren> warren,
+                              cottontail::addr p, cottontail::addr q) {
+  return clean_passage(warren->txt()->translate(p, q));
+}
+
+std::string highlighted_passage(std::shared_ptr<cottontail::Warren> warren,
+                                cottontail::addr start, cottontail::addr end,
+                                cottontail::addr highlight_start,
+                                cottontail::addr highlight_end) {
+  if (highlight_start < start || highlight_end > end ||
+      highlight_start > highlight_end)
+    return translate_passage(warren, start, end);
+  std::string text;
+  if (start < highlight_start)
+    text += translate_passage(warren, start, highlight_start - 1);
+  text += "<b>";
+  text += translate_passage(warren, highlight_start, highlight_end);
+  text += "</b>";
+  if (highlight_end < end)
+    text += translate_passage(warren, highlight_end + 1, end);
+  return text;
+}
+
+std::string passage(std::shared_ptr<cottontail::Warren> warren,
+                    const cottontail::RankingResult &result) {
+  cottontail::addr cp = result.container_p();
+  cottontail::addr cq = result.container_q();
+  cottontail::addr p = result.p();
+  cottontail::addr q = result.q();
+  if (cq - cp + 1 <= WINDOW_TOKENS)
+    return highlighted_passage(warren, cp, cq, p, q);
+  if (q - p + 1 >= WINDOW_TOKENS)
+    return highlighted_passage(warren, p, q, p, q);
+  cottontail::addr extra = WINDOW_TOKENS - (q - p + 1);
+  cottontail::addr start = p - extra / 2;
+  cottontail::addr end = q + extra - extra / 2;
+  if (start < cp) {
+    end += cp - start;
+    start = cp;
+  }
+  if (end > cq) {
+    start -= end - cq;
+    end = cq;
+    if (start < cp)
+      start = cp;
+  }
+  return highlighted_passage(warren, start, end, p, q);
 }
 
 } // namespace
@@ -82,17 +113,29 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  for (const auto &query : QUERIES) {
-    std::cout << "QUERY: " << query << "\n";
-    std::cerr << "QUERY: " << query << "\n";
-    std::cerr << "Ranking started...\n";
+  char *line;
+  std::vector<cottontail::RankingResult> ranking;
+  size_t next_result = 0;
+  auto print_next = [&]() {
+    if (next_result < ranking.size()) {
+      std::cout << passage(warren, ranking[next_result++]) << "\n";
+      std::cout.flush();
+    }
+  };
+  while ((line = readline(">> ")) != nullptr) {
+    std::string query = line;
+    std::free(line);
+    if (query.empty()) {
+      print_next();
+      continue;
+    }
+    add_history(query.c_str());
     cottontail::addr start = cottontail::now();
-    std::vector<cottontail::RankingResult> ranking =
-        cottontail::parallel_ssr(warren, query, CONTAINER, 10);
+    ranking = cottontail::parallel_ssr(warren, query, CONTAINER, DEPTH);
     cottontail::addr elapsed = cottontail::now() - start;
     std::cerr << "Ranking took: " << elapsed << " millisecond(s)\n";
-    for (const auto &result : ranking)
-      std::cout << snippet(warren, result) << "\n";
+    next_result = 0;
+    print_next();
   }
 
   warren->end();

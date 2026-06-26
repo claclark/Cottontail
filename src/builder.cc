@@ -2,10 +2,13 @@
 
 #include <array>
 #include <cassert>
+#include <cstdio>
 #include <exception>
 #include <iostream>
+#include <istream>
 #include <memory>
 #include <regex>
+#include <streambuf>
 #include <string>
 #include <vector>
 
@@ -28,77 +31,124 @@ inline bool has_zcat_extension(const std::string &filename) {
          has_extension(filename, ".2z");
 }
 
-std::shared_ptr<std::string> inhale_with_zcat(const std::string &filename,
-                                              std::string *error, bool *okay) {
-  // All this is pretty ugly..
-  // ...and won't work at all on things that aren't fairly unix-like.
-  // TODO: replace with a call to a library function?
-  if (!has_zcat_extension(filename))
-    return nullptr;
-  // If zcat is not in a typical location, refuse to use it.
-  std::string zcat_command;
-  FILE *fp = fopen("/usr/bin/zcat", "r");
-  if (fp) {
-    fclose(fp);
-    zcat_command = "/usr/bin/zcat " + filename;
-  } else {
-    fp = fopen("/bin/zcat", "r");
-    if (!fp) {
-      safe_error(error) = "Can't find zcat in any of the usual places";
-      safe_set(okay) = false;
-      fclose(fp);
-      return nullptr;
-    }
-    fclose(fp);
-    zcat_command = "/bin/zcat " + filename;
+std::string shell_quote(const std::string &s) {
+  std::string quoted = "'";
+  for (char c : s) {
+    if (c == '\'')
+      quoted += "'\\''";
+    else
+      quoted += c;
   }
-  FILE *pipe = popen(zcat_command.c_str(), "r");
-  if (!pipe) {
-    safe_error(error) = "Can't run zcat command: " + zcat_command;
-    safe_set(okay) = false;
-    return nullptr;
-  }
-  std::shared_ptr<std::string> contents = std::make_shared<std::string>();
-  const size_t buffer_size = 256 * 1024;
-  std::array<char, buffer_size> buffer;
-  while (fgets(buffer.data(), buffer_size, pipe) != NULL)
-    (*contents) += buffer.data();
-  pclose(pipe);
-  return contents;
+  quoted += "'";
+  return quoted;
 }
 
-std::shared_ptr<std::string>
-inhale_assuming_uncompressed(const std::string &filename, std::string *error) {
-  FILE *fp = fopen(filename.c_str(), "r");
-  if (!fp) {
-    safe_error(error) = "Can't open: " + filename;
-    return nullptr;
+bool zcat(std::string *path) {
+  FILE *fp = fopen("/usr/bin/zcat", "r");
+  if (fp != nullptr) {
+    fclose(fp);
+    *path = "/usr/bin/zcat";
+    return true;
   }
-  std::shared_ptr<std::string> contents = std::make_shared<std::string>();
-  const size_t buffer_size = 256 * 1024;
-  std::array<char, buffer_size> buffer;
-  while (fgets(buffer.data(), buffer_size, fp) != NULL)
-    (*contents) += buffer.data();
-  fclose(fp);
-  return contents;
+  fp = fopen("/bin/zcat", "r");
+  if (fp != nullptr) {
+    fclose(fp);
+    *path = "/bin/zcat";
+    return true;
+  }
+  return false;
 }
+
+class FileStreamBuffer final : public std::streambuf {
+public:
+  FileStreamBuffer(FILE *file, bool pipe) : file_(file), pipe_(pipe) {}
+  ~FileStreamBuffer() final { close(); }
+
+protected:
+  int_type underflow() final {
+    if (gptr() < egptr())
+      return traits_type::to_int_type(*gptr());
+    if (file_ == nullptr)
+      return traits_type::eof();
+    size_t count = fread(buffer_.data(), 1, buffer_.size(), file_);
+    if (count == 0)
+      return traits_type::eof();
+    setg(buffer_.data(), buffer_.data(), buffer_.data() + count);
+    return traits_type::to_int_type(*gptr());
+  }
+
+private:
+  void close() {
+    if (file_ == nullptr)
+      return;
+    if (pipe_)
+      pclose(file_);
+    else
+      fclose(file_);
+    file_ = nullptr;
+  }
+
+  FILE *file_;
+  bool pipe_;
+  static constexpr size_t BUFFER_SIZE = 256 * 1024;
+  std::array<char, BUFFER_SIZE> buffer_;
+};
+
+class FileInputStream final : public std::istream {
+public:
+  FileInputStream(FILE *file, bool pipe)
+      : std::istream(nullptr), buffer_(file, pipe) {
+    rdbuf(&buffer_);
+  }
+
+private:
+  FileStreamBuffer buffer_;
+};
 
 } // namespace
 
-std::shared_ptr<std::string> inhale(const std::string &filename,
-                                    std::string *error) {
+std::unique_ptr<std::istream> maybe_zipped(const std::string &filename,
+                                           std::string *error) {
   FILE *fp = fopen(filename.c_str(), "r");
   if (!fp) {
     safe_error(error) = "Could not access: " + filename;
     return nullptr;
   }
+  if (!has_zcat_extension(filename))
+    return std::make_unique<FileInputStream>(fp, false);
   fclose(fp);
-  bool okay = true;
-  std::shared_ptr<std::string> contents =
-      inhale_with_zcat(filename, error, &okay);
-  if (contents || !okay)
-    return contents;
-  return inhale_assuming_uncompressed(filename, error);
+  // All this is pretty ugly..
+  // ...and won't work at all on things that aren't fairly unix-like.
+  // TODO: replace with a call to a library function?
+  std::string zcat_path;
+  if (!zcat(&zcat_path)) {
+    safe_error(error) = "Can't find zcat in any of the usual places";
+    return nullptr;
+  }
+  std::string zcat_command = zcat_path + " " + shell_quote(filename);
+  FILE *pipe = popen(zcat_command.c_str(), "r");
+  if (!pipe) {
+    safe_error(error) = "Can't run zcat command: " + zcat_command;
+    return nullptr;
+  }
+  return std::make_unique<FileInputStream>(pipe, true);
+}
+
+std::shared_ptr<std::string> inhale(const std::string &filename,
+                                    std::string *error) {
+  std::unique_ptr<std::istream> input = maybe_zipped(filename, error);
+  if (input == nullptr)
+    return nullptr;
+  std::shared_ptr<std::string> contents = std::make_shared<std::string>();
+  const size_t buffer_size = 256 * 1024;
+  std::array<char, buffer_size> buffer;
+  while (input->read(buffer.data(), buffer.size()) || input->gcount() > 0)
+    contents->append(buffer.data(), input->gcount());
+  if (input->bad()) {
+    safe_error(error) = "Error reading: " + filename;
+    return nullptr;
+  }
+  return contents;
 }
 
 bool build_trec(const std::vector<std::string> &text,

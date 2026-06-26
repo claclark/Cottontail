@@ -14,6 +14,7 @@
 
 #include "meadowlark/forager.h"
 #include "src/bigwig.h"
+#include "src/builder.h"
 #include "src/core.h"
 #include "src/json.h"
 #include "src/warren.h"
@@ -96,11 +97,9 @@ bool append_jsonl(std::shared_ptr<Warren> warren, const std::string &filename,
   assert(warren != nullptr);
   if (threads == 0)
     threads = std::thread::hardware_concurrency() + 1;
-  std::ifstream f(filename, std::istream::in);
-  if (f.fail()) {
-    safe_set(error) = "Cannot open: " + filename;
+  std::unique_ptr<std::istream> input = maybe_zipped(filename, error);
+  if (input == nullptr)
     return false;
-  }
   addr path_feature;
   if (!append_path(warren, filename, &path_feature, error))
     return false;
@@ -141,9 +140,9 @@ bool append_jsonl(std::shared_ptr<Warren> warren, const std::string &filename,
         std::lock_guard<std::mutex> _(sync);
         if (done)
           break;
-        if (!std::getline(f, line)) {
+        if (!std::getline(*input, line)) {
           done = true;
-          if (!f.eof()) {
+          if (!input->eof()) {
             *error = "Read error on: " + filename;
             failed = true;
             return;

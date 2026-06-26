@@ -254,7 +254,9 @@ tiered_ranking(std::shared_ptr<Warren> warren,
           container_seen.end()) {
         container_seen.insert(ranking[i].container_p());
         fval fake_score = depth - top.size();
-        top.emplace_back(ranking[i].p(), ranking[i].q(), fake_score);
+        top.emplace_back(ranking[i].p(), ranking[i].q(),
+                         ranking[i].container_p(), ranking[i].container_q(),
+                         fake_score);
       }
     if (top.size() == depth)
       break;
@@ -333,27 +335,33 @@ ssr_ranking(std::shared_ptr<Warren> warren, const std::string &gcl,
   hopper->tau(cp, &p, &q);
   fval score = 0.0;
   fval target = 0.0;
+  addr best_p = maxfinity, best_q = maxfinity;
   while (p < maxfinity && cq < maxfinity && cp < end) {
     target = (top.size() == depth ? top[top.size() - 1].score() : 0.0);
     if (p < cp) {
       hopper->tau(cp, &p, &q);
     } else if (q > cq) {
       if (score > target) {
-        current.emplace_back(cp, cq, score);
+        current.emplace_back(best_p, best_q, cp, cq, score);
         if (current.size() == depth) {
           top = top_results(top, current, depth);
           current.clear();
         }
       }
       score = 0.0;
+      best_p = best_q = maxfinity;
       chopper->rho(q, &cp, &cq);
     } else {
       score += 1.0 / (K + q - p);
+      if (best_p == maxfinity || q - p < best_q - best_p) {
+        best_p = p;
+        best_q = q;
+      }
       hopper->tau(p + 1, &p, &q);
     }
   }
   if (score > target && cq < maxfinity && cp < end)
-    current.emplace_back(cp, cq, score);
+    current.emplace_back(best_p, best_q, cp, cq, score);
   top = top_results(top, current, depth);
   return top;
 }
