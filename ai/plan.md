@@ -1,5 +1,7 @@
 # Current Plan
 
+No coding without discussion and confirmation from the user.
+
 Finish Meadowlark.
 
 Next work, in no particular order:

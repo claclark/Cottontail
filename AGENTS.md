@@ -10,6 +10,10 @@ development of Cottontail, but of course anyone is free to look around.
 
 All agent documentation lives in the `ai/` directory.
 
+No coding before discussion and confirmation with the user. If you ever
+find yourself calling something a "side car" you are probably breaking
+an abstraction.  Stop and talk with the user.
+
 ## Before Doing Any Work
 
 Read:
