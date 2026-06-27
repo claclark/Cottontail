@@ -2,12 +2,18 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cstdio>
+#include <cstdlib>
+#include <fstream>
 #include <map>
 #include <memory>
 #include <regex>
 #include <set>
+#include <sstream>
 #include <string>
+#include <sys/stat.h>
 #include <thread>
+#include <unistd.h>
 #include <vector>
 
 #include "src/annotator.h"
@@ -340,10 +346,45 @@ bool combine_shards(std::shared_ptr<Working> working,
   return true;
 }
 
+std::string shell_quote(const std::string &s) {
+  std::string quoted = "'";
+  for (char c : s) {
+    if (c == '\'')
+      quoted += "'\\''";
+    else
+      quoted += c;
+  }
+  quoted += "'";
+  return quoted;
+}
+
+bool is_commit_script(const std::string &name) {
+  return name.size() > 10 && name.compare(0, 7, "commit.") == 0 &&
+         name.compare(name.size() - 3, 3, ".sh") == 0;
+}
+
+bool finalize_commits(std::shared_ptr<Working> working, std::string *error) {
+  if (working == nullptr)
+    return true;
+  for (auto &name : working->ls("commit")) {
+    if (!is_commit_script(name))
+      continue;
+    std::string command = shell_quote(working->make_name(name));
+    if (std::system(command.c_str()) != 0) {
+      safe_error(error) = "Could not finalize commit script: " + name;
+      return false;
+    }
+    if (!working->remove(name, error))
+      return false;
+  }
+  return true;
+}
+
 bool sanitize(std::shared_ptr<Working> working, SanitizedInventory *inventory,
               std::string *error) {
   SanitizedInventory found;
-  if (!Fiver::sanitize(working, &found.fivers, error) ||
+  if (!finalize_commits(working, error) ||
+      !Fiver::sanitize(working, &found.fivers, error) ||
       !Hazel::sanitize(working, &found.hazels, &found.hazel_merges, error) ||
       !combine_shards(working, &found, error))
     return false;
@@ -1284,6 +1325,52 @@ void Bigwig::commit_() {
   annotator_ = nullptr;
   fiver_ = nullptr;
   try_merge();
+}
+
+bool Bigwig::commit_all(std::vector<std::shared_ptr<Bigwig>> bigwigs) {
+  if (bigwigs.size() == 0)
+    return true;
+  std::shared_ptr<Working> working = bigwigs[0]->working();
+  if (working == nullptr)
+    return false;
+  for (auto &bigwig : bigwigs)
+    if (bigwig == nullptr || bigwig->working() != working)
+      return false;
+  std::string temp_name = working->make_temp("commit");
+  std::ofstream script(temp_name);
+  if (script.fail())
+    return false;
+  script << "#!/bin/sh\n";
+  for (auto &bigwig : bigwigs) {
+    assert(bigwig->fiver_ != nullptr);
+    std::string command =
+        bigwig->fiver_ == nullptr ? "" : bigwig->fiver_->commit_command();
+    script << command;
+    if (command.size() == 0 || command.back() != '\n')
+      script << "\n";
+  }
+  script.close();
+  if (script.fail()) {
+    std::remove(temp_name.c_str());
+    return false;
+  }
+  if (chmod(temp_name.c_str(), 0700) != 0) {
+    std::remove(temp_name.c_str());
+    return false;
+  }
+  std::ostringstream name;
+  name << "commit." << bigwigs[0].get() << ".sh";
+  std::string commit_name = name.str();
+  std::string commit_path = working->make_name(commit_name);
+  if (link(temp_name.c_str(), commit_path.c_str()) != 0) {
+    std::remove(temp_name.c_str());
+    return false;
+  }
+  std::remove(temp_name.c_str());
+  for (auto &bigwig : bigwigs)
+    bigwig->commit();
+  working->remove(commit_name);
+  return true;
 }
 
 void Bigwig::abort_() {

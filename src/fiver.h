@@ -40,6 +40,7 @@ public:
                        std::string *error = nullptr);
   bool pickle(const std::string &filename, std::string *error = nullptr);
   bool pickle(std::string *error = nullptr);
+  std::string commit_command();
   bool discard(std::string *error = nullptr) final;
   std::shared_ptr<Hazel> hazel(std::string *error = nullptr,
                                addr text_chunk_size = 64 * 1024,

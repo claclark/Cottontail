@@ -37,6 +37,7 @@ public:
     return make(working, featurizer, tokenizer, fluffle, error,
                 posting_compressor, fvalue_compressor, text_compressor);
   };
+  static bool commit_all(std::vector<std::shared_ptr<Bigwig>> bigwigs);
   void merge(bool on = true);
 
   virtual ~Bigwig(){};

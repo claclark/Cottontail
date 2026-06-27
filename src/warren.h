@@ -4,6 +4,7 @@
 #include <cassert>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "src/annotator.h"
 #include "src/appender.h"
@@ -28,6 +29,7 @@ public:
                                       std::string *error = nullptr);
   static std::shared_ptr<Warren> make(const std::string &burrow,
                                       std::string *error = nullptr);
+  static void commit_all(std::vector<std::shared_ptr<Warren>> warrens);
   Warren(std::shared_ptr<Working> working,
          std::shared_ptr<Featurizer> featurizer,
          std::shared_ptr<Tokenizer> tokenizer, std::shared_ptr<Idx> idx,

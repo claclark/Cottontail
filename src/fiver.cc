@@ -458,6 +458,18 @@ bool remove_names(std::shared_ptr<Working> working,
   return true;
 }
 
+std::string shell_quote(const std::string &s) {
+  std::string quoted = "'";
+  for (char c : s) {
+    if (c == '\'')
+      quoted += "'\\''";
+    else
+      quoted += c;
+  }
+  quoted += "'";
+  return quoted;
+}
+
 } // namespace
 
 bool Fiver::sanitize(std::shared_ptr<Working> working,
@@ -623,6 +635,19 @@ void Fiver::get_sequence(addr *start, addr *end) const {
 
 std::string Fiver::recipe_() {
   return seq2str(sequence_start_) + "." + seq2str(sequence_end_);
+}
+
+std::string Fiver::commit_command() {
+  assert(!built_ && working() != nullptr);
+  if (built_ || working() == nullptr)
+    return "";
+  std::string ready_name = working()->make_name(name() + "." + recipe());
+  std::string final_name = working()->make_name("fiver." + recipe());
+  assert(access(ready_name.c_str(), F_OK) == 0);
+  if (access(ready_name.c_str(), F_OK) != 0)
+    return "";
+  return "mv -n " + shell_quote(ready_name) + " " + shell_quote(final_name) +
+         " 2>/dev/null; rm -f " + shell_quote(ready_name);
 }
 
 bool Fiver::transaction_(std::string *error = nullptr) {

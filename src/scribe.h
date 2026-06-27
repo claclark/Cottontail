@@ -3,6 +3,7 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "src/annotator.h"
 #include "src/appender.h"
@@ -20,6 +21,7 @@ public:
                                       std::string *error = nullptr);
   static std::shared_ptr<Scribe> make(std::shared_ptr<Builder> builder,
                                       std::string *error = nullptr);
+  static void commit_all(std::vector<std::shared_ptr<Scribe>> scribes);
   inline std::shared_ptr<Featurizer> featurizer() { return featurizer_(); };
   inline std::shared_ptr<Annotator> annotator() { return annotator_(); };
   inline std::shared_ptr<Appender> appender() { return appender_(); };

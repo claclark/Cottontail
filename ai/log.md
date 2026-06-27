@@ -261,3 +261,7 @@
 2026-06-26T18:25:52Z - Preserved container ranges when `tiered_ranking(...)` forwards SSR results and updated ranking tests to inspect SSR containers explicitly; verified `bazel build //test:tests`.
 2026-06-26T18:59:53Z - Updated AI planning and notes for the next Meadowlark work queue, current Bigwig mixed-shard/barrier policy, SSR passage/container semantics, and the current scratch `apps/gcl-timing` shape.
 2026-06-27T12:22:49Z - Propagated `ready(error)` through the `Committable` virtual hook and the Bigwig/Fiver/Scribe/Forager ready paths so failures report from the component that detects them; verified compile-only builds.
+2026-06-27T15:29:29Z - Added restart detection and verbose skip/append status for `meadowlark::append_jsonl(...)`; verified `bazel build //apps:meadowlark`.
+2026-06-27T19:25:54Z - Added Scribe-level coordinated commit routing for Warren-backed scribes and kept `append_jsonl(...)` on the Scribe transaction/finalize lifecycle; verified `bazel build //src:cottontail //apps:meadowlark` and `bazel build //apps:jsonl //apps:wikidata-build`.
+2026-06-27T19:34:34Z - Added `ai/meadowlark.md` with the planned common Meadowlark append lifecycle, future JSONL/TSV/text/code ingestion surfaces, and inconsistencies left after today's JSONL-focused changes.
+2026-06-27T19:44:54Z - Added a Codex-labeled README section summarizing why annotative indexing may be useful for agents that can generate precise structural queries over code and text.

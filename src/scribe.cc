@@ -62,6 +62,8 @@ public:
   WarrenScribe &operator=(const WarrenScribe &) = delete;
   WarrenScribe(WarrenScribe &&) = delete;
   WarrenScribe &operator=(WarrenScribe &&) = delete;
+  std::shared_ptr<Warren> warren() { return warren_; }
+  void mark_committed() { committed_ = true; }
 
 private:
   std::shared_ptr<Featurizer> featurizer_() final {
@@ -75,13 +77,22 @@ private:
   };
   bool finalize_(std::string *error) final { return true; }
   bool transaction_(std::string *error) final {
+    committed_ = false;
     return warren_->transaction(error);
   };
   bool ready_(std::string *error) final { return warren_->ready(error); };
-  void commit_() final { warren_->commit(); };
-  void abort_() final { warren_->abort(); };
+  void commit_() final {
+    if (!committed_)
+      warren_->commit();
+    committed_ = false;
+  };
+  void abort_() final {
+    committed_ = false;
+    warren_->abort();
+  };
 
   std::shared_ptr<Warren> warren_;
+  bool committed_ = false;
 };
 
 class BuilderAnnotator : public Annotator {
@@ -221,6 +232,25 @@ std::shared_ptr<Scribe> Scribe::make(std::shared_ptr<Builder> builder,
     return nullptr;
   }
   return std::shared_ptr<Scribe>(new BuilderScribe(builder));
+}
+
+void Scribe::commit_all(std::vector<std::shared_ptr<Scribe>> scribes) {
+  std::vector<std::shared_ptr<WarrenScribe>> warren_scribes;
+  std::vector<std::shared_ptr<Warren>> warrens;
+  for (auto &scribe : scribes) {
+    auto warren_scribe = std::dynamic_pointer_cast<WarrenScribe>(scribe);
+    if (warren_scribe == nullptr)
+      break;
+    warren_scribes.push_back(warren_scribe);
+    warrens.push_back(warren_scribe->warren());
+  }
+  if (warren_scribes.size() == scribes.size()) {
+    Warren::commit_all(warrens);
+    for (auto &scribe : warren_scribes)
+      scribe->mark_committed();
+  }
+  for (auto &scribe : scribes)
+    scribe->commit();
 }
 
 bool scribe_files(const std::vector<std::string> &filenames,

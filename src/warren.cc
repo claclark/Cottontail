@@ -139,6 +139,22 @@ std::shared_ptr<Warren> Warren::make(const std::string &burrow,
   return Warren::make(name, burrow, error);
 }
 
+void Warren::commit_all(std::vector<std::shared_ptr<Warren>> warrens) {
+  std::vector<std::shared_ptr<Bigwig>> bigwigs;
+  for (auto &warren : warrens) {
+    if (warren == nullptr || warren->name() != "bigwig")
+      break;
+    auto bigwig = std::dynamic_pointer_cast<Bigwig>(warren);
+    if (bigwig == nullptr)
+      break;
+    bigwigs.push_back(bigwig);
+  }
+  if (bigwigs.size() == warrens.size() && Bigwig::commit_all(bigwigs))
+    return;
+  for (auto &warren : warrens)
+    warren->commit();
+}
+
 std::shared_ptr<Warren> Warren::clone_(std::string *error) {
   safe_error(error) = "Warren type does not support cloning: " + name();
   return nullptr;
