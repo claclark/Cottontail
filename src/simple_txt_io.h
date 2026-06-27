@@ -50,7 +50,7 @@ private:
       : nameof_contents_(nameof_contents), nameof_chunk_map_(nameof_chunk_map),
         chunk_size_(chunk_size), compressor_(compressor){};
   bool transaction_(std::string *error = nullptr) final;
-  bool ready_() final;
+  bool ready_(std::string *error) final;
   void commit_() final;
   void abort_() final;
   void fetch_chunk(size_t chunk_index_);

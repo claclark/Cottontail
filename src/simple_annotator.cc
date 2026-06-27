@@ -281,13 +281,17 @@ void SimpleAnnotator::cleanup_temporary_files() {
   added_files_.push_back(pst_filename_);
 }
 
-bool SimpleAnnotator::ready_() {
+bool SimpleAnnotator::ready_(std::string *error) {
   lock_.lock();
   if (isready_) {
     lock_.unlock();
     return true;
   }
   if (failed_ || !adding_) {
+    if (failed_)
+      safe_error(error) = "SimpleAnnotator in failed state";
+    else
+      safe_error(error) = "SimpleAnnotator not in transaction";
     lock_.unlock();
     return false;
   }
@@ -297,6 +301,7 @@ bool SimpleAnnotator::ready_() {
     cleanup_temporary_files();
     failed_ = true;
     adding_ = false;
+    safe_error(error) = "SimpleAnnotator cannot create temporary files";
     lock_.unlock();
     return false;
   }
@@ -307,6 +312,7 @@ bool SimpleAnnotator::ready_() {
     cleanup_temporary_files();
     std::remove(tmp_idx_filename.c_str());
     std::remove(tmp_pst_filename.c_str());
+    safe_error(error) = "SimpleAnnotator cannot merge updates";
     lock_.unlock();
     return false;
   }
@@ -315,6 +321,7 @@ bool SimpleAnnotator::ready_() {
   if (std::rename(tmp_idx_filename.c_str(), new_idx_filename.c_str())) {
     std::remove(tmp_idx_filename.c_str());
     std::remove(tmp_pst_filename.c_str());
+    safe_error(error) = "SimpleAnnotator cannot publish idx update";
     lock_.unlock();
     return false;
   }
@@ -322,6 +329,7 @@ bool SimpleAnnotator::ready_() {
   if (std::rename(tmp_pst_filename.c_str(), new_pst_filename.c_str())) {
     std::remove(new_idx_filename.c_str());
     std::remove(tmp_pst_filename.c_str());
+    safe_error(error) = "SimpleAnnotator cannot publish posting update";
     lock_.unlock();
     return false;
   }

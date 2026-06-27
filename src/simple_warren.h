@@ -38,7 +38,7 @@ private:
   bool get_parameter_(const std::string &key, std::string *value,
                       std::string *error) final;
   bool transaction_(std::string *error) final;
-  bool ready_() final;
+  bool ready_(std::string *error) final;
   void commit_() final;
   void abort_() final;
 };

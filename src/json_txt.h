@@ -30,7 +30,7 @@ private:
   JsonTxt(){};
   std::shared_ptr<Txt> txt_;
   bool transaction_(std::string *error) final;
-  bool ready_() final;
+  bool ready_(std::string *error) final;
   void commit_() final;
   void abort_() final;
   std::string name_() final;

@@ -25,6 +25,7 @@ public:
       lock_.unlock();
       return false;
     }
+    readied_ = vote_ = false;
     started_ = transaction_(error);
     bool result = started_;
     lock_.unlock();
@@ -32,17 +33,19 @@ public:
   }
   inline bool ready(std::string *error = nullptr) {
     lock_.lock();
-    assert(started_);
+    if (!started_) {
+      safe_error(error) = "Commitable not in transaction.";
+      lock_.unlock();
+      return false;
+    }
     bool result;
     if (readied_) {
       result = vote_;
     } else {
       readied_ = true;
-      vote_ = ready_();
+      vote_ = ready_(error);
       result = vote_;
     }
-    if (!result)
-      safe_error(error) = "Transaction cannot be commited.";
     lock_.unlock();
     return result;
   }
@@ -74,7 +77,11 @@ private:
     safe_error(error) = "Committable does not support transactions";
     return false;
   };
-  virtual bool ready_() { return false; };
+  virtual bool ready_(std::string *error) {
+    assert(false);
+    safe_error(error) = "Committable missing ready operation";
+    return false;
+  };
   virtual void commit_() { return; };
   virtual void abort_() { return; };
 };

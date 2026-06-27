@@ -44,7 +44,7 @@ private:
   };
   bool finalize_(std::string *error) final { return true; };
   bool transaction_(std::string *error) final { return true; };
-  bool ready_() final { return true; };
+  bool ready_(std::string *error) final { return true; };
   void commit_() final { return; };
   void abort_() final { return; };
 
@@ -77,7 +77,7 @@ private:
   bool transaction_(std::string *error) final {
     return warren_->transaction(error);
   };
-  bool ready_() final { return warren_->ready(); };
+  bool ready_(std::string *error) final { return warren_->ready(error); };
   void commit_() final { warren_->commit(); };
   void abort_() final { warren_->abort(); };
 
@@ -117,7 +117,7 @@ private:
     return true;
   };
   bool transaction_(std::string *error) final { return true; };
-  bool ready_() final { return true; };
+  bool ready_(std::string *error) final { return true; };
   void commit_() final { builder_ = nullptr; };
   void abort_() final { builder_ = nullptr; };
 
@@ -156,7 +156,7 @@ private:
     return builder_->add_text(text, p, q, error);
   };
   bool transaction_(std::string *error) final { return true; };
-  bool ready_() final { return true; };
+  bool ready_(std::string *error) final { return true; };
   void commit_() final { builder_ = nullptr; };
   void abort_() final { builder_ = nullptr; };
 
@@ -190,7 +190,7 @@ private:
   };
   bool finalize_(std::string *error) { return builder_->finalize(error); }
   bool transaction_(std::string *error) final { return true; };
-  bool ready_() final { return true; };
+  bool ready_(std::string *error) final { return true; };
   void commit_() final { return; };
   void abort_() final { return; };
 

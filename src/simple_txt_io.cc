@@ -467,7 +467,7 @@ bool SimpleTxtIO::transaction_(std::string *error) {
   return true;
 }
 
-bool SimpleTxtIO::ready_() {
+bool SimpleTxtIO::ready_(std::string *error) {
   flush();
   return true;
 }

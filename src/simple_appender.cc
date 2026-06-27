@@ -308,9 +308,13 @@ bool SimpleAppender::transaction_(std::string *error) {
   return true;
 }
 
-bool SimpleAppender::ready_() {
+bool SimpleAppender::ready_(std::string *error) {
   lock_.lock();
-  bool result = !failed_ && adding_ && io_->ready();
+  bool result = !failed_ && adding_ && io_->ready(error);
+  if (!result && !failed_ && !adding_)
+    safe_error(error) = "SimpleAppender not in transaction";
+  else if (!result && failed_)
+    safe_error(error) = "SimpleAppender in failed state";
   lock_.unlock();
   return result;
 }

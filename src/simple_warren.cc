@@ -160,8 +160,8 @@ bool SimpleWarren::transaction_(std::string *error) {
   return true;
 }
 
-bool SimpleWarren::ready_() {
-  return appender_->ready() && annotator_->ready();
+bool SimpleWarren::ready_(std::string *error) {
+  return appender_->ready(error) && annotator_->ready(error);
 }
 
 void SimpleWarren::commit_() {

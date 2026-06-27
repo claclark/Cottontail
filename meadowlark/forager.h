@@ -81,7 +81,7 @@ protected:
 private:
   virtual bool forage_(addr p, addr q, std::string *error) = 0;
   bool transaction_(std::string *error) { return warren_->transaction(error); };
-  bool ready_() { return warren_->ready(); };
+  bool ready_(std::string *error) { return warren_->ready(error); };
   void commit_() { return warren_->commit(); }
   void abort_() { return warren_->abort(); }
 };

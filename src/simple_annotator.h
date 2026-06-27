@@ -40,7 +40,7 @@ private:
   bool transaction_(std::string *error) final;
   bool annotate_(addr feature, addr p, addr q, fval v,
                  std::string *error) final;
-  bool ready_() final;
+  bool ready_(std::string *error) final;
   void commit_() final;
   void abort_() final;
   void maybe_flush_additions(bool force);

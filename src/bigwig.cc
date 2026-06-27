@@ -763,14 +763,14 @@ bool Bigwig::transaction_(std::string *error) {
   return true;
 }
 
-bool Bigwig::ready_() {
+bool Bigwig::ready_(std::string *error) {
   fluffle_->lock.lock();
   fluffle_->address = fiver_->relocate(fluffle_->address);
   fiver_->set_sequence(fluffle_->sequence);
   fluffle_->sequence++;
   fluffle_->warrens.push_back(fiver_);
   fluffle_->lock.unlock();
-  return fiver_->ready();
+  return fiver_->ready(error);
 }
 
 namespace {

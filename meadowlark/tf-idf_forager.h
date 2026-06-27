@@ -33,7 +33,7 @@ public:
 private:
   TfIdfForager(){};
   bool forage_(addr p, addr q, std::string *error) final;
-  bool ready_() final;
+  bool ready_(std::string *error) final;
   std::string tag_;
   addr p_min_ = maxfinity;
   addr total_items_ = 0;

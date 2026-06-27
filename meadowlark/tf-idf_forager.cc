@@ -97,20 +97,20 @@ bool TfIdfForager::forage_(addr p, addr q, std::string *error) {
   return true;
 }
 
-bool TfIdfForager::ready_() {
+bool TfIdfForager::ready_(std::string *error) {
   if (p_min_ == maxfinity)
     return true;
   for (auto &feature : df_)
     if (!warren_->annotator()->annotate(feature.first, p_min_, p_min_,
-                                        feature.second))
+                                        feature.second, error))
       return false;
   if (!warren_->annotator()->annotate(total_featurizer_->featurize("items"),
-                                      p_min_, p_min_, total_items_))
+                                      p_min_, p_min_, total_items_, error))
     return false;
   if (!warren_->annotator()->annotate(total_featurizer_->featurize("length"),
-                                      p_min_, p_min_, total_length_))
+                                      p_min_, p_min_, total_length_, error))
     return false;
-  return warren_->ready();
+  return warren_->ready(error);
 }
 
 } // namespace meadowlark

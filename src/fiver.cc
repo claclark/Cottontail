@@ -76,7 +76,7 @@ private:
     }
     return true;
   };
-  bool ready_() final { return true; };
+  bool ready_(std::string *error) final { return true; };
   void commit_() final { annotations_ = nullptr; };
   void abort_() final { annotations_->clear(); };
   std::shared_ptr<std::vector<Annotation>> annotations_;
@@ -160,16 +160,17 @@ private:
     }
     return true;
   };
-  bool ready_() {
+  bool ready_(std::string *error) {
     if (text_->length() > 0 && text_->back() != '\n')
       *text_ += "\n";
     if (address_ > first_address_)
       if (!annotator_->annotate(featurizer_->featurize(transaction_tag),
-                                first_address_, address_ - 1))
+                                first_address_, address_ - 1, error))
         return false;
     if (address_ > chunk_address_)
       if (!annotator_->annotate(featurizer_->featurize(text_chunk_tag),
-                                chunk_address_, address_ - 1, chunk_offset_))
+                                chunk_address_, address_ - 1, chunk_offset_,
+                                error))
         return false;
     return true;
   }
@@ -638,8 +639,12 @@ bool Fiver::transaction_(std::string *error = nullptr) {
   return true;
 };
 
-bool Fiver::ready_() {
-  if (built_ || !appender_->ready() || !annotator_->ready())
+bool Fiver::ready_(std::string *error) {
+  if (built_) {
+    safe_error(error) = "Fiver does not support more than one transaction";
+    return false;
+  }
+  if (!appender_->ready(error) || !annotator_->ready(error))
     return false;
   if (annotations_->size() == 0)
     return true;
@@ -664,7 +669,7 @@ bool Fiver::ready_() {
         posting_factory->posting_from_annotations(&it, annotations_->end());
     (*index_)[posting->feature()] = posting;
   }
-  if (pickle())
+  if (pickle(error))
     return true;
   else
     return false;

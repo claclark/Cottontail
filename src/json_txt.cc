@@ -63,7 +63,7 @@ bool JsonTxt::transaction_(std::string *error) {
   return txt_->transaction(error);
 }
 
-bool JsonTxt::ready_() { return txt_->ready(); }
+bool JsonTxt::ready_(std::string *error) { return txt_->ready(error); }
 
 void JsonTxt::commit_() { txt_->commit(); }
 
