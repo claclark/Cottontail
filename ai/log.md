@@ -287,3 +287,5 @@
 2026-06-28T22:56:25Z - Renamed the interactive SSR client from `apps/gcl-timing.cc` to `apps/ssr-client.cc`, updated its diagnostics to use `program_name`, wired `//apps:ssr-client`, and refreshed AI notes; verified `bazel build //apps:ssr-client`.
 2026-06-29T21:31:20Z - Reworked Bigwig merge selection to remove the split/barrier policy, group Fiver cleanup/conversion under `find_fiver_action(...)`, keep Hazel work as the fallback policy, and allow adjacent Fiver-pair merges when each side is below `medium_shard`; verified `bazel build //src:cottontail` and `bazel build //apps:trec-example`.
 2026-06-29T21:31:20Z - Refreshed `ai/plan.md`, `ai/notes.md`, and `ai/hazel.md` so current Bigwig merge-policy notes match the no-split implementation.
+2026-06-29T23:12:25Z - Updated `apps/ssr-server` snippets to stay within the ranked content interval, use the outer container only for docno lookup, clip oversized covers to the first window, emit `<cover>` highlighting, and verified `bazel build //apps:ssr-server`.
+2026-06-29T23:19:00Z - Expanded `apps/ssr-server` retained SSR result depth from 20 to 1000 covers and verified `bazel build //apps:ssr-server`.

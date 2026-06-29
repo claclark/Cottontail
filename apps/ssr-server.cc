@@ -21,7 +21,7 @@
 namespace {
 
 constexpr cottontail::addr WINDOW_TOKENS = 200;
-constexpr size_t DEPTH = 20;
+constexpr size_t DEPTH = 1000;
 
 struct Collection {
   std::string burrow;
@@ -31,8 +31,6 @@ struct Collection {
 struct Result {
   size_t collection = 0;
   cottontail::RankingResult ranking;
-  cottontail::addr container_p = cottontail::maxfinity;
-  cottontail::addr container_q = cottontail::minfinity;
   std::string docno;
 };
 
@@ -67,9 +65,9 @@ std::string highlighted(std::shared_ptr<cottontail::Warren> warren,
   std::string text;
   if (start < highlight_start)
     text += translate(warren, start, highlight_start - 1);
-  text += "<b>";
+  text += "<cover>";
   text += translate(warren, highlight_start, highlight_end);
-  text += "</b>";
+  text += "</cover>";
   if (highlight_end < end)
     text += translate(warren, highlight_end + 1, end);
   return text;
@@ -77,14 +75,20 @@ std::string highlighted(std::shared_ptr<cottontail::Warren> warren,
 
 std::string snippet(std::shared_ptr<cottontail::Warren> warren,
                     const Result &result) {
-  cottontail::addr cp = result.container_p;
-  cottontail::addr cq = result.container_q;
+  cottontail::addr cp = result.ranking.container_p();
+  cottontail::addr cq = result.ranking.container_q();
   cottontail::addr p = result.ranking.p();
   cottontail::addr q = result.ranking.q();
   if (cq - cp + 1 <= WINDOW_TOKENS)
     return highlighted(warren, cp, cq, p, q);
-  if (q - p + 1 >= WINDOW_TOKENS)
-    return highlighted(warren, p, q, p, q);
+  if (q - p + 1 >= WINDOW_TOKENS) {
+    cottontail::addr end = p + WINDOW_TOKENS - 1;
+    if (end > q)
+      end = q;
+    if (end > cq)
+      end = cq;
+    return highlighted(warren, p, end, p, end);
+  }
   cottontail::addr extra = WINDOW_TOKENS - (q - p + 1);
   cottontail::addr start = p - extra / 2;
   cottontail::addr end = q + extra - extra / 2;
@@ -158,8 +162,6 @@ bool make_result(const Collection &collection, size_t collection_index,
   }
   result->collection = collection_index;
   result->ranking = ranking;
-  result->container_p = cp;
-  result->container_q = cq;
   result->docno = docno;
   return true;
 }
