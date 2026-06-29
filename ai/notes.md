@@ -67,10 +67,9 @@
   before passing it outward. The contained-in/all-of rewrite now materializes
   each nested level. `Link` is the existing precedent for lazy child
   materialization into an array-backed hopper.
-- `apps/gcl-timing` is currently a scratch interactive passage prompt. It opens
-  a burrow, accepts raw GCL/boolean queries, runs `parallel_ssr(...)` over `:`,
-  reports ranking time, and prints 200-token windows with the main cover marked
-  in `<b>...</b>`.
+- `apps/ssr-server` serves JSON-line SSR requests over localhost for one or
+  more burrows, and `apps/ssr-client` is the readline client for interactive
+  query/next-result use.
 - `SimpleIdx` posting-cache eviction is currently compiled out with
   `COTTONTAIL_SIMPLE_IDX_CACHE_EJECTION` set to `0`; cached postings remain for
   the life of the `SimpleIdx` unless the idx is reset or destroyed.
@@ -82,26 +81,35 @@
   featurizer, zlib text/fvalue compression, and post posting compression.
 - `append_tsv(...)` and `append_jsonl(...)` ingest datasets, clone Warrens for
   parallel work, and annotate records with path/container metadata.
+- `apps/meadowlark.cc` preflights typed input files in one started-Warren pass
+  using `meadowlark::already_appended(...)`, then skips already-present files
+  before dispatching appends.
 - `meadowlark/forager.*`: pluggable annotation passes over intervals or GCL
   query results.
 - Current foragers include `tf-idf_forager.*` and `null_forager.h`.
 
 ## CLI Surfaces
 
-- `apps/meadowlark.cc`: create/open a meadow and append `--tsv`/`--jsonl`
-  inputs.
+- `apps/meadowlark.cc`: create/open a meadow, preflight existing input files,
+  and append missing `--tsv`/`--jsonl` inputs.
 - `apps/forage.cc`: run a Meadowlark forager over a query; supports
   `--key value` and `--key=value` parameters.
 - `apps/fluffy.cc`: interactive GCL query shell over a burrow or Hazel.
 - `apps/rank.cc`: ranking CLI.
-- `apps/gcl-timing.cc`: scratch interactive ranking/passage prompt; planned to
-  become a server-like passage/query tool.
+- `apps/ssr-server.cc`: localhost JSON-line SSR server over one or more
+  burrows.
+- `apps/ssr-client.cc`: readline client for `ssr-server`; non-empty input sends
+  a query and empty input requests the next result.
 - `apps/simple.cc`: build a simple burrow from TREC/MARCO-style corpora.
 - `apps/fiver2hazel.cc`: convert live Fiver shards in a burrow to Hazel shards
   with `--convert`, merge available Hazel shards with `--merge`, and time the
   conversion/merge phases. Existing exact per-Fiver Hazels are reused, and
   intermediate Hazels are preserved after merge. With no mode flags it does
   both phases.
+- `apps/merge-hazels.cc`: explicitly merge a given ordered list of standalone
+  Hazel files, require that they form a complete sequence, infer the sibling
+  output Hazel name from the input sequence range, and delegate merge validation
+  to `Hazel::merge(...)`.
 - `apps/scratch.cc`: scratch utility for creating no-merge Bigwig/Fiver shards
   from small text files with `line:` and `file:` annotations.
 
@@ -192,11 +200,16 @@
   selection reads this list without mutating it, and merge-worker validation
   clears matching or conflicting recovery records when a Hazel action is
   accepted.
-- Bigwig merge selection uses a barrier policy. Younger than the barrier it
-  first merges tiny eligible Fiver runs, then oldest eligible adjacent Fiver
-  pairs. Older side, including the barrier, it converts oldest eligible Fivers,
-  then continues recovered Hazel merges or merges the smallest eligible adjacent
-  Hazel pair. Hazel throttling applies only to Hazel actions.
+- Bigwig merge selection no longer uses a split/barrier. `find_merge_action(...)`
+  asks `find_fiver_action(...)` first, then falls back to `find_hazel_action(...)`.
+- Fiver policy order is: lone-Fiver cleanup; merge a run of at least three tiny
+  eligible Fivers anywhere in the visible vector; convert the oldest eligible
+  Fiver stranded between Hazels; convert the oldest eligible Fiver whose own
+  estimate is at least `medium_shard`; merge the smallest adjacent eligible
+  Fiver pair where each side is below `medium_shard`.
+- Hazel policy continues recovered Hazel merges first, otherwise merges the
+  smallest eligible adjacent Hazel pair. Hazel throttling applies only to Hazel
+  actions.
 - `BigwigIdx` composes postings from visible `Owsla` children. Its multi-shard
   path handles empty and single-shard cases directly, merges `text_chunk_tag`
   postings fresh without caching, and uses the captured `OwslaCache` only for

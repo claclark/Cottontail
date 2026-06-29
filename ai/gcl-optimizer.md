@@ -22,9 +22,9 @@ future development, not a commitment to turn the optimizer on by default.
 - `gcl/parse.*` recognizes `materialize` as a unary GCL operator and lowers it
   through normal hopper construction.
 - `test/optimizer.cc` is the focused optimizer test target.
-- `apps/gcl-timing.cc` is a scratch timing app for comparing optimized and
-  unoptimized runs. It is useful for local exploration, but should not be
-  treated as a stable benchmark or test harness yet.
+- The old `apps/gcl-timing.cc` scratch timing app has been retired. Current
+  interactive SSR exploration uses `apps/ssr-server.cc` and
+  `apps/ssr-client.cc`.
 
 ## Materialize
 

@@ -55,20 +55,26 @@ of each growing a separate duplicate check.
 ### JSONL Files
 
 `append_jsonl(warren, filename, ...)` is the current prototype for the common
-pattern.
+Scribe-based append/commit pattern. CLI restart checks are now performed by
+`apps/meadowlark.cc` before calling this function.
 
 Current useful behavior:
 
 - Starts the original Warren at the top.
-- Checks for an existing source identity before opening the input.
 - Streams plain or gzipped input with `maybe_zipped(...)`.
+- Writes the source marker through a private shared path helper that owns
+  normalization, marker annotation, and returned source-feature calculation.
+- Wraps the original Warren as `path_scribe`, readies the marker transaction,
+  and commits it with the worker Scribes at the bottom.
 - Writes records through per-clone `Scribe`s.
 - Readies through `Scribe`.
 - Commits through `Scribe::commit_all(...)`.
 - Finalizes all Scribes as the last formal Scribe step.
 
-Near-term cleanup should focus on extracting the reusable pieces without
-changing behavior.
+`apps/meadowlark.cc` now parses input files into typed records, starts the
+Warren once, checks every source identity with public scalar
+`already_appended(...)`, flags already-present files, and dispatches only the
+missing appends in command-line order.
 
 ### JSONL From Strings
 
@@ -102,8 +108,9 @@ Desired behavior:
   separate design discussion.
 
 Current inconsistency: TSV still uses direct Warren transactions, direct clone
-starts, direct commits, no restart skip check, and no verbose skip/append
-reporting.
+starts, direct commits, and no verbose append reporting. CLI preflight now
+skips already-appended TSV files, but `append_tsv(...)` itself has not moved to
+the common Scribe lifecycle.
 
 ### Raw Text Files
 
@@ -136,7 +143,8 @@ Code append must use the same restart and batch-commit pattern as text/jsonl.
 
 ## Current Inconsistencies To Resolve
 
-- `append_jsonl(...)` is now the only append path with restart detection.
+- CLI-level Meadowlark append now has restart detection for all input files,
+  but only `append_jsonl(...)` uses the Scribe marker/worker lifecycle.
 - `append_jsonl(...)` has `verbose = true`; `append_tsv(...)` does not.
 - `append_jsonl(...)` uses the Scribe lifecycle; `append_tsv(...)` writes and
   commits through Warrens directly.
@@ -144,8 +152,8 @@ Code append must use the same restart and batch-commit pattern as text/jsonl.
   `append_tsv(...)` still explicitly starts clones.
 - `append_jsonl(...)` uses `Scribe::commit_all(...)`; `append_tsv(...)` commits
   each clone individually.
-- `append_path(...)` now records a general source identity but is still named
-  and typed as a path helper.
+- The path marker helpers are private to `meadowlark.cc`; future non-file
+  source identities may need a renamed/generalized helper.
 - `thread_count(...)` policy differs: JSONL uses `hardware_concurrency() + 1`
   directly, while TSV uses the local helper and forces small inputs to one
   thread.
@@ -165,4 +173,3 @@ Code append must use the same restart and batch-commit pattern as text/jsonl.
 5. Add raw text file append.
 6. Add code append as raw text plus metadata first.
 7. Revisit foraging only after append operations share the same pattern.
-

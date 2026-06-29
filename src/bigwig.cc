@@ -815,8 +815,9 @@ bool Bigwig::ready_(std::string *error) {
 }
 
 namespace {
-const addr small_shard = 4 * 1024 * 1024;
-const addr medium_shard = 128 * 1024 * 1024;
+const addr small_shard = 8 * 1024 * 1024;
+const addr medium_shard = 256 * 1024 * 1024;
+const addr large_shard = 2 * medium_shard;
 
 bool find_sequence(const std::vector<bool> &a, size_t *start, size_t *end) {
   size_t best_len = 0;
@@ -874,70 +875,23 @@ bool find_smallest_pair(const std::vector<addr> &a, size_t *start,
   return found;
 }
 
-bool find_oldest_pair(const std::vector<bool> &a, size_t *start, size_t *end) {
-  if (a.size() < 2)
-    return false;
-  for (size_t i = 0; i + 1 < a.size(); i++)
-    if (a[i] && a[i + 1]) {
-      if (start && end) {
-        *start = i;
-        *end = i + 1;
-      }
-      return true;
-    }
-  return false;
-}
-
 bool eligible(std::shared_ptr<Fluffle> fluffle, std::shared_ptr<Owsla> warren) {
   return warren != nullptr &&
          fluffle->merging.find(warren) == fluffle->merging.end();
 }
 
-bool find_barrier(std::shared_ptr<Fluffle> fluffle, bool *found,
-                  size_t *barrier) {
-  if (found != nullptr)
-    *found = false;
-  if (barrier != nullptr)
-    *barrier = 0;
-  for (size_t i = 0; i < fluffle->warrens.size(); i++) {
-    auto warren = fluffle->warrens[i];
-    if (warren == nullptr)
-      continue;
-    if (warren->name() == "hazel") {
-      if (found != nullptr)
-        *found = true;
-      if (barrier != nullptr)
-        *barrier = i;
-    } else if (warren->name() == "fiver") {
-      if (warren->estimated_size() >= medium_shard) {
-        if (found != nullptr)
-          *found = true;
-        if (barrier != nullptr)
-          *barrier = i;
-      }
-    } else {
-      return false;
-    }
-  }
-  return true;
-}
-
 bool hazel_merge_okay(std::shared_ptr<Fluffle> fluffle) {
-#if 1
   size_t merging_hazels = 0;
   for (auto &warren : fluffle->merging)
     if (warren != nullptr && warren->name() == "hazel")
       merging_hazels++;
   return merging_hazels + 1 < fluffle->max_workers;
-#endif
-  return false;
 }
 
-bool find_tiny_fiver_run(std::shared_ptr<Fluffle> fluffle, size_t begin,
-                         size_t limit, size_t *start, size_t *end) {
+bool find_tiny_fiver_run(std::shared_ptr<Fluffle> fluffle, size_t *start,
+                         size_t *end) {
   std::vector<bool> tiny(fluffle->warrens.size(), false);
-  limit = std::min(limit, fluffle->warrens.size());
-  for (size_t i = begin; i < limit; i++) {
+  for (size_t i = 0; i < fluffle->warrens.size(); i++) {
     auto warren = fluffle->warrens[i];
     tiny[i] = eligible(fluffle, warren) && warren->name() == "fiver" &&
               warren->estimated_size() < small_shard;
@@ -945,13 +899,49 @@ bool find_tiny_fiver_run(std::shared_ptr<Fluffle> fluffle, size_t begin,
   return find_sequence(tiny, start, end);
 }
 
-bool find_oldest_fiver_conversion(std::shared_ptr<Fluffle> fluffle,
-                                  size_t begin, size_t limit, size_t *start,
-                                  size_t *end) {
-  limit = std::min(limit, fluffle->warrens.size());
-  for (size_t i = begin; i < limit; i++) {
+bool find_smallest_fiver_pair(std::shared_ptr<Fluffle> fluffle, size_t *start,
+                              size_t *end) {
+  bool found = false;
+  size_t best = 0;
+  addr best_sum = 0;
+  for (size_t i = 0; i + 1 < fluffle->warrens.size(); i++) {
+    auto left = fluffle->warrens[i];
+    auto right = fluffle->warrens[i + 1];
+    if (!eligible(fluffle, left) || !eligible(fluffle, right) ||
+        left->name() != "fiver" || right->name() != "fiver")
+      continue;
+    addr left_size = left->estimated_size();
+    addr right_size = right->estimated_size();
+    if (left_size < 0 || right_size < 0 || left_size >= medium_shard ||
+        right_size >= medium_shard)
+      continue;
+    addr sum = left_size + right_size;
+    if (!found || sum < best_sum) {
+      found = true;
+      best = i;
+      best_sum = sum;
+    }
+  }
+  if (!found)
+    return false;
+  if (start != nullptr && end != nullptr) {
+    *start = best;
+    *end = best + 1;
+  }
+  return true;
+}
+
+bool find_stranded_fiver_conversion(std::shared_ptr<Fluffle> fluffle,
+                                    size_t *start, size_t *end) {
+  if (fluffle->warrens.size() < 3)
+    return false;
+  for (size_t i = 1; i + 1 < fluffle->warrens.size(); i++) {
+    auto left = fluffle->warrens[i - 1];
     auto warren = fluffle->warrens[i];
-    if (eligible(fluffle, warren) && warren->name() == "fiver") {
+    auto right = fluffle->warrens[i + 1];
+    if (left != nullptr && right != nullptr && warren != nullptr &&
+        left->name() == "hazel" && warren->name() == "fiver" &&
+        right->name() == "hazel" && eligible(fluffle, warren)) {
       if (start != nullptr && end != nullptr) {
         *start = i;
         *end = i;
@@ -962,15 +952,20 @@ bool find_oldest_fiver_conversion(std::shared_ptr<Fluffle> fluffle,
   return false;
 }
 
-bool find_oldest_fiver_pair(std::shared_ptr<Fluffle> fluffle, size_t begin,
-                            size_t limit, size_t *start, size_t *end) {
-  std::vector<bool> fivers(fluffle->warrens.size(), false);
-  limit = std::min(limit, fluffle->warrens.size());
-  for (size_t i = begin; i < limit; i++) {
+bool find_oldest_large_fiver_conversion(std::shared_ptr<Fluffle> fluffle,
+                                        size_t *start, size_t *end) {
+  for (size_t i = 0; i < fluffle->warrens.size(); i++) {
     auto warren = fluffle->warrens[i];
-    fivers[i] = eligible(fluffle, warren) && warren->name() == "fiver";
+    if (eligible(fluffle, warren) && warren->name() == "fiver" &&
+        warren->estimated_size() >= medium_shard) {
+      if (start != nullptr && end != nullptr) {
+        *start = i;
+        *end = i;
+      }
+      return true;
+    }
   }
-  return find_oldest_pair(fivers, start, end);
+  return false;
 }
 
 bool same_sequence(const OwslaShard &shard, std::shared_ptr<Owsla> warren) {
@@ -982,15 +977,14 @@ bool same_sequence(const OwslaShard &shard, std::shared_ptr<Owsla> warren) {
   return shard.start == start && shard.end == end;
 }
 
-bool find_recovered_hazel_merge(std::shared_ptr<Fluffle> fluffle, size_t begin,
-                                size_t limit, size_t *start, size_t *end) {
-  limit = std::min(limit, fluffle->warrens.size());
-  if (begin >= limit)
-    return false;
+bool find_recovered_hazel_merge(std::shared_ptr<Fluffle> fluffle, size_t *start,
+                                size_t *end) {
   for (auto &recovery : fluffle->hazel_merges) {
-    if (recovery.sources.size() < 2 || recovery.sources.size() > limit - begin)
+    if (recovery.sources.size() < 2 ||
+        recovery.sources.size() > fluffle->warrens.size())
       continue;
-    for (size_t i = begin; i + recovery.sources.size() <= limit; i++) {
+    for (size_t i = 0; i + recovery.sources.size() <= fluffle->warrens.size();
+         i++) {
       bool match = true;
       for (size_t j = 0; j < recovery.sources.size(); j++) {
         auto warren = fluffle->warrens[i + j];
@@ -1012,11 +1006,10 @@ bool find_recovered_hazel_merge(std::shared_ptr<Fluffle> fluffle, size_t begin,
   return false;
 }
 
-bool find_smallest_hazel_pair(std::shared_ptr<Fluffle> fluffle, size_t begin,
-                              size_t limit, size_t *start, size_t *end) {
+bool find_smallest_hazel_pair(std::shared_ptr<Fluffle> fluffle, size_t *start,
+                              size_t *end) {
   std::vector<addr> storage(fluffle->warrens.size(), -1);
-  limit = std::min(limit, fluffle->warrens.size());
-  for (size_t i = begin; i < limit; i++) {
+  for (size_t i = 0; i < fluffle->warrens.size(); i++) {
     auto warren = fluffle->warrens[i];
     if (eligible(fluffle, warren) && warren->name() == "hazel")
       storage[i] = warren->estimated_size();
@@ -1024,34 +1017,75 @@ bool find_smallest_hazel_pair(std::shared_ptr<Fluffle> fluffle, size_t begin,
   return find_smallest_pair(storage, start, end);
 }
 
-bool find_hazel_action(std::shared_ptr<Fluffle> fluffle, size_t begin,
-                       size_t limit, size_t *start, size_t *end) {
+bool find_hazel_action(std::shared_ptr<Fluffle> fluffle, size_t *start,
+                       size_t *end) {
   if (!hazel_merge_okay(fluffle))
     return false;
-  if (find_recovered_hazel_merge(fluffle, begin, limit, start, end))
+  if (find_recovered_hazel_merge(fluffle, start, end))
     return true;
-  if (find_smallest_hazel_pair(fluffle, begin, limit, start, end))
+  if (find_smallest_hazel_pair(fluffle, start, end))
+    return true;
+  return false;
+}
+
+bool find_lone_fiver_cleanup(std::shared_ptr<Fluffle> fluffle, size_t *start,
+                             size_t *end) {
+  bool found_fiver = false;
+  bool fiver_eligible = false;
+  size_t fiver_index = 0;
+  size_t hazels = 0;
+  addr smallest_hazel = 0;
+  for (size_t i = 0; i < fluffle->warrens.size(); i++) {
+    auto warren = fluffle->warrens[i];
+    if (warren == nullptr)
+      continue;
+    if (warren->name() == "fiver") {
+      if (found_fiver)
+        return false;
+      found_fiver = true;
+      fiver_eligible = eligible(fluffle, warren);
+      fiver_index = i;
+    } else if (warren->name() == "hazel") {
+      addr size = warren->estimated_size();
+      if (hazels == 0 || size < smallest_hazel)
+        smallest_hazel = size;
+      hazels++;
+    } else {
+      return false;
+    }
+  }
+  if (!found_fiver || !fiver_eligible)
+    return false;
+  if (hazels == 1 || (hazels > 1 && smallest_hazel > large_shard)) {
+    if (start != nullptr && end != nullptr) {
+      *start = fiver_index;
+      *end = fiver_index;
+    }
+    return true;
+  }
+  return false;
+}
+
+bool find_fiver_action(std::shared_ptr<Fluffle> fluffle, size_t *start,
+                       size_t *end) {
+  if (find_lone_fiver_cleanup(fluffle, start, end))
+    return true;
+  if (find_tiny_fiver_run(fluffle, start, end))
+    return true;
+  if (find_stranded_fiver_conversion(fluffle, start, end))
+    return true;
+  if (find_oldest_large_fiver_conversion(fluffle, start, end))
+    return true;
+  if (find_smallest_fiver_pair(fluffle, start, end))
     return true;
   return false;
 }
 
 bool find_merge_action(std::shared_ptr<Fluffle> fluffle, size_t *start,
                        size_t *end) {
-  bool has_barrier;
-  size_t barrier;
-  if (!find_barrier(fluffle, &has_barrier, &barrier))
-    return false;
-  size_t younger_begin = has_barrier ? barrier + 1 : 0;
-  size_t older_limit = has_barrier ? barrier + 1 : 0;
-  if (find_tiny_fiver_run(fluffle, younger_begin, fluffle->warrens.size(),
-                          start, end))
+  if (find_fiver_action(fluffle, start, end))
     return true;
-  if (find_oldest_fiver_conversion(fluffle, 0, older_limit, start, end))
-    return true;
-  if (find_oldest_fiver_pair(fluffle, younger_begin, fluffle->warrens.size(),
-                             start, end))
-    return true;
-  if (find_hazel_action(fluffle, 0, older_limit, start, end))
+  if (find_hazel_action(fluffle, start, end))
     return true;
   return false;
 }

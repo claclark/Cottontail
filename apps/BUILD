@@ -146,19 +146,6 @@ cc_binary(
 )
 
 cc_binary(
-    name = "gcl-timing",
-    srcs = [
-      "gcl-timing.cc",
-    ],
-    deps = [
-      "//src:cottontail",
-    ],
-    linkopts = [
-      "-lreadline -pthread",
-    ],
-)
-
-cc_binary(
     name = "json-examples",
     srcs = [
       "json-examples.cc",
@@ -181,6 +168,19 @@ cc_binary(
     ],
     linkopts = [
       "-pthread"
+    ],
+)
+
+cc_binary(
+    name = "merge-hazels",
+    srcs = [
+      "merge-hazels.cc",
+    ],
+    deps = [
+      "//src:cottontail",
+    ],
+    linkopts = [
+      "-pthread",
     ],
 )
 
@@ -337,6 +337,32 @@ cc_binary(
     name = "splade",
     srcs = [
       "splade.cc",
+    ],
+    deps = [
+      "//src:cottontail",
+    ],
+    linkopts = [
+      "-pthread",
+    ],
+)
+
+cc_binary(
+    name = "ssr-client",
+    srcs = [
+      "ssr-client.cc",
+    ],
+    deps = [
+      "//src:cottontail",
+    ],
+    linkopts = [
+      "-lreadline -pthread",
+    ],
+)
+
+cc_binary(
+    name = "ssr-server",
+    srcs = [
+      "ssr-server.cc",
     ],
     deps = [
       "//src:cottontail",

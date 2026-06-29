@@ -393,8 +393,8 @@ Fiver-before-Hazel relationships are rejected.
 
 Fluffle owns sanitized pending Hazel merge recovery records as
 `hazel_merges`. Startup copies them from the sanitized inventory for future
-consolidation-worker restart handling. Current policy records them but does
-not yet schedule them ahead of new Hazel/Hazel merges.
+consolidation-worker restart handling. Current policy schedules recovered Hazel
+merges ahead of new Hazel/Hazel merges when Hazel work is allowed.
 
 ## Bigwig Merge Worker
 
@@ -410,7 +410,7 @@ of:
 
 - Fiver/Fiver merge;
 - Hazel/Hazel merge;
-- boundary Fiver-to-Hazel conversion.
+- Fiver-to-Hazel conversion.
 
 It then claims the selected shards in `fluffle->merging`, optionally spawns a
 friend worker, releases the lock, performs the operation, reacquires the lock,
@@ -419,17 +419,21 @@ successful publication.
 
 Current policy order:
 
-1. Compute `hazel_merge_okay(...)`.
-2. If Hazel work is allowed, try boundary Fiver-to-Hazel conversion first.
-3. Merge a run of small available Fivers, preserving old Fiver behavior.
-4. Merge the smallest available adjacent Fiver/Fiver pair.
-5. If Hazel work is allowed, merge the smallest available adjacent Hazel/Hazel
-   pair.
-6. Otherwise report no recommendation.
+1. Apply Fiver policy:
+   lone-Fiver cleanup; merge a run of at least three tiny eligible Fivers
+   anywhere in the visible vector; convert the oldest eligible Fiver stranded
+   between Hazels; convert the oldest eligible Fiver whose own estimate is at
+   least `medium_shard`; merge the smallest adjacent eligible Fiver/Fiver pair
+   where each side is below `medium_shard`.
+2. If no Fiver action is available and Hazel work is allowed, continue a
+   recovered Hazel merge first; otherwise merge the smallest eligible adjacent
+   Hazel/Hazel pair.
+3. Otherwise report no recommendation.
 
-The boundary Fiver conversion rule converts the first Fiver after the Hazel
-prefix if it is at least 128 MiB, or if there is at least one Hazel and it is
-the only live Fiver.
+Current thresholds are `small_shard` = 8 MiB, `medium_shard` = 256 MiB, and
+`large_shard` = 512 MiB. The Fiver policy is meant to sweep tiny update bursts
+quickly, avoid producing tiny Hazels, and still make progress when updates
+leave stranded or individually large Fivers.
 
 The current Hazel work gate is intentionally simple: count Hazel shards already
 in `fluffle->merging`; allow another Hazel-related action only when

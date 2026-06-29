@@ -121,6 +121,19 @@ Especially don't do these things without discussion and approval from the user.
 - Do not apply this path to `null_feature` or the text-chunk posting. The
   text-chunk posting still needs text-base value adjustment during merge.
 
+## Hazel Merge Disk Usage
+
+- Restructure Hazel posting-list merge so merged postings can be written
+  directly into the restartable `mrg.*` files instead of first materializing a
+  separate full posting output and then checkpointing or publishing it.
+- Large Hazel/Hazel merges can currently require roughly twice the final disk
+  footprint during the merge. Direct-to-`mrg.*` output should reduce peak disk
+  pressure, which matters for multi-terabyte builds.
+- This may require separating posting merge production from current file
+  publication assumptions so dictionary/checkpoint entries remain the durable
+  commit markers while posting bytes stream directly to their final recoverable
+  merge location.
+
 ## Split Test Targets and improve regression testing generally
 
 - The old aggregate `//test:tests` target makes it awkward to run or reason
