@@ -1,6 +1,5 @@
 #include <algorithm>
 #include <cerrno>
-#include <cstdlib>
 #include <cstring>
 #include <iostream>
 #include <map>
@@ -34,6 +33,12 @@ struct Result {
   std::string docno;
 };
 
+struct Document {
+  size_t collection = 0;
+  cottontail::addr content_p = cottontail::maxfinity;
+  cottontail::addr content_q = cottontail::minfinity;
+};
+
 struct QueryState {
   std::vector<Result> results;
   size_t next = 0;
@@ -41,7 +46,7 @@ struct QueryState {
 
 void usage(const std::string &program_name) {
   std::cerr << "usage: " << program_name
-            << " port container content docno burrow [burrow...]\n";
+            << " container content docno burrow [burrow...]\n";
 }
 
 std::string clean_text(std::string text) {
@@ -53,6 +58,10 @@ std::string clean_text(std::string text) {
 std::string translate(std::shared_ptr<cottontail::Warren> warren,
                       cottontail::addr p, cottontail::addr q) {
   return clean_text(warren->txt()->translate(p, q));
+}
+
+std::string display_docno(const std::string &text) {
+  return cottontail::trec_docno(cottontail::json_translate(text));
 }
 
 std::string highlighted(std::shared_ptr<cottontail::Warren> warren,
@@ -138,7 +147,7 @@ bool docno_in(std::shared_ptr<cottontail::Warren> warren,
   dhopper->tau(cp, &dp, &dq);
   if (dq > cq)
     return false;
-  *docno = warren->txt()->translate(dp, dq);
+  *docno = display_docno(warren->txt()->translate(dp, dq));
   return true;
 }
 
@@ -346,6 +355,11 @@ private:
                      [](const Result &a, const Result &b) {
                        return a.ranking.score() > b.ranking.score();
                      });
+    for (auto &result : merged)
+      documents_.emplace(result.docno,
+                         Document{result.collection,
+                                  result.ranking.container_p(),
+                                  result.ranking.container_q()});
     std::string qid = "q" + std::to_string(next_qid_++);
     QueryState state;
     state.results = merged;
@@ -388,37 +402,19 @@ private:
     std::string wanted = request.value("docno", "");
     if (wanted.empty())
       return error_response("document", "Missing docno");
-    for (auto &collection : collections_) {
-      std::string error;
-      std::unique_ptr<cottontail::Hopper> dhopper =
-          hopper(collection.warren, docno_, "docno", &error);
-      if (dhopper == nullptr)
-        continue;
-      for (cottontail::addr dp, dq,
-           k = cottontail::minfinity + 1;
-           k < cottontail::maxfinity; k = dp + 1) {
-        dhopper->tau(k, &dp, &dq);
-        if (dp >= cottontail::maxfinity)
-          break;
-        std::string docno = collection.warren->txt()->translate(dp, dq);
-        if (docno != wanted)
-          continue;
-        cottontail::RankingResult cover(dp, dq, 0.0);
-        cottontail::addr cp, cq;
-        if (!container_for(collection.warren, container_, cover, &cp, &cq,
-                           &error))
-          continue;
-        json response;
-        response["op"] = "document";
-        response["ok"] = true;
-        response["burrow"] = collection.burrow;
-        response["docno"] = wanted;
-        response["document"] = clean_text(collection.warren->txt()->translate(
-            cp, cq));
-        return response;
-      }
-    }
-    return error_response("document", "Unknown docno");
+    auto found = documents_.find(wanted);
+    if (found == documents_.end())
+      return error_response("document", "Unknown docno");
+    const Document &document = found->second;
+    const Collection &collection = collections_[document.collection];
+    json response;
+    response["op"] = "document";
+    response["ok"] = true;
+    response["burrow"] = collection.burrow;
+    response["docno"] = wanted;
+    response["document"] = clean_text(collection.warren->txt()->translate(
+        document.content_p, document.content_q));
+    return response;
   }
 
   std::string container_;
@@ -426,24 +422,23 @@ private:
   std::string docno_;
   std::vector<Collection> collections_;
   std::map<std::string, QueryState> queries_;
-  size_t next_qid_ = 1;
+  std::map<std::string, Document> documents_;
+  size_t next_qid_ = 0;
 };
 
 } // namespace
 
 int main(int argc, char **argv) {
   std::string program_name = argv[0];
-  if (argc < 6) {
+  if (argc < 5) {
     usage(program_name);
     return 1;
   }
-  uint16_t requested_port =
-      static_cast<uint16_t>(std::strtoul(argv[1], nullptr, 10));
-  std::string container = argv[2];
-  std::string content = argv[3];
-  std::string docno = argv[4];
+  std::string container = argv[1];
+  std::string content = argv[2];
+  std::string docno = argv[3];
   std::vector<Collection> collections;
-  for (int i = 5; i < argc; i++) {
+  for (int i = 4; i < argc; i++) {
     std::string error;
     std::string burrow = argv[i];
     std::shared_ptr<cottontail::Warren> warren =
@@ -463,14 +458,13 @@ int main(int argc, char **argv) {
     collections.push_back({burrow, warren});
   }
   uint16_t actual_port = 0;
-  int server = listen_local(requested_port, &actual_port);
+  int server = listen_local(0, &actual_port);
   if (server < 0) {
-    std::cerr << program_name << ": cannot listen on 127.0.0.1:"
-              << requested_port << ": " << std::strerror(errno) << "\n";
+    std::cerr << program_name << ": cannot listen: " << std::strerror(errno)
+              << "\n";
     return 1;
   }
-  std::cerr << program_name << ": listening on 127.0.0.1:" << actual_port
-            << "\n";
+  std::cerr << program_name << ": listening on port " << actual_port << "\n";
   Server ssr(container, content, docno, collections);
   for (;;) {
     sockaddr_in client_address;

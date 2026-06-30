@@ -289,3 +289,7 @@
 2026-06-29T21:31:20Z - Refreshed `ai/plan.md`, `ai/notes.md`, and `ai/hazel.md` so current Bigwig merge-policy notes match the no-split implementation.
 2026-06-29T23:12:25Z - Updated `apps/ssr-server` snippets to stay within the ranked content interval, use the outer container only for docno lookup, clip oversized covers to the first window, emit `<cover>` highlighting, and verified `bazel build //apps:ssr-server`.
 2026-06-29T23:19:00Z - Expanded `apps/ssr-server` retained SSR result depth from 20 to 1000 covers and verified `bazel build //apps:ssr-server`.
+2026-06-29T23:46:01Z - Added `apps/ssr-client.py` as a standard-library Python JSON-line SSR client example, unignored it explicitly, and verified `python3 -m py_compile apps/ssr-client.py`.
+2026-06-29T23:47:27Z - Removed the explicit port argument from `apps/ssr-server`; it now binds an automatic localhost port, reports only the port number, and verified `bazel build //apps:ssr-server`.
+2026-06-30T13:55:47Z - Normalized `apps/ssr-server` emitted docnos, changed qids to zero-based `qN` strings, cached emitted docnos to ranked content intervals for `document` requests, removed the document-path docno scan, and verified `bazel build //apps:ssr-server`.
+2026-06-30T19:37:25Z - Refreshed `ai/notes.md` to document current SSR server/client protocol behavior, content-bounded snippets, qid/docno handling, and document-cache semantics for the pending commit.

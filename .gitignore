@@ -1,13 +1,17 @@
 *~
 *.swp
+
 *.burrow
 *.meadow
-*temp*
+
+# Top-level scratch files.
+/*temp*
 /*test*
 !/*test*/
 !/*test*/**
-*.sh
-*.py
+/*.sh
+/*.py
+
 .DS_Store
 MODULE.bazel.lock
 /bazel-Cottontail
