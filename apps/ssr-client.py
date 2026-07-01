@@ -34,7 +34,7 @@ def request(stream, query):
     return json.loads(response.decode("utf-8"))
 
 
-def print_record(record, qid, program_name):
+def print_record(record, qid, docno, program_name):
     response = record.get("response", {})
     op = response.get("op", "")
     if not response.get("ok", False):
@@ -42,20 +42,22 @@ def print_record(record, qid, program_name):
             f"{program_name}: {response.get('error', 'unknown error')}",
             file=sys.stderr,
         )
-        return qid
+        return qid, docno
     if "time" in record and op == "query":
         print(f"Ranking took: {record['time']} millisecond(s)", file=sys.stderr)
     if response.get("done", False):
         if op == "query" and "qid" in response:
-            return response["qid"]
-        return qid
+            qid = response["qid"]
+        return qid, docno
     if "qid" in response:
         qid = response["qid"]
+    if "docno" in response:
+        docno = response["docno"]
     if "snippet" in response:
         print(response["snippet"], flush=True)
     elif "document" in response:
         print(response["document"], flush=True)
-    return qid
+    return qid, docno
 
 
 def main(argv):
@@ -75,19 +77,26 @@ def main(argv):
               file=sys.stderr)
         return 1
     qid = ""
+    docno = ""
     with sock, sock.makefile("rwb") as stream:
         while True:
             try:
                 line = input(">> ")
             except EOFError:
                 break
-            if line == "":
+            if line != "" and readline is not None:
+                readline.add_history(line)
+            if line == "" or line == "@next":
                 if qid == "":
                     continue
                 query = {"op": "next", "qid": qid}
+            elif line == "@full":
+                if docno == "":
+                    print(f"{program_name}: no current document",
+                          file=sys.stderr)
+                    continue
+                query = {"op": "document", "docno": docno}
             else:
-                if readline is not None:
-                    readline.add_history(line)
                 query = {"op": "query", "query": line}
             try:
                 record = request(stream, query)
@@ -99,7 +108,7 @@ def main(argv):
                 print(f"{program_name}: server connection closed",
                       file=sys.stderr)
                 return 1
-            qid = print_record(record, qid, program_name)
+            qid, docno = print_record(record, qid, docno, program_name)
     return 0
 
 

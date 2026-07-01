@@ -83,7 +83,7 @@ bool request(int fd, const json &query, json *record,
   return true;
 }
 
-bool print_record(const json &record, std::string *qid,
+bool print_record(const json &record, std::string *qid, std::string *docno,
                   const std::string &program_name) {
   json response = record.value("response", json::object());
   std::string op = response.value("op", "");
@@ -102,6 +102,8 @@ bool print_record(const json &record, std::string *qid,
   }
   if (response.contains("qid"))
     *qid = response["qid"].get<std::string>();
+  if (response.contains("docno"))
+    *docno = response["docno"].get<std::string>();
   if (response.contains("snippet")) {
     std::cout << response["snippet"].get<std::string>() << "\n";
     std::cout.flush();
@@ -129,18 +131,27 @@ int main(int argc, char **argv) {
   }
 
   std::string qid;
+  std::string docno;
   char *line;
   while ((line = readline(">> ")) != nullptr) {
     std::string input = line;
     std::free(line);
+    if (!input.empty())
+      add_history(input.c_str());
     json query;
-    if (input.empty()) {
+    if (input.empty() || input == "@next") {
       if (qid.empty())
         continue;
       query["op"] = "next";
       query["qid"] = qid;
+    } else if (input == "@full") {
+      if (docno.empty()) {
+        std::cerr << program_name << ": no current document\n";
+        continue;
+      }
+      query["op"] = "document";
+      query["docno"] = docno;
     } else {
-      add_history(input.c_str());
       query["op"] = "query";
       query["query"] = input;
     }
@@ -150,7 +161,7 @@ int main(int argc, char **argv) {
       close(fd);
       return 1;
     }
-    print_record(record, &qid, program_name);
+    print_record(record, &qid, &docno, program_name);
   }
   close(fd);
   return 0;

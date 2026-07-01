@@ -63,6 +63,18 @@ Especially don't do these things without discussion and approval from the user.
   planned before implementation, including reference lifetime, sharing,
   string/S-expression representation, and how `($ n)` lowers to hoppers.
 
+## Ranking Content and Container Terminology
+
+- Untangle places in `ranking.cc` and adjacent app code where "content" means
+  the rankable interval and where "container" means the outer document/item
+  interval.
+- SSR server usage now needs all three concepts: an outer container that holds
+  identity and displayable document text, a content interval used for ranking,
+  and a docno/id interval used for lookup.
+- BM25-style annotations are associated with the container, so future API and
+  variable naming should make that boundary explicit rather than assuming one
+  interval can serve every ranking model.
+
 ## Txt Wrapping
 
 - Revisit `Txt::wrap(...)` and the general wrapper model.

@@ -69,8 +69,8 @@
   materialization into an array-backed hopper.
 - `apps/ssr-server` serves JSON-line SSR requests over localhost for one or
   more burrows, and `apps/ssr-client` is the readline client for interactive
-  query/next-result use. `apps/ssr-client.py` is the standard-library Python
-  example client for the same protocol.
+  query/next/full-document use. `apps/ssr-client.py` is the standard-library
+  Python example client for the same protocol.
 - `SimpleIdx` posting-cache eviction is currently compiled out with
   `COTTONTAIL_SIMPLE_IDX_CACHE_EJECTION` set to `0`; cached postings remain for
   the life of the `SimpleIdx` unless the idx is reset or destroyed.
@@ -98,16 +98,21 @@
 - `apps/fluffy.cc`: interactive GCL query shell over a burrow or Hazel.
 - `apps/rank.cc`: ranking CLI.
 - `apps/ssr-server.cc`: localhost JSON-line SSR server over one or more
-  burrows. It takes `container content docno burrow...`, binds an automatic
-  localhost port, and reports `listening on port N` for clients. Query results
-  rank within `content`; `container` is used to find docno/document identity.
+  burrows. It takes `[--fields fields] container content docno burrow...`,
+  binds an automatic localhost port, and reports `listening on port N` for
+  clients. Query results rank within `content`; `container` is used to find
+  docno/document identity.
   Snippets stay within the ranked content interval, highlight with
   `<cover>...</cover>`, clip oversized covers to the first 200 tokens, and keep
-  up to 1000 covers available through `next`.
+  up to 1000 covers available through `next`. The optional `--fields` value is
+  a comma-separated list of field GCL queries used only to assemble full
+  `document` responses in caller-specified order, with outer quotes stripped
+  from each translated field piece and pieces joined by ` ... `.
 - `apps/ssr-client.cc`: readline client for `ssr-server`; non-empty input sends
-  a query and empty input requests the next result.
+  a query, empty input or `@next` requests the next result, and `@full` requests
+  the full document for the last returned result.
 - `apps/ssr-client.py`: no-dependency Python example client for the same
-  JSON-line protocol.
+  JSON-line protocol and interactive `@next`/`@full` commands.
 - `apps/simple.cc`: build a simple burrow from TREC/MARCO-style corpora.
 - `apps/fiver2hazel.cc`: convert live Fiver shards in a burrow to Hazel shards
   with `--convert`, merge available Hazel shards with `--merge`, and time the
@@ -287,16 +292,21 @@
   to bind to the same read snapshot when cloned from an already-started source
   Warren.
 - SSR-derived ranking results use `p/q` for the best/shortest matching passage
-  and `container_p/container_q` for the ranked container. Wrappers such as
-  `tiered_ranking(...)` must preserve both ranges.
-- In `apps/ssr-server`, the command-line `content` query is the ranked
-  container passed to SSR, so `RankingResult::container_p/q` should be read as
-  the ranked content bounds. The command-line `container` query is only the
-  outer unit used to recover the normalized docno.
+  and `container_p/container_q` for the interval passed to SSR as its ranking
+  container. Wrappers such as `tiered_ranking(...)` must preserve both ranges.
+- In `apps/ssr-server`, the command-line `content` query is the rankable
+  interval query passed to SSR, so `RankingResult::container_p/q` should be
+  read as ranked content bounds. The command-line `container` query is the
+  outer document/item unit used for full-document lookup and docno identity.
 - `apps/ssr-server` emits qids as zero-based `qN` strings and normalizes JSON or
-  TREC-style docno text before returning it. The `document` operation only
-  accepts docnos previously emitted by this server session and translates the
-  cached ranked content interval instead of scanning the whole docno list.
+  TREC-style docno text before returning it. The `document` operation is
+  stateless: for each request it runs
+  `(>> {container} (>> {docno} "{requested-docno}"))` against every collection,
+  errors on zero or multiple matching containers, and translates either the
+  whole outer container or the optional comma-separated `--fields` intervals
+  inside that container. Field-assembled documents preserve the caller's field
+  order, strip outer quotes from each translated piece, and join pieces with
+  ` ... `.
 
 ## Ranking Measurements
 
