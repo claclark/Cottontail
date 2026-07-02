@@ -97,6 +97,23 @@ TEST(GCLTest, E2E) {
   EXPECT_EQ(p, cottontail::maxfinity);
   EXPECT_EQ(q, cottontail::maxfinity);
 
+  for (auto &gcl : {"(^ hello)", "(+ hello)", "(... hello)"}) {
+    std::unique_ptr<cottontail::Hopper> unary = compile(gcl);
+    ASSERT_NE(unary, nullptr);
+    unary->tau(cottontail::minfinity + 1, &p, &q);
+    EXPECT_EQ(p, 5);
+    EXPECT_EQ(q, 5);
+    unary->tau(6, &p, &q);
+    EXPECT_EQ(p, 8);
+    EXPECT_EQ(q, 8);
+    unary->rho(9, &p, &q);
+    EXPECT_EQ(p, 10);
+    EXPECT_EQ(q, 10);
+    unary->uat(cottontail::maxfinity - 1, &p, &q);
+    EXPECT_EQ(p, 13);
+    EXPECT_EQ(q, 13);
+  }
+
   std::unique_ptr<cottontail::Hopper> h1 = compile("NOTATTOKEN");
   ASSERT_NE(h1, nullptr);
   h1->tau(cottontail::minfinity + 1, &p, &q);

@@ -55,7 +55,7 @@ static std::map<enum Operator, std::string> gcl_operator_reverse = {
 static std::map<enum Operator, unsigned> gcl_operator_min_operands = {
     {TERM, 0},           {FIXED, 0},
     {ONE_OF, 1},         {ALL_OF, 1},
-    {FOLLOWED_BY, 2},    {CONTAINED_IN, 2},
+    {FOLLOWED_BY, 1},    {CONTAINED_IN, 2},
     {CONTAINING, 2},     {NOT_CONTAINED_IN, 2},
     {NOT_CONTAINING, 2}, {LINK, 1},
     {MATERIALIZE, 1}};
@@ -285,6 +285,9 @@ SExpression::to_hopper(std::shared_ptr<Featurizer> featurizer,
     std::shared_ptr<SExpression> binary_expr = to_binary();
     return binary_expr->to_hopper(featurizer, idx);
   }
+  if (subx_.size() == 1 &&
+      (kind_ == ONE_OF || kind_ == ALL_OF || kind_ == FOLLOWED_BY))
+    return subx_[0]->to_hopper(featurizer, idx);
   if (subx_.size() < 2)
     return nullptr;
   std::unique_ptr<cottontail::Hopper> left =
