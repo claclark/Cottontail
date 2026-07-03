@@ -6,6 +6,11 @@ explicit coding task.
 
 Especially don't do these things without discussion and approval from the user.
 
+## Lazy Materialization
+- Slow query: (^ (+ "animal testing" "tested on animals") (+ "by" students student) (+ "boycott" "cruelty-free" "make this issue known"))
+- Materialization makes it faster: (^ (+ (materialize "animal testing") (materialize "tested on animals")) (+ "by" students student) (+ "boycott" (materialize "cruelty-free") (materialize "make this issue known")))
+- Materialization should be lazy.
+
 ## Directory-level locking
 
 - Ensure only one process (i.e., one flufle) is manipulating the databases at
