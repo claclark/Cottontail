@@ -15,6 +15,7 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+#include "gcl/optimizer.h"
 #include "src/cottontail.h"
 #include "src/nlohmann.h"
 
@@ -361,6 +362,8 @@ public:
         response = next(request);
       else if (op == "document")
         response = document(request);
+      else if (op == "set_optimizer")
+        response = set_optimizer(request);
       else
         response = error_response(op, "Unknown op");
       if (!send_record(fd, request, response, cottontail::now() - start))
@@ -467,6 +470,21 @@ private:
     response["burrow"] = collection.burrow;
     response["docno"] = wanted;
     response["document"] = text;
+    return response;
+  }
+
+  json set_optimizer(const json &request) {
+    if (!request.contains("enabled") || !request["enabled"].is_boolean())
+      return error_response("set_optimizer", "Missing enabled");
+    bool enabled = request["enabled"].get<bool>();
+    if (enabled)
+      cottontail::gcl::Optimizer::enable();
+    else
+      cottontail::gcl::Optimizer::disable();
+    json response;
+    response["op"] = "set_optimizer";
+    response["ok"] = true;
+    response["enabled"] = enabled;
     return response;
   }
 

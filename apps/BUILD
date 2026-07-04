@@ -360,6 +360,19 @@ cc_binary(
 )
 
 cc_binary(
+    name = "ssr-timing",
+    srcs = [
+      "ssr-timing.cc",
+    ],
+    deps = [
+      "//src:cottontail",
+    ],
+    linkopts = [
+      "-pthread",
+    ],
+)
+
+cc_binary(
     name = "ssr-server",
     srcs = [
       "ssr-server.cc",

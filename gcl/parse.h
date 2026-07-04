@@ -41,6 +41,9 @@ public:
   SExpression &operator=(SExpression &&) = delete;
   ~SExpression() = default;
 
+  static std::shared_ptr<SExpression>
+  make(Operator kind, const std::string &term, addr width,
+       const std::vector<std::shared_ptr<SExpression>> &subx);
   static std::shared_ptr<SExpression> from_string(std::string s,
                                                   std::string *error);
   std::string to_string();
@@ -52,6 +55,10 @@ public:
 
   friend const char *parse_expr(const char *where,
                                 std::shared_ptr<SExpression> expr, bool *okay);
+
+  // Optimizer is the trusted GCL tree-rewrite boundary. Its private helpers
+  // inspect and rebuild SExpression internals without exposing tree mutation
+  // through the public parser API.
   friend class Optimizer;
 
 private:

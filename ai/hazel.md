@@ -497,12 +497,27 @@ not strict benchmarks: binaries changed, timers changed, the host was sometimes
 noisy, and some runs were user-reported manual checks. The durable conclusion
 is the performance shape by shard structure.
 
-All current MARCO dev-small semantic checks after the Meadowlark
-stemmer/tokenizer fixes preserved the expected profile:
+MARCO dev-small semantic checks after the Meadowlark stemmer/tokenizer fixes
+preserve the expected profile:
 
 - `MRR @10: 0.18975923272843034`;
 - `QueriesRanked: 6980`;
 - known fake-result topics `645252` and `970152` in the ranker output.
+
+The 2026-07-04 user-run `rank.sh` checks used `bm25:b=0.68`,
+`bm25:k1=0.82`, `bm25:depth=10`, `stop`, `stem`, and `bm25` over MARCO
+dev-small:
+
+| Burrow | Shape | Hot ranking loop | Wall time | Max RSS | MRR @10 |
+| --- | --- | ---: | ---: | ---: | ---: |
+| `a.meadow/` | Single merged Hazel | `12136 ms` | `0:13.73` | `5958648 KB` | `0.1897873743575748` |
+| `b.meadow/` | One large Fiver | `6720 ms` | `1:23.37` | `21597860 KB` | `0.1896242666120888` |
+
+Both ranked `6980` queries and emitted the known fake-result topics `645252`
+and `970152`. The small MRR difference was inspected with a local diff of
+rank triples: most differences were identical `(topic, docid)` pairs with only
+rank positions changed, with a smaller number of top-10 boundary swaps. This
+matches expected tie/order variation from highly parallel database build order.
 
 Historical first-pass Hazel activation before decoded idx posting caching was
 correct but unusably slow: around 43 minutes wall time and roughly 30 GB RSS

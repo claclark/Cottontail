@@ -88,6 +88,17 @@ inline bool is_width_character(char c) { return c >= '0' && c <= '9'; }
 inline int width_character_value(char c) { return c - '0'; }
 } // namespace
 
+std::shared_ptr<SExpression> SExpression::make(
+    Operator kind, const std::string &term, addr width,
+    const std::vector<std::shared_ptr<SExpression>> &subx) {
+  std::shared_ptr<SExpression> expr = std::make_shared<SExpression>();
+  expr->kind_ = kind;
+  expr->term_ = term;
+  expr->width_ = width;
+  expr->subx_ = subx;
+  return expr;
+}
+
 const char *parse_expr(const char *where, std::shared_ptr<SExpression> expr,
                        bool *okay) {
   *okay = false;

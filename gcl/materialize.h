@@ -1,6 +1,13 @@
 #ifndef COTTONTAIL_GCL_MATERIALIZE_H_
 #define COTTONTAIL_GCL_MATERIALIZE_H_
 
+#ifndef COTTONTAIL_GCL_MATERIALIZE_LAZY
+#define COTTONTAIL_GCL_MATERIALIZE_LAZY 0
+#endif
+
+#if COTTONTAIL_GCL_MATERIALIZE_LAZY
+#include <map>
+#endif
 #include <memory>
 
 #include "gcl/gcl.h"
@@ -20,13 +27,27 @@ public:
   Materialize &operator=(Materialize &&) = delete;
 
 private:
-  void materialize();
   void tau_(addr k, addr *p, addr *q, fval *v) final;
   void rho_(addr k, addr *p, addr *q, fval *v) final;
   void uat_(addr k, addr *p, addr *q, fval *v) final;
   void ohr_(addr k, addr *p, addr *q, fval *v) final;
 
+#if COTTONTAIL_GCL_MATERIALIZE_LAZY
+  struct CacheEntry {
+    addr k;
+    addr p;
+    addr q;
+    fval v;
+  };
+
+  std::map<addr, CacheEntry> tau_cache_;
+  std::map<addr, CacheEntry> rho_cache_;
+  std::map<addr, CacheEntry> uat_cache_;
+  std::map<addr, CacheEntry> ohr_cache_;
+#else
+  void materialize();
   bool materialized_ = false;
+#endif
 };
 
 } // namespace gcl

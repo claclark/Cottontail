@@ -17,7 +17,7 @@ public:
   inline addr R(addr k) { return R_(k); }
 
   inline void tau(addr k, addr *p, addr *q, fval *v) {
-    if (k != tau_k_) {
+    if (!(tau_p_ >= k && k >= tau_k_)) {
       tau_k_ = k;
       tau_v_ = 0.0;
       tau_(tau_k_, &tau_p_, &tau_q_, &tau_v_);
@@ -28,7 +28,7 @@ public:
     return;
   };
   inline void rho(addr k, addr *p, addr *q, fval *v) {
-    if (k != rho_k_) {
+    if (!(rho_q_ >= k && k >= rho_k_)) {
       rho_k_ = k;
       rho_v_ = 0.0;
       rho_(rho_k_, &rho_p_, &rho_q_, &rho_v_);
@@ -39,7 +39,7 @@ public:
     return;
   };
   inline void uat(addr k, addr *p, addr *q, fval *v) {
-    if (k != uat_k_) {
+    if (!(uat_q_ <= k && k <= uat_k_)) {
       uat_k_ = k;
       uat_v_ = 0.0;
       uat_(uat_k_, &uat_p_, &uat_q_, &uat_v_);
@@ -50,7 +50,7 @@ public:
     return;
   };
   inline void ohr(addr k, addr *p, addr *q, fval *v) {
-    if (k != ohr_k_) {
+    if (!(ohr_p_ <= k && k <= ohr_k_)) {
       ohr_k_ = k;
       ohr_v_ = 0.0;
       ohr_(ohr_k_, &ohr_p_, &ohr_q_, &ohr_v_);

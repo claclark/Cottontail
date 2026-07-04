@@ -53,24 +53,41 @@
 
 - GCL query code lives in `gcl/` and remains part of the core Cottontail
   library through `//src:cottontail`.
-- `gcl/optimizer.*` currently provides an opt-in S-expression optimizer shell.
-  Optimization defaults off; callers can use `Optimizer::enable()` for
-  experiments and `Optimizer::disable()` to restore the baseline path.
-- The first rewrite experiment reordered and nested
-  `(<< (^ a b c ...) Q)` by estimated term count. On the user's old single
-  SimpleWarren shard containing nearly 1 TB of raw text, this was a negative
-  result: the longer rewritten/title-style `winnie the pooh` query was roughly
-  one minute, while the two-term innermost probe `winnie pooh` with the same
-  window shape was about `46` ms.
-- The current materialization experiment adds optimizer-generated
-  `(materialize X)`, which fully enumerates `X` once into an `ArrayHopper`
-  before passing it outward. The contained-in/all-of rewrite now materializes
-  each nested level. `Link` is the existing precedent for lazy child
-  materialization into an array-backed hopper.
+- `gcl/optimizer.*` is on by default. `Optimizer::disable()` remains available
+  for explicit comparisons, and `apps/ssr-server` exposes this through the
+  `set_optimizer` protocol command.
+- The old estimated-count rewrite for top-level
+  `(<< (^ a b c ...) Q)` was removed. The current optimizer rule is narrower:
+  entering `+` turns on a materialization context for its children; the first
+  containment operator under that context (`<<`, `>>`, `!<`, or `!>`) is wrapped
+  as `(materialize X)` and then treated atomically for further optimization.
+  A nested `+` below that materialized node can start a new context.
+- Phrase expansion produces containment (`>> (# n) (... ...))`, so a phrase
+  branch under `+` is materialized at the phrase containment, not at the
+  internal ordered-window node.
+- Active `Materialize` fully enumerates the child hopper once with repeated
+  `tau(p + 1)`. It preserves empty and singleton fast paths; for two or more
+  postings it now pushes directly into `SimplePosting` and returns an
+  `ArrayHopper` over that storage, avoiding the previous temporary vector plus
+  shared-array copy. `SimplePosting` omits `q` storage when `q == p` and omits
+  `v` storage while all values are `0.0`; those are semantic defaults restored
+  by the hopper path.
+- The sparse lazy-materialization map experiment remains behind disabled
+  `COTTONTAIL_GCL_MATERIALIZE_LAZY` preprocessor branches for reference.
+- `Hopper` accessor memoization now reuses cached answers across semantic
+  intervals, not just exact keys: `tau` reuses when `p >= k >= cached-k`,
+  `rho` when `q >= k >= cached-k`, `uat` when `q <= k <= cached-k`, and `ohr`
+  when `p <= k <= cached-k`.
 - `apps/ssr-server` serves JSON-line SSR requests over localhost for one or
   more burrows, and `apps/ssr-client` is the readline client for interactive
   query/next/full-document use. `apps/ssr-client.py` is the standard-library
   Python example client for the same protocol.
+- `apps/ssr-timing` is a batch timing client for an existing `ssr-server`.
+  Usage is `ssr-timing port timing.queries [seconds]`. Each query file row has
+  a qid and a query. The client runs each query as `c/opt`, `w/not`, then
+  `w/opt`, checks that returned docnos match, prints each timing as it arrives,
+  appends flushed records to `timing.log`, and stops after a returned query
+  exceeds the optional/default slow-query threshold.
 - `SimpleIdx` posting-cache eviction is currently compiled out with
   `COTTONTAIL_SIMPLE_IDX_CACHE_EJECTION` set to `0`; cached postings remain for
   the life of the `SimpleIdx` unless the idx is reset or destroyed.
@@ -134,7 +151,7 @@
   Meadowlark library.
 - `apps/BUILD` contains standalone `cc_binary` targets.
 - `test/BUILD` contains aggregate `//test:tests` and dedicated
-  `//test:hazel_test`.
+  `//test:hazel_test` and `//test:optimizer_test`.
 - Repository rule: agents should run compile/build checks only. Do not run test
   cases, including `bazel test`, unless the user explicitly asks for that
   specific test run.
@@ -313,6 +330,20 @@
 - Consolidated historical performance-shape notes live in `ai/hazel.md`.
 - `apps/rank --verbose` reports the max per-worker ranking-loop time, not outer
   `trec(...)` wall time.
+- On 2026-07-04, user reran `make testing`: `//test:hazel_test`,
+  `//test:optimizer_test`, and `//test:tests` all passed.
+- On 2026-07-04, user reran MARCO dev-small `rank.sh` checks with
+  `bm25:b=0.68`, `bm25:k1=0.82`, `bm25:depth=10`, `stop`, `stem`, and `bm25`.
+  `a.meadow/` reported `Ranking took: 12136 ms`, `0:13.73` wall,
+  `5958648` KB max RSS, `MRR @10: 0.1897873743575748`, and
+  `QueriesRanked: 6980`. `b.meadow/` reported `Ranking took: 6720 ms`,
+  `1:23.37` wall, `21597860` KB max RSS, `MRR @10: 0.1896242666120888`, and
+  `QueriesRanked: 6980`.
+- Both MARCO runs emitted the known fake-result topics `645252` and `970152`.
+  The small MRR difference was inspected via local `temp` diff output: most
+  differences were same `(topic, docid)` rows with only rank changed, plus
+  small top-10 boundary swaps. This is consistent with tie/order differences
+  from highly parallel database build order, not a broad semantic change.
 
 ## Current Local Worktree Notes
 

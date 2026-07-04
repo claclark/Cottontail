@@ -115,26 +115,47 @@ public:
 
 } // namespace
 
-TEST(OptimizerTest, ContainedInAllOfAtoms) {
+TEST(OptimizerTest, TopLevelContainmentRemainsUnchanged) {
   ScopedOptimization optimization;
   OptimizerWarren warren;
   warren.start();
   EXPECT_EQ(optimize(&warren, "(<< (^ 30 10 20) 5)"),
-            "(materialize (<< (^ (materialize (<< (^ 10 20) 5)) 30) 5))");
-  EXPECT_EQ(optimize(&warren, "(<< (^ 10 20 30) 5)"),
-            "(materialize (<< (^ (materialize (<< (^ 10 20) 5)) 30) 5))");
-  EXPECT_EQ(optimize(&warren, "(<< (^ 30 10 20 40) 5)"),
-            "(materialize (<< (^ (materialize (<< (^ (materialize "
-            "(<< (^ 10 20) 5)) 30) 5)) 40) 5))");
-  EXPECT_EQ(optimize(&warren, "(<< (^ cat 30 10) 5)"),
-            "(materialize (<< (^ (materialize (<< (^ cat 10) 5)) 30) 5))");
-  EXPECT_EQ(optimize(&warren, "(<< (^ 30 (# 3) 10) 5)"),
-            "(materialize (<< (^ (materialize (<< (^ 10 30) 5)) (# 3)) 5))");
-  EXPECT_EQ(optimize(&warren, "(<< (^ 30 10 20) foo)"),
-            "(materialize (<< (^ (materialize (<< (^ 10 20) foo)) 30) foo))");
-  EXPECT_EQ(optimize(&warren, "(<< (^ 30 10 20) (# 100))"),
-            "(materialize (<< (^ (materialize (<< (^ 10 20) (# 100))) 30) "
-            "(# 100)))");
+            "(<< (^ 30 10 20) 5)");
+  EXPECT_EQ(optimize(&warren, "(>> (^ 30 10 20) 5)"),
+            "(>> (^ 30 10 20) 5)");
+  warren.end();
+}
+
+TEST(OptimizerTest, OneOfMaterializesContainmentChildren) {
+  ScopedOptimization optimization;
+  OptimizerWarren warren;
+  warren.start();
+  EXPECT_EQ(optimize(&warren, "(+ (<< (^ 30 10) 5) 40)"),
+            "(+ (materialize (<< (^ 30 10) 5)) 40)");
+  EXPECT_EQ(optimize(&warren, "(+ (^ 1 (<< 2 3) 4) 5)"),
+            "(+ (^ 1 (materialize (<< 2 3)) 4) 5)");
+  EXPECT_EQ(optimize(&warren, "(+ \"10 20\" 30)"),
+            "(+ (materialize (>> (# 2) (... 10 20))) 30)");
+  warren.end();
+}
+
+TEST(OptimizerTest, MaterializedContainmentIsAtomic) {
+  ScopedOptimization optimization;
+  OptimizerWarren warren;
+  warren.start();
+  EXPECT_EQ(
+      optimize(&warren, "(+ (materialize (<< (^ 1 (<< 2 3)) 4)) 5)"),
+      "(+ (materialize (<< (^ 1 (<< 2 3)) 4)) 5)");
+  warren.end();
+}
+
+TEST(OptimizerTest, NestedOneOfStartsANewMaterializationContext) {
+  ScopedOptimization optimization;
+  OptimizerWarren warren;
+  warren.start();
+  EXPECT_EQ(
+      optimize(&warren, "(+ (<< (+ (<< 1 2) 3) 4) 5)"),
+      "(+ (materialize (<< (+ (materialize (<< 1 2)) 3) 4)) 5)");
   warren.end();
 }
 
@@ -142,18 +163,9 @@ TEST(OptimizerTest, NonMatchingShapesRemainUnchanged) {
   ScopedOptimization optimization;
   OptimizerWarren warren;
   warren.start();
-  EXPECT_EQ(optimize(&warren, "(<< (^ 30 10) 5)"), "(<< (^ 30 10) 5)");
-  EXPECT_EQ(optimize(&warren, "(<< (^ 30 (... 10 20) 5) 1)"),
-            "(<< (^ 30 (... 10 20) 5) 1)");
   EXPECT_EQ(optimize(&warren, "(^ 30 10 20)"), "(^ 30 10 20)");
   EXPECT_EQ(optimize(&warren, "(<< (... 30 10 20) 5)"),
             "(<< (... 30 10 20) 5)");
-  EXPECT_EQ(optimize(&warren, "(<< (^ 30 10 20) (... 5 6))"),
-            "(<< (^ 30 10 20) (... 5 6))");
-  EXPECT_EQ(optimize(&warren, "(<< (^ 30 (<< 10 5) 20) 1)"),
-            "(<< (^ 30 (<< 10 5) 20) 1)");
-  EXPECT_EQ(optimize(&warren, "(>> (^ 30 10 20) 5)"),
-            "(>> (^ 30 10 20) 5)");
   EXPECT_EQ(optimize(&warren, "\"30 10 20\""), "(>> (# 3) (... 30 10 20))");
   warren.end();
 }

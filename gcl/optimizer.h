@@ -23,23 +23,12 @@ public:
 private:
   Optimizer() = delete;
 
-  static std::shared_ptr<SExpression> optimize_(std::shared_ptr<SExpression> expr,
-                                                Warren *warren);
+  // Helpers that need direct access to SExpression internals.
   static std::shared_ptr<SExpression>
-  rewrite_contained_in_all_of(std::shared_ptr<SExpression> expr,
-                              Warren *warren);
-  static bool collect_all_of_atoms(std::shared_ptr<SExpression> expr,
-                                   std::vector<std::shared_ptr<SExpression>>
-                                       *atoms);
-  static bool is_atomic(std::shared_ptr<SExpression> expr);
-  static addr cost(std::shared_ptr<SExpression> expr, Warren *warren);
+  optimize_(std::shared_ptr<SExpression> expr, bool materialize_inside,
+            bool *materialize_me);
   static std::shared_ptr<SExpression>
   materialize(std::shared_ptr<SExpression> expr);
-  static std::shared_ptr<SExpression>
-  make(Operator kind, const std::string &term, addr width,
-       const std::vector<std::shared_ptr<SExpression>> &subx);
-  static std::shared_ptr<SExpression>
-  clone(std::shared_ptr<SExpression> expr);
 };
 
 } // namespace gcl
