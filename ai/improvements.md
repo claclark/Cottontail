@@ -31,6 +31,38 @@ Especially don't do these things without discussion and approval from the user.
   encoding during design. The operation should receive normalized phrase
   components rather than depend on the original surface spelling.
 
+## Parallel Multi-Burrow Activation
+
+- Load `ssr-server` collections concurrently, with one activation task per
+  requested burrow. Join all activation tasks before serving requests, preserve
+  command-line collection order, and report activation or GCL-validation errors
+  after the join.
+- Implement parallel activation together with the planned "burrow is already
+  open" mechanism. Opening should use canonical burrow identity and an atomic
+  get-or-open operation: one caller performs activation, concurrent callers wait
+  for it, and later callers reuse the existing open dynamic state.
+- Do not reject repeated burrow arguments. They should reuse the existing
+  Fluffle rather than create independent Fluffles that can concurrently merge
+  the same directory. Callers may receive separate Warren views where required.
+- Give each Bigwig the total number of distinct Bigwigs active in the process.
+  This is workload context, not a caller-selected merge-thread count. Repeated
+  arguments and additional Warren views do not increase the total.
+- Bigwig should combine that population count with the machine's normal worker
+  budget to derive its own merge-worker allowance. Threading and merge-policy
+  decisions remain owned by Bigwig, while multiple open corpora no longer each
+  assume they own the entire machine.
+- Serial opening already leaves earlier Fluffles merging while later burrows
+  activate, so parallel activation does not create a fundamentally new merge
+  load. Its purpose is to reduce startup latency while making existing
+  multi-Bigwig resource use explicit.
+
+## Restartable builder for static shards
+
+- After the Meadowlark `append_*` lifecycle is finished, add a restartable tool
+  that greedily balances whole input files across standalone Hazel shards. The
+  durable manifest, serial ingestion, live Bigwig consolidation, restart, and
+  final publication design is in `ai/static-shards.md`.
+
 ## Directory-level locking
 
 - Ensure only one process (i.e., one flufle) is manipulating the databases at
@@ -82,6 +114,31 @@ Especially don't do these things without discussion and approval from the user.
 - BM25-style annotations are associated with the container, so future API and
   variable naming should make that boundary explicit rather than assuming one
   interval can serve every ranking model.
+
+## General Parallel Ranking Server
+
+- Extend `ssr-server` beyond SSR to support BM25 and other ranking methods over
+  the same multi-collection request and result-merging framework. The server and
+  clients should probably be renamed once SSR is one ranking mode rather than
+  the identity of the service.
+- Give requests an explicit desired global result depth `m`. For independently
+  partitioned shards, choose a smaller local retrieval depth `k` from the shard
+  count `n` and an acceptable miss probability instead of always retrieving the
+  full global depth from every shard.
+- Use the Section 4 model from Clarke and Terra, [Approximating the Top-m
+  Passages in a Parallel Question Answering
+  System](https://plg.uwaterloo.ca/~claclark/top.pdf). Its dynamic-programming
+  recurrence computes the probability that taking the local top `k` from each
+  of `n` randomly populated shards contains the global top `m`.
+- Choose the smallest `k` meeting a configured confidence threshold, then merge
+  local results normally. Preserve a conservative exact mode with `k = m`.
+- State and check the model assumptions: shards should be roughly balanced and
+  target items approximately uniformly and independently distributed. Repeated
+  or content-partitioned collections do not satisfy the model and need a
+  conservative fallback or a different model.
+- This optimization is not especially important for the current interactive
+  SSR use, but becomes useful when the server exposes general top-`m` ranking
+  with BM25 and other methods.
 
 ## Txt Wrapping
 
