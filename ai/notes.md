@@ -88,6 +88,10 @@
   `w/opt`, checks that returned docnos match, prints each timing as it arrives,
   appends flushed records to `timing.log`, and stops after a returned query
   exceeds the optional/default slow-query threshold.
+- Informal reweighting of the stratified SSR timing sample suggested roughly a
+  one-quarter reduction in average query time and removal of the extreme tail.
+  Full materialization can still make some common phrases, notably
+  `united states`, slower. See `ai/gcl-optimizer.md` for the measurement context.
 - `SimpleIdx` posting-cache eviction is currently compiled out with
   `COTTONTAIL_SIMPLE_IDX_CACHE_EJECTION` set to `0`; cached postings remain for
   the life of the `SimpleIdx` unless the idx is reset or destroyed.
@@ -140,6 +144,9 @@
   Hazel files, require that they form a complete sequence, infer the sibling
   output Hazel name from the input sequence range, and delegate merge validation
   to `Hazel::merge(...)`.
+- `apps/finish-merging.cc`: open directory burrows to keep Bigwig background
+  merging active, skip regular-file arguments, and poll every 10 seconds until
+  each burrow contains exactly one `fiver.*` or `hazel.*` shard.
 - `apps/scratch.cc`: scratch utility for creating no-merge Bigwig/Fiver shards
   from small text files with `line:` and `file:` annotations.
 

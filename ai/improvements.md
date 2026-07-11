@@ -6,10 +6,30 @@ explicit coding task.
 
 Especially don't do these things without discussion and approval from the user.
 
-## Lazy Materialization
-- Slow query: (^ (+ "animal testing" "tested on animals") (+ "by" students student) (+ "boycott" "cruelty-free" "make this issue known"))
-- Materialization makes it faster: (^ (+ (materialize "animal testing") (materialize "tested on animals")) (+ "by" students student) (+ "boycott" (materialize "cruelty-free") (materialize "make this issue known")))
-- Materialization should be lazy.
+## Cached Phrase Postings
+
+- Formalize the existing rule that token text does not contain ASCII whitespace
+  or control characters. A normalized token sequence can then be serialized
+  with a reserved separator and featurized as a phrase cache key without
+  colliding with an ordinary token feature.
+- Add a phrase operation to `Warren` that returns a hopper. Its default
+  implementation should construct exactly the phrase hopper used today, so
+  Warrens without phrase caching preserve current behavior.
+- Phrase lowering should call the Warren operation rather than assemble the
+  phrase entirely inside GCL. A cache-aware Warren can get or reserve a
+  waitable posting-cache entry under the canonical phrase feature.
+- When a phrase first reserves its cache entry, launch a worker to obtain the
+  component token postings, solve the phrase with current interval semantics,
+  fill a `SimplePosting`, and release the cache entry. Query construction can
+  continue in parallel; a consumer waits only if it reaches the phrase before
+  the posting is ready.
+- Concurrent queries should share the same in-progress phrase entry. The cache
+  generation must remain tied to the Warren read snapshot so a visible commit
+  naturally invalidates derived phrase postings along with other cached
+  postings.
+- Decide the exact `Warren::phrase(...)` signature and canonical phrase-key
+  encoding during design. The operation should receive normalized phrase
+  components rather than depend on the original surface spelling.
 
 ## Directory-level locking
 
@@ -50,23 +70,6 @@ Especially don't do these things without discussion and approval from the user.
 - If bounded cache behavior is needed, consider replacing the old thresholds
   with an LRU-style policy or another policy tied more directly to observed
   memory pressure and reuse.
-
-## GCL Substitute Bindings
-
-- Consider an optimizer-generated GCL operator for staged materialized
-  bindings, tentatively shaped like `(substitute A B C ...)`.
-- Each stage would be evaluated in order and materialized. Later stages can
-  refer to earlier materialized results with `($ 1)`, `($ 2)`, etc.
-- References are reusable bound values, not one-time hoppers passed down a
-  single branch. A materialized result may appear multiple times in later
-  expressions without recomputing the stage.
-- This could express query rewrites such as building a selective
-  `(<< (^ a b) Q)` seed first, then substituting that seed into later
-  refinements, avoiding eager global work on frequent terms inside generic
-  boolean operators.
-- This is a larger design than the current `materialize` wrapper and should be
-  planned before implementation, including reference lifetime, sharing,
-  string/S-expression representation, and how `($ n)` lowers to hoppers.
 
 ## Ranking Content and Container Terminology
 

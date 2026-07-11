@@ -26,13 +26,18 @@ Current implementation state:
 - Bigwig merge selection no longer uses a split/barrier. `find_merge_action(...)`
   first asks `find_fiver_action(...)` for Fiver cleanup/conversion work, then
   falls back to `find_hazel_action(...)`.
-- Fiver policy order is: lone-Fiver cleanup; whole-vector tiny Fiver run merge;
-  oldest eligible stranded Fiver conversion; oldest eligible Fiver whose own
-  estimate is at least `medium_shard`; smallest adjacent eligible Fiver pair
-  where each side is below `medium_shard`.
+- Fiver policy order is: lone-Fiver cleanup; merge an eligible run of at least
+  three tiny Fivers anywhere in the visible vector; oldest eligible stranded
+  Fiver conversion; oldest eligible Fiver whose own estimate is at least
+  `medium_shard`; smallest adjacent eligible Fiver pair where each side is below
+  `medium_shard`.
 - Current Bigwig thresholds are `small_shard` = 8 MiB, `medium_shard` = 256 MiB,
   and `large_shard` = 512 MiB. Verified compile-only builds after the policy
   work: `bazel build //src:cottontail` and `bazel build //apps:trec-example`.
+- `apps/finish-merging` opens and retains directory Warrens so Bigwig background
+  consolidation continues, then polls until each burrow has one Fiver/Hazel
+  shard. Regular-file arguments are skipped. Verified compile-only build:
+  `bazel build //apps:finish-merging`.
 
 Next possible work, after discussion:
 
