@@ -120,6 +120,19 @@ cc_binary(
 )
 
 cc_binary(
+    name = "finish-merging",
+    srcs = [
+      "finish-merging.cc",
+    ],
+    deps = [
+      "//src:cottontail",
+    ],
+    linkopts = [
+      "-pthread",
+    ],
+)
+
+cc_binary(
     name = "fluffy",
     srcs = [
       "fluffy.cc",
