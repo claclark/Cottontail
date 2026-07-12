@@ -113,7 +113,8 @@ std::string strip_outer_quotes(const std::string &text) {
 
 std::string translate(std::shared_ptr<cottontail::Warren> warren,
                       cottontail::addr p, cottontail::addr q) {
-  return clean_text(warren->txt()->translate(p, q));
+  return clean_text(
+      cottontail::json_translate(warren->txt()->translate(p, q)));
 }
 
 std::string display_docno(const std::string &text) {
@@ -526,7 +527,7 @@ private:
                      cottontail::addr cq, std::string *text,
                      std::string *error) {
     if (fields_.empty()) {
-      *text = clean_text(collection.warren->txt()->translate(cp, cq));
+      *text = translate(collection.warren, cp, cq);
       return true;
     }
     text->clear();

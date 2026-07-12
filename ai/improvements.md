@@ -142,6 +142,14 @@ Especially don't do these things without discussion and approval from the user.
 
 ## Txt Wrapping
 
+- Preserve `Txt::translate(...)` as an index-facing representation that the
+  configured tokenizer can split back into the same token stream. Internal JSON
+  structural tokens belong in that representation; presentation conversion
+  belongs at application display boundaries through `json_translate(...)`.
+- Audit and eventually remove or simplify `JsonTxt` presentation wrapping. It
+  currently makes storage-level translation depend on display concerns and
+  obscures the distinction between faithful translation and human-readable
+  rendering.
 - Revisit `Txt::wrap(...)` and the general wrapper model.
 - Clarify whether one recipe should carry both a concrete `Txt` component's
   physical parameters and wrapper-layer parameters.

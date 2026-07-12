@@ -323,3 +323,4 @@
 2026-07-11T16:13:08+00:00 - Added an SSR improvement note to choose per-shard retrieval depth with the Section 4 top-m probability model, including confidence selection, exact fallback, and distribution assumptions.
 2026-07-11T16:15:16+00:00 - Moved the top-m depth idea lower in improvements and broadened it into a future renamed parallel ranking server supporting SSR, BM25, and other ranking methods, with the Clarke-Terra model linked for per-shard depth selection.
 2026-07-11T16:17:03+00:00 - Replaced the completed-work-heavy active plan with three explicitly gated next phases: finish Meadowlark `append_*` lifecycles, cache phrase postings, and build restartable static shards.
+2026-07-11T16:41:59+00:00 - Made `ssr-server` apply `json_translate(...)` at its display boundary for snippets, field pieces, and full documents, and recorded the deferred cleanup separating faithful `Txt::translate(...)` output from presentation rendering.
