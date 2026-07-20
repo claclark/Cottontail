@@ -933,6 +933,17 @@ bool find_smallest_fiver_pair(std::shared_ptr<Fluffle> fluffle, size_t *start,
 
 bool find_stranded_fiver_conversion(std::shared_ptr<Fluffle> fluffle,
                                     size_t *start, size_t *end) {
+  if (fluffle->warrens.size() >= 2) {
+    auto warren = fluffle->warrens[0];
+    auto right = fluffle->warrens[1];
+    if (warren != nullptr && right != nullptr &&
+        warren->name() == "fiver" && right->name() == "hazel" &&
+        eligible(fluffle, warren)) {
+      if (start != nullptr && end != nullptr)
+        *start = *end = 0;
+      return true;
+    }
+  }
   if (fluffle->warrens.size() < 3)
     return false;
   for (size_t i = 1; i + 1 < fluffle->warrens.size(); i++) {

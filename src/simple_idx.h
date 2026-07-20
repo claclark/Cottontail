@@ -1,7 +1,7 @@
 #ifndef COTTONTAIL_SRC_SIMPLE_IDX_H_
 #define COTTONTAIL_SRC_SIMPLE_IDX_H_
 
-#define COTTONTAIL_SIMPLE_IDX_CACHE_EJECTION 0
+#define COTTONTAIL_SIMPLE_IDX_CACHE_EJECTION 1
 
 #include <condition_variable>
 #include <fstream>
