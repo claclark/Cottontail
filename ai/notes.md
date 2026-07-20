@@ -288,6 +288,11 @@
 
 ## Current Meadowlark/Ranking Notes
 
+- `meadowlark/metadata.*` owns forager metadata JSON serialization and parsing;
+  the implementation uses the existing nlohmann single-header JSON library,
+  emits `"type":"forager"`, and accepts a missing type only for compatibility.
+- `Forager` retains forager construction and annotation behavior, while
+  `TfIdfStats` consumes the metadata parser directly.
 - `TfIdfStats::make(...)` owns its ranking-view stemmer/tokenizer through
   private base `Stats` state initialized by constructor.
 - Meadowlark ranking should use `@tf-idf:` metadata/defaults

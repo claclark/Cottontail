@@ -6,6 +6,7 @@
 #include <string>
 
 #include "meadowlark/forager.h"
+#include "meadowlark/metadata.h"
 #include "src/core.h"
 #include "src/hopper.h"
 #include "src/tagging_featurizer.h"

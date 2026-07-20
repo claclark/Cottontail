@@ -3,7 +3,7 @@
 
 #include <gtest/gtest.h>
 
-#include "meadowlark/forager.h"
+#include "meadowlark/metadata.h"
 #include "src/cottontail.h"
 
 static void ExpectRoundtrip(const std::string &name, const std::string &tag,
@@ -38,6 +38,12 @@ static void ExpectParseFail(const std::string &json) {
 
 TEST(ForagerJson, RoundtripEmptyParameters) {
   ExpectRoundtrip("alpha", "t0", {});
+}
+
+TEST(ForagerJson, WriterIncludesForagerType) {
+  const std::string j =
+      cottontail::meadowlark::forager2json("alpha", "t0", {});
+  EXPECT_NE(j.find("\"type\": \"forager\""), std::string::npos);
 }
 
 TEST(ForagerJson, RoundtripSimpleParameters) {
@@ -84,6 +90,20 @@ TEST(ForagerJson, MissingParametersBecomesEmptyMap) {
                         "  \"tag\": \"B\"\n"
                         "}\n";
   ExpectParseOK(j, "A", "B", {});
+}
+
+TEST(ForagerJson, ExplicitForagerTypeIsAccepted) {
+  const std::string j = "{\n"
+                        "  \"type\": \"forager\",\n"
+                        "  \"name\": \"A\",\n"
+                        "  \"tag\": \"B\"\n"
+                        "}\n";
+  ExpectParseOK(j, "A", "B", {});
+}
+
+TEST(ForagerJson, OtherMetadataTypesAreRejected) {
+  ExpectParseFail("{\"type\":\"tsv\",\"name\":\"A\"}");
+  ExpectParseFail("{\"type\":7,\"name\":\"A\"}");
 }
 
 TEST(ForagerJson, ExtraFieldsAreIgnored) {
