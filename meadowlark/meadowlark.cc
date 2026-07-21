@@ -1,6 +1,5 @@
 #include "meadowlark/meadowlark.h"
 
-#include <atomic>
 #include <cassert>
 #include <cctype>
 #include <iostream>
@@ -8,6 +7,7 @@
 #include <memory>
 #include <mutex>
 #include <regex>
+#include <set>
 #include <sstream>
 #include <string>
 #include <thread>
@@ -121,39 +121,17 @@ bool append_path(std::shared_ptr<Appender> appender,
   return true;
 }
 
-bool append_json_metadata(std::shared_ptr<Warren> warren,
-                          const std::string &filename, std::string *error) {
+bool append_source(std::shared_ptr<Warren> warren,
+                   const std::string &filename, const std::string &metadata,
+                   addr *path_feature, std::string *error) {
   assert(warren != nullptr);
+  assert(path_feature != nullptr);
+  if (!warren->transaction(error))
+    return false;
   addr p, q;
-  return json_append(json_metadata(normalized_path(filename)), warren, &p, &q,
-                     "@", error);
-}
-
-bool append_json_source(std::shared_ptr<Warren> warren,
-                        const std::string &filename, addr *path_feature,
-                        std::string *error) {
-  assert(warren != nullptr);
-  assert(path_feature != nullptr);
-  if (!warren->transaction(error))
-    return false;
   if (!append_path(warren->appender(), warren->annotator(),
                    warren->featurizer(), filename, path_feature, error) ||
-      !append_json_metadata(warren, filename, error) || !warren->ready(error)) {
-    warren->abort();
-    return false;
-  }
-  return true;
-}
-
-bool append_path_warren(std::shared_ptr<Warren> warren,
-                        const std::string &filename, addr *path_feature,
-                        std::string *error) {
-  assert(warren != nullptr);
-  assert(path_feature != nullptr);
-  if (!warren->transaction(error))
-    return false;
-  if (!append_path(warren->appender(), warren->annotator(),
-                   warren->featurizer(), filename, path_feature, error) ||
+      !json_append(metadata, warren, &p, &q, "@", error) ||
       !warren->ready(error)) {
     warren->abort();
     return false;
@@ -200,7 +178,9 @@ bool append_jsonl(std::shared_ptr<Warren> warren, const std::string &filename,
   if (input == nullptr)
     return finish(false);
   addr path_feature;
-  if (!append_json_source(warren, filename, &path_feature, error))
+  if (!append_source(warren, filename,
+                     json_metadata(normalized_path(filename)), &path_feature,
+                     error))
     return finish(false);
   std::vector<std::shared_ptr<cottontail::Warren>> clones;
   for (size_t i = 0; i < threads; i++) {
@@ -296,26 +276,96 @@ size_t thread_count(size_t threads, size_t count) {
     threads = std::thread::hardware_concurrency() + 1;
   return threads;
 }
+
+std::string numeric_column_feature(size_t index) {
+  return ":" + std::to_string(index) + ":";
+}
+
+std::string normalized_heading(const std::string &heading) {
+  std::string normalized;
+  bool whitespace = false;
+  for (unsigned char c : heading)
+    if (std::isspace(c)) {
+      if (!whitespace)
+        normalized += '_';
+      whitespace = true;
+    } else {
+      normalized += static_cast<char>(c);
+      whitespace = false;
+    }
+  return normalized;
+}
+
+void tsv_columns(const std::string &first_line, bool have_first_line,
+                 const std::string &separator, bool header,
+                 std::vector<std::string> *headings,
+                 std::vector<std::string> *features) {
+  assert(headings != nullptr);
+  assert(features != nullptr);
+  std::vector<std::string> first;
+  if (have_first_line)
+    first = split_tsv(first_line, separator);
+  size_t columns = first.size();
+  headings->assign(columns, "");
+  if (header)
+    *headings = first;
+  features->resize(columns);
+  std::set<std::string> numeric;
+  for (size_t i = 0; i < columns; i++)
+    numeric.insert(numeric_column_feature(i));
+  std::set<std::string> used;
+  for (size_t i = 0; i < columns; i++) {
+    std::string fallback = numeric_column_feature(i);
+    std::string feature = fallback;
+    if (header && (*headings)[i] != "") {
+      std::string heading = normalized_heading((*headings)[i]);
+      if (heading != "")
+        feature = ":" + heading + ":";
+      if (used.find(feature) != used.end() ||
+          (numeric.find(feature) != numeric.end() && feature != fallback))
+        feature = fallback;
+    }
+    used.insert(feature);
+    (*features)[i] = feature;
+  }
+}
 } // namespace
 
 bool append_tsv(std::shared_ptr<Warren> warren, const std::string &filename,
                 std::string *error, bool header, std::string separator,
                 size_t threads) {
   assert(warren != nullptr);
-  std::vector<std::string> lines;
-  {
-    std::shared_ptr<std::string> contents = inhale(filename, error);
-    if (contents == nullptr)
-      return false;
-    lines = split_lines(*contents);
+  warren->start();
+  auto finish = [&](bool result) {
+    warren->end();
+    return result;
+  };
+  std::unique_ptr<std::istream> input = maybe_zipped(filename, error);
+  if (input == nullptr)
+    return finish(false);
+  std::string first_line;
+  bool have_first_line = static_cast<bool>(std::getline(*input, first_line));
+  if (!have_first_line && !input->eof()) {
+    safe_error(error) = "Read error on: " + filename;
+    return finish(false);
   }
+  if (!first_line.empty() && first_line.back() == '\r')
+    first_line.pop_back();
+  std::vector<std::string> headings, column_features;
+  tsv_columns(first_line, have_first_line, separator, header, &headings,
+              &column_features);
   addr path_feature;
-  if (!append_path_warren(warren, filename, &path_feature, error))
-    return false;
-  warren->commit();
-  if (lines.size() == 0)
-    return true;
-  threads = thread_count(threads, lines.size());
+  if (!append_source(warren, filename,
+                     tsv_metadata(normalized_path(filename), separator, header,
+                                  headings, column_features),
+                     &path_feature, error))
+    return finish(false);
+  if (!have_first_line) {
+    Warren::commit_all({warren});
+    return finish(true);
+  }
+  if (threads == 0)
+    threads = std::thread::hardware_concurrency() + 1;
   std::string wsep = separator;
   if (wsep == "")
     wsep = "\t";
@@ -327,43 +377,68 @@ bool append_tsv(std::shared_ptr<Warren> warren, const std::string &filename,
         c->abort();
         c->end();
       }
-      return false;
+      warren->abort();
+      return finish(false);
     }
-    clone->start();
     if (!clone->transaction(error)) {
       clone->end();
       for (auto &c : clones) {
         c->abort();
         c->end();
       }
-      return false;
+      warren->abort();
+      return finish(false);
     }
     clones.push_back(clone);
   }
-  std::mutex sync_error;
-  std::atomic<bool> failed(false);
+  bool first_pending = true;
+  bool done = false;
+  bool failed = false;
+  std::mutex sync;
+  auto fail = [&](const std::string &message) {
+    std::lock_guard<std::mutex> _(sync);
+    if (!failed) {
+      done = failed = true;
+      safe_set(error) = message;
+    }
+  };
   auto append_worker = [&](size_t n) {
     std::string terror;
     std::shared_ptr<cottontail::Warren> twarren = clones[n];
     addr data_feature = twarren->featurizer()->featurize(":");
     addr header_feature = twarren->featurizer()->featurize("::");
     std::vector<addr> tags;
+    for (const auto &feature : column_features)
+      tags.push_back(twarren->featurizer()->featurize(feature));
     addr p = maxfinity, q = minfinity;
-    size_t start = (lines.size() * n) / threads;
-    size_t end = (lines.size() * (n + 1)) / threads;
-    for (size_t i = start; i < end; i++) {
-      addr record_feature;
-      if (header && i == 0)
-        record_feature = header_feature;
-      else
-        record_feature = data_feature;
-      if (failed.load(std::memory_order_relaxed))
-        return;
+    for (;;) {
+      std::string line;
+      bool header_record = false;
+      {
+        std::lock_guard<std::mutex> _(sync);
+        if (done)
+          break;
+        if (first_pending) {
+          line = first_line;
+          first_pending = false;
+          header_record = header;
+        } else if (!std::getline(*input, line)) {
+          done = true;
+          if (!input->eof()) {
+            failed = true;
+            safe_set(error) = "Read error on: " + filename;
+          }
+          break;
+        }
+      }
+      if (!line.empty() && line.back() == '\r')
+        line.pop_back();
+      addr record_feature = header_record ? header_feature : data_feature;
       addr p0 = maxfinity, q0 = minfinity;
-      std::vector<std::string> fields = split_tsv(lines[i], separator);
+      std::vector<std::string> fields = split_tsv(line, separator);
       while (fields.size() > tags.size())
         tags.push_back(twarren->featurizer()->featurize(
-            ":" + std::to_string(tags.size()) + ":"));
+            numeric_column_feature(tags.size())));
       for (size_t j = 0; j < fields.size(); j++) {
         addr p1, q1;
         std::string field = fields[j];
@@ -372,10 +447,7 @@ bool append_tsv(std::shared_ptr<Warren> warren, const std::string &filename,
         if (!twarren->appender()->append(field, &p1, &q1, &terror) ||
             (p1 <= q1 &&
              !twarren->annotator()->annotate(tags[j], p1, q1, &terror))) {
-          if (!failed.exchange(true, std::memory_order_relaxed)) {
-            std::lock_guard<std::mutex> _(sync_error);
-            safe_error(error) = terror;
-          }
+          fail(terror);
           return;
         }
         p0 = std::min(p0, p1);
@@ -383,10 +455,7 @@ bool append_tsv(std::shared_ptr<Warren> warren, const std::string &filename,
       }
       if (p0 <= q0 &&
           !twarren->annotator()->annotate(record_feature, p0, q0, &terror)) {
-        if (!failed.exchange(true, std::memory_order_relaxed)) {
-          std::lock_guard<std::mutex> _(sync_error);
-          safe_error(error) = terror;
-        }
+        fail(terror);
         return;
       }
       p = std::min(p, p0);
@@ -395,10 +464,7 @@ bool append_tsv(std::shared_ptr<Warren> warren, const std::string &filename,
     if ((p <= q &&
          !twarren->annotator()->annotate(path_feature, p, q, &terror)) ||
         !twarren->ready(&terror)) {
-      if (!failed.exchange(true, std::memory_order_relaxed)) {
-        std::lock_guard<std::mutex> _(sync_error);
-        safe_error(error) = terror;
-      }
+      fail(terror);
     }
   };
   std::vector<std::thread> workers;
@@ -406,18 +472,20 @@ bool append_tsv(std::shared_ptr<Warren> warren, const std::string &filename,
     workers.emplace_back(std::thread(append_worker, i));
   for (auto &worker : workers)
     worker.join();
-  if (failed.load(std::memory_order_relaxed)) {
+  if (failed) {
     for (auto &c : clones) {
       c->abort();
       c->end();
     }
-    return false;
+    warren->abort();
+    return finish(false);
   }
-  for (auto &c : clones) {
-    c->commit();
+  std::vector<std::shared_ptr<Warren>> warrens = clones;
+  warrens.push_back(warren);
+  Warren::commit_all(warrens);
+  for (auto &c : clones)
     c->end();
-  }
-  return true;
+  return finish(true);
 }
 
 bool forage(std::shared_ptr<Warren> warren,
@@ -517,7 +585,8 @@ bool forage(std::shared_ptr<Warren> warren, const std::string &gcl, addr start,
     intervals.emplace_back(p, q);
   warren->end();
   std::map<std::string, std::string> params = parameters;
-  params["gcl"] = gcl;
+  params.erase("gcl");
+  params["contents"] = gcl;
   return forage(warren, intervals, name, tag, params, error, threads);
 }
 

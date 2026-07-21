@@ -273,15 +273,31 @@ std::string json_translate(const std::string &s) {
     } else if (is_next(c, open_number_token) ||
                is_next(c, close_number_token)) {
       c = skip(c);
-    } else if (*c == '\n') {
-      pending_space = true;
     } else if (inside) {
       if (*c == '"')
         t += "\\\"";
       else if (*c == '\\')
         t += "\\\\";
-      else
+      else if (*c == '\b')
+        t += "\\b";
+      else if (*c == '\f')
+        t += "\\f";
+      else if (*c == '\n')
+        t += "\\n";
+      else if (*c == '\r')
+        t += "\\r";
+      else if (*c == '\t')
+        t += "\\t";
+      else if (static_cast<unsigned char>(*c) < 0x20) {
+        static const char hex[] = "0123456789abcdef";
+        unsigned char u = static_cast<unsigned char>(*c);
+        t += "\\u00";
+        t += hex[(u >> 4) & 0x0f];
+        t += hex[u & 0x0f];
+      } else
         t += *c;
+    } else if (*c == '\n') {
+      pending_space = true;
     } else {
       t += *c;
     }

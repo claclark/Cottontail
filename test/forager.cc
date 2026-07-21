@@ -46,6 +46,28 @@ TEST(JsonMetadata, DescribesNormalizedFile) {
   EXPECT_NE(j.find("\"file\": \"./whatever\""), std::string::npos);
 }
 
+TEST(TsvMetadata, DescribesHeaderMapping) {
+  const std::string j = cottontail::meadowlark::tsv_metadata(
+      "./table.tsv", "\t", true, {"Animal", "Favorite Food"},
+      {":Animal:", ":Favorite_Food:"});
+  EXPECT_NE(j.find("\"type\": \"tsv\""), std::string::npos);
+  EXPECT_NE(j.find("\"file\": \"./table.tsv\""), std::string::npos);
+  EXPECT_NE(j.find("\"separator\": \"\\t\""), std::string::npos);
+  EXPECT_NE(j.find("\"header\": true"), std::string::npos);
+  EXPECT_NE(j.find("\"header\": \"Favorite Food\""), std::string::npos);
+  EXPECT_NE(j.find("\"feature\": \":Favorite_Food:\""),
+            std::string::npos);
+}
+
+TEST(TsvMetadata, OmitsHeadingsWithoutHeader) {
+  const std::string j = cottontail::meadowlark::tsv_metadata(
+      "./table.tsv", "\t", false, {"", ""}, {":0:", ":1:"});
+  EXPECT_NE(j.find("\"header\": false"), std::string::npos);
+  EXPECT_EQ(j.find("\"header\": \""), std::string::npos);
+  EXPECT_NE(j.find("\"feature\": \":0:\""), std::string::npos);
+  EXPECT_NE(j.find("\"feature\": \":1:\""), std::string::npos);
+}
+
 TEST(ForagerJson, WriterIncludesForagerType) {
   const std::string j =
       cottontail::meadowlark::forager2json("alpha", "t0", {});

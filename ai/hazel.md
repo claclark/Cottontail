@@ -519,6 +519,13 @@ rank triples: most differences were identical `(topic, docid)` pairs with only
 rank positions changed, with a smaller number of top-10 boundary swaps. This
 matches expected tie/order variation from highly parallel database build order.
 
+On 2026-07-21, a user-run check of a newly built `a.meadow/` after the current
+TSV and metadata changes reported `14863 ms` in the hot ranking loop,
+`0:16.47` wall time, `6165964` KB max RSS, an MRR@10 of
+`0.18971858370855488`, and `6980` ranked queries. It emitted the same two
+known fake-result topics. The MRR lies within the previously observed
+build-order variation and is not evidence of a semantic change.
+
 Historical first-pass Hazel activation before decoded idx posting caching was
 correct but unusably slow: around 43 minutes wall time and roughly 30 GB RSS
 on the merged `a.meadow` Hazel. Adding the Hazel idx decoded posting cache

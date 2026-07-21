@@ -68,6 +68,14 @@ TEST(JSON, Encode) {
                 cottontail::close_string_token);
 }
 
+TEST(JSON, TranslateEscapesControlsInsideStrings) {
+  std::string encoded = cottontail::open_string_token +
+                        std::string("\b\f\n\r\t\x01", 6) +
+                        cottontail::close_string_token;
+  EXPECT_EQ(cottontail::json_translate(encoded),
+            "\"\\b\\f\\n\\r\\t\\u0001\"");
+}
+
 namespace {
 
 std::string x0 =

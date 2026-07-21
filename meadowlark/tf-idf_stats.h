@@ -44,7 +44,7 @@ private:
   std::string tag_;
   std::string label_;
   std::string id_query_;
-  std::string content_query_;
+  std::string contents_query_;
   std::string container_query_;
   fval items_;
   fval average_length_;

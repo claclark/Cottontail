@@ -55,11 +55,11 @@ int main(int argc, char **argv) {
     } else {
       continue;
     }
-    auto thing = [](std::string s) {
+    auto clean = [](std::string s) {
       for (size_t i = 0; i < s.length(); i++)
         if (s[i] == '\n')
           s[i] = ' ';
-      return s;
+      return cottontail::json_translate(s);
     };
 
     warren->start();
@@ -100,11 +100,11 @@ int main(int argc, char **argv) {
       }
       cottontail::addr const WINDOW = 128;
       if (q - p <= WINDOW) {
-        std::string b = thing(txt->translate(p, q));
+        std::string b = clean(txt->translate(p, q));
         std::cout << b << "\n";
       } else {
-        std::string a = thing(txt->translate(p, p + WINDOW / 2));
-        std::string c = thing(txt->translate(q - WINDOW / 2, q));
+        std::string a = clean(txt->translate(p, p + WINDOW / 2));
+        std::string c = clean(txt->translate(q - WINDOW / 2, q));
         std::cout << a << "... " << c << "\n";
       }
     }

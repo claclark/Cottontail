@@ -6,12 +6,13 @@ active implementation plan yet.
 
 ## Prerequisite
 
-Finish the Meadowlark `append_*` work before implementing this program. Every
-supported append path needs the same restartable lifecycle: durable source
-identity, coordinated transaction publication, reliable detection of committed
-inputs, and safe retry after interruption. `static-shards` depends on being able
-to rerun Meadowlark with a complete assigned file list and have Meadowlark skip
-committed files while appending only missing files.
+The current JSONL and TSV append paths now provide the restartable lifecycle
+needed by an initial implementation: durable source identity, typed metadata,
+coordinated transaction publication, reliable detection of committed inputs,
+and safe retry after interruption. `static-shards` depends on being able to
+rerun Meadowlark with a complete assigned file list and have Meadowlark skip
+committed files while appending only missing files. A future input type must
+meet the same contract before `static-shards` accepts it.
 
 The new app must reuse shared Meadowlark argument/append code or invoke the
 existing `meadowlark` executable. It must not copy Meadowlark parsing and

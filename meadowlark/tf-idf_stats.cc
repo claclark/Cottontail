@@ -77,26 +77,29 @@ std::shared_ptr<Stats> TfIdfStats::make(const std::string &recipe,
   if (!json2forager(warren->txt()->translate(p, q), &name, &tag, &parameters,
                     error))
     return nullptr;
-  if (name != "tf-idf" || tag != metadata_tag ||
-      parameters.find("gcl") == parameters.end()) {
+  if (name != "tf-idf" || tag != metadata_tag) {
     safe_error(error) = "Metadata inconsistency";
     return nullptr;
   }
   std::string label = forager_label("tf-idf", metadata_tag);
   std::string id_query;
-  if (parameters.find("id") == parameters.end())
-    id_query = ":0:";
-  else
+  if (parameters.find("id") != parameters.end())
     id_query = parameters["id"];
-  std::string content_query = parameters["gcl"];
-  if ((hopper = warren->hopper_from_gcl(content_query, error)) == nullptr)
-    return nullptr;
   std::string container_query;
   if (parameters.find("container") == parameters.end())
     container_query = ":";
   else
     container_query = parameters["container"];
   if ((hopper = warren->hopper_from_gcl(container_query, error)) == nullptr)
+    return nullptr;
+  std::string contents_query;
+  if (parameters.find("contents") != parameters.end())
+    contents_query = parameters["contents"];
+  else if (parameters.find("gcl") != parameters.end())
+    contents_query = parameters["gcl"];
+  else
+    contents_query = container_query;
+  if ((hopper = warren->hopper_from_gcl(contents_query, error)) == nullptr)
     return nullptr;
   std::string stemmer_name;
   if (parameters.find("stemmer") == parameters.end())
@@ -125,7 +128,7 @@ std::shared_ptr<Stats> TfIdfStats::make(const std::string &recipe,
   stats->tag_ = metadata_tag;
   stats->label_ = label + ":";
   stats->id_query_ = id_query;
-  stats->content_query_ = content_query;
+  stats->contents_query_ = contents_query;
   stats->container_query_ = container_query;
   stats->tf_featurizer_ =
       TaggingFeaturizer::make(warren->featurizer(), label + "tf", error);
@@ -213,7 +216,7 @@ std::unique_ptr<Hopper> TfIdfStats::tf_hopper_(const std::string &term) {
   std::unique_ptr<Hopper> tf_hopper =
       warren_->idx()->hopper(tf_featurizer_->featurize(term));
   assert(tf_hopper != nullptr);
-  std::unique_ptr<Hopper> chopper = warren_->hopper_from_gcl(content_query_);
+  std::unique_ptr<Hopper> chopper = warren_->hopper_from_gcl(contents_query_);
   assert(chopper != nullptr);
   return std::make_unique<TfHopper>(std::move(tf_hopper), std::move(chopper));
 }
@@ -225,8 +228,9 @@ std::unique_ptr<Hopper> TfIdfStats::container_hopper_() {
 }
 
 std::unique_ptr<Hopper> TfIdfStats::id_hopper_() {
+  if (id_query_ == "")
+    return nullptr;
   std::unique_ptr<Hopper> hopper = warren_->hopper_from_gcl(id_query_);
-  assert(hopper != nullptr);
   return hopper;
 }
 } // namespace meadowlark

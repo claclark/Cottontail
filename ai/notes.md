@@ -102,7 +102,11 @@
 - `create_meadow(...)` creates a Bigwig-based meadow with UTF-8 tokenizer, JSON
   featurizer, zlib text/fvalue compression, and post posting compression.
 - `append_tsv(...)` and `append_jsonl(...)` ingest datasets, clone Warrens for
-  parallel work, and annotate records with path/container metadata.
+  parallel work, and atomically publish source identity, typed `@` metadata,
+  and source-annotated data records.
+- Meadowlark's machine-discovery roots are `/` for source identities and `@`
+  for metadata; `(<< :type: @)` enumerates explicit metadata types. Ordinary
+  data objects use `:`, and an optional TSV header uses `::`.
 - `apps/meadowlark.cc` preflights typed input files in one started-Warren pass
   using `meadowlark::already_appended(...)`, then skips already-present files
   before dispatching appends.
@@ -288,15 +292,27 @@
 
 ## Current Meadowlark/Ranking Notes
 
-- `meadowlark/metadata.*` owns forager metadata JSON serialization and parsing;
-  the implementation uses the existing nlohmann single-header JSON library,
-  emits `"type":"forager"`, and accepts a missing type only for compatibility.
+- `meadowlark/metadata.*` owns JSON, TSV, and forager metadata creation plus
+  forager metadata parsing. It uses the existing nlohmann single-header JSON
+  library, emits explicit `type` fields, and accepts a missing type only as a
+  legacy forager record.
+- Current metadata types are `json`, `tsv`, and `forager`. Metadata roots use
+  `@`; ordinary colon-path JSON fields support discovery and selection. File
+  metadata has a `file` member, while the source-identity feature annotates only
+  file contents. Direct C++ consumers pass translated metadata text through
+  `json_translate(...)` before treating it as presentation JSON.
 - `Forager` retains forager construction and annotation behavior, while
   `TfIdfStats` consumes the metadata parser directly.
 - `append_jsonl(...)` writes `{"type":"json","file":"<normalized-path>"}`
   metadata in the original Warren transaction, gives it an `@` root plus
   normal colon-path fields, and publishes it with the `/` marker and direct
   Warren JSON workers. The file feature annotates only data records.
+- `append_tsv(...)` now uses the same coordinated direct-Warren lifecycle and
+  streaming worker pattern as `append_jsonl(...)`. It emits `type=tsv`
+  metadata with its separator, header status, and initial column-to-feature
+  mapping after buffering only the first record. Header whitespace runs become
+  `_`; other characters are preserved. No-header columns remain numeric, and
+  unexpected extra fields are assigned numeric features lazily.
 - `json_append(...)` in `src/json.*` writes and annotates encoded JSON through
   a Warren without transaction management. Its root feature is independent of
   colon-based member paths. `json_scribe(...)` shares the templated traversal.
@@ -306,6 +322,16 @@
   `none`, and their metadata is selected through `@`, `:type:`, `:name:`, and
   `:tag:`. An empty Stats recipe first checks the legacy `@tf-idf:` feature,
   then falls back to the new literal `none` tag.
+- New forage metadata calls its processed interval query `contents`.
+  `TfIdfStats` falls back through legacy `gcl` and then `container`; `id` has no
+  default and is only required by consumers such as TREC output.
+- User verified the current compatibility path against older `b.meadow` and
+  `c.meadow` indexes with pre-current metadata field names; both remained
+  usable.
+- A fresh MSMARCO meadow built on 2026-07-21 exposed `tsv` and `forager`
+  records through `@`; `(<< :type: @)` returned those two type values, while
+  `/` returned the collection source identity. The forager record used
+  `tag=none`, `contents=:1:`, `container=:`, and `id=:0:`.
 - Meadowlark ranking uses forager metadata defaults (`stemmer=porter`,
   `tokenizer=ascii`) rather than Warren-global DNA stemmer settings.
 - New Meadowlark creation no longer writes a Warren-global `container`
@@ -366,6 +392,11 @@
   differences were same `(topic, docid)` rows with only rank changed, plus
   small top-10 boundary swaps. This is consistent with tie/order differences
   from highly parallel database build order, not a broad semantic change.
+- On 2026-07-21, a newly built `a.meadow/` reported `Ranking took: 14863 ms`,
+  `0:16.47` wall, `6165964` KB max RSS, MRR@10 of
+  `0.18971858370855488`, and `QueriesRanked: 6980`. It emitted the same two
+  known fake-result topics; the MRR remains within historical build-order
+  variation.
 
 ## Current Local Worktree Notes
 

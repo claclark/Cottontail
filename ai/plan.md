@@ -15,15 +15,13 @@ code improvement, (near-)clone reduction, or anything that improves
 code quality are welcome, but discuss with the user. Never hesitate to
 discuss a potential quality improvement.
 
-## 1. Complete Meadowlark Append Lifecycles
+## 1. Meadowlark Append Lifecycles (Current Formats Complete)
 
-This is the next area to finish. Bring the Meadowlark `append_*` functions onto
-one consistent, restartable lifecycle while preserving the semantics of each
-input format.
+The JSONL and TSV file appenders now share a consistent, restartable lifecycle.
+The remaining append surfaces are future steps rather than active work.
 
-- Start with `append_tsv(...)`, moving it onto the same start/end, source
-  identity, preflight, coordinated commit, abort, and restart behavior as the
-  current JSONL path.
+- Preserve the coordinated streaming, start/end, source identity, metadata,
+  commit, abort, and restart behavior of the JSONL and TSV file paths.
 - Keep Meadowlark argument parsing and typed input records reusable so future
   callers do not duplicate the CLI's interpretation of input files.
 - Finish the planned append surfaces only after discussing each one: JSONL from
@@ -33,9 +31,10 @@ input format.
   input list skips committed sources and safely retries missing or interrupted
   sources.
 
-The broader append design and remaining inconsistencies are recorded in
-`ai/meadowlark.md`. The restartable static-shard builder depends on this work
-being complete.
+The format and append conventions are recorded in `ai/meadowlark.md`. JSONL and
+TSV satisfy the ingestion prerequisite for an initial restartable static-shard
+builder. Any future input adapter must meet the same lifecycle before that
+builder accepts it.
 
 ## 2. Cache Phrase Postings
 
@@ -65,5 +64,5 @@ resumes, and published standalone Hazels return immediately. The builder uses
 greedy whole-file balancing, serial Meadowlark ingestion, concurrent background
 consolidation, in-burrow Fiver conversion, and restart-safe Hazel publication.
 
-Do not begin this implementation until the Meadowlark `append_*` prerequisite
-has been completed and the user explicitly approves coding it.
+The JSONL/TSV Meadowlark prerequisite is complete. Do not begin this
+implementation unless the user explicitly selects it and approves coding it.

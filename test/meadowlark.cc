@@ -66,25 +66,99 @@ TEST(Meadowlark, JSONMetadata) {
 }
 
 TEST(Meadowlark, TSV) {
-  std::string burrow = "tsv.meadow";
-  std::string options = "tokenizer:name:utf8 txt:json:yes featurizer@json";
-  std::shared_ptr<cottontail::Bigwig> warren =
-      cottontail::Bigwig::make(burrow, options);
-  ASSERT_NE(warren, nullptr);
+  const std::string path = "test/test.tsv";
+  std::string error;
+  std::shared_ptr<cottontail::Warren> warren =
+      cottontail::meadowlark::create_meadow("tsv.meadow", &error);
+  ASSERT_NE(warren, nullptr) << error;
   ASSERT_TRUE(cottontail::meadowlark::append_tsv(warren, "test/test.tsv",
-                                                 nullptr, true));
+                                                 &error, true, "\t", 1))
+      << error;
   warren->start();
+  std::unique_ptr<cottontail::Hopper> metadata =
+      warren->hopper_from_gcl("(>> @ (>> :type: \"tsv\"))", &error);
+  ASSERT_NE(metadata, nullptr) << error;
+  cottontail::addr metadata_p, metadata_q;
+  metadata->tau(cottontail::minfinity + 1, &metadata_p, &metadata_q);
+  ASSERT_NE(metadata_p, cottontail::maxfinity);
+  std::string description =
+      cottontail::json_translate(warren->txt()->translate(metadata_p,
+                                                          metadata_q));
+  EXPECT_NE(description.find("\"file\": \"test/test.tsv\""),
+            std::string::npos);
+  EXPECT_NE(description.find("\"separator\": \"\\t\""),
+            std::string::npos);
+  EXPECT_NE(description.find("\"header\": true"), std::string::npos);
+  EXPECT_NE(description.find("\"header\": \"Favorite Food\""),
+            std::string::npos);
+  EXPECT_NE(description.find("\"feature\": \":Favorite_Food:\""),
+            std::string::npos);
+
+  std::unique_ptr<cottontail::Hopper> described = warren->hopper_from_gcl(
+      "(>> (>> @ (>> :type: \"tsv\")) "
+      "(>> :file: \"test/test.tsv\"))",
+      &error);
+  ASSERT_NE(described, nullptr) << error;
+  cottontail::addr described_p, described_q;
+  described->tau(cottontail::minfinity + 1, &described_p, &described_q);
+  EXPECT_EQ(described_p, metadata_p);
+  EXPECT_EQ(described_q, metadata_q);
+
+  std::shared_ptr<cottontail::Hopper> file =
+      warren->idx()->hopper(warren->featurizer()->featurize(path));
+  ASSERT_NE(file, nullptr);
+  cottontail::addr file_p, file_q;
+  file->tau(metadata_p, &file_p, &file_q);
+  EXPECT_NE(file_p, metadata_p);
+  EXPECT_NE(file_p, cottontail::maxfinity);
+
   std::shared_ptr<cottontail::Hopper> hopper =
-      warren->hopper_from_gcl("(<< :0: (>> : (>> :3: \"Mud bath\")))");
+      warren->hopper_from_gcl(
+          "(<< :Animal: (>> : (>> :Hobby: \"Mud bath\")))");
   ASSERT_NE(hopper, nullptr);
   cottontail::addr p, q;
   hopper->rho(0, &p, &q);
   std::string pig = warren->txt()->translate(p, q).substr(0, 3);
   EXPECT_EQ(pig, "Pig");
-  hopper = warren->hopper_from_gcl("(<< :2: (>> : (>> :0: \"Owl\")))");
+  hopper = warren->hopper_from_gcl(
+      "(<< :Favorite_Food: (>> : (>> :Animal: \"Owl\")))");
   ASSERT_NE(hopper, nullptr);
   hopper->ohr(10000, &p, &q);
   std::string mouse = warren->txt()->translate(p, q).substr(0, 5);
   EXPECT_EQ(mouse, "Mouse");
+  warren->end();
+}
+
+TEST(Meadowlark, TSVWithoutHeaderUsesNumericColumns) {
+  const std::string path = "test/test.tsv";
+  std::string error;
+  std::shared_ptr<cottontail::Warren> warren =
+      cottontail::meadowlark::create_meadow("numeric-tsv.meadow", &error);
+  ASSERT_NE(warren, nullptr) << error;
+  ASSERT_TRUE(cottontail::meadowlark::append_tsv(warren, path, &error, false,
+                                                 "\t", 1))
+      << error;
+  warren->start();
+  std::unique_ptr<cottontail::Hopper> metadata =
+      warren->hopper_from_gcl("(>> @ (>> :type: \"tsv\"))", &error);
+  ASSERT_NE(metadata, nullptr) << error;
+  cottontail::addr metadata_p, metadata_q;
+  metadata->tau(cottontail::minfinity + 1, &metadata_p, &metadata_q);
+  ASSERT_NE(metadata_p, cottontail::maxfinity);
+  std::string description =
+      cottontail::json_translate(warren->txt()->translate(metadata_p,
+                                                          metadata_q));
+  EXPECT_NE(description.find("\"header\": false"), std::string::npos);
+  EXPECT_NE(description.find("\"feature\": \":0:\""),
+            std::string::npos);
+  EXPECT_NE(description.find("\"feature\": \":1:\""),
+            std::string::npos);
+
+  std::unique_ptr<cottontail::Hopper> hopper = warren->hopper_from_gcl(
+      "(<< :0: (>> : (>> :3: \"Mud bath\")))", &error);
+  ASSERT_NE(hopper, nullptr) << error;
+  cottontail::addr p, q;
+  hopper->rho(0, &p, &q);
+  EXPECT_EQ(warren->txt()->translate(p, q).substr(0, 3), "Pig");
   warren->end();
 }

@@ -56,12 +56,38 @@ Especially don't do these things without discussion and approval from the user.
   load. Its purpose is to reduce startup latency while making existing
   multi-Bigwig resource use explicit.
 
-## Restartable builder for static shards
+## Restartable Builder for Static Shards
 
-- After the Meadowlark `append_*` lifecycle is finished, add a restartable tool
-  that greedily balances whole input files across standalone Hazel shards. The
-  durable manifest, serial ingestion, live Bigwig consolidation, restart, and
-  final publication design is in `ai/static-shards.md`.
+- JSONL and TSV now have the coordinated, restartable Meadowlark append
+  lifecycle needed by an initial builder. Add a separately approved tool that
+  greedily balances those supported input files across standalone Hazel shards.
+  Any future input type must acquire the same lifecycle before the builder
+  accepts it. The durable manifest, serial ingestion, live Bigwig
+  consolidation, restart, and final publication design is in
+  `ai/static-shards.md`.
+
+## Meadowlark Metadata Evolution
+
+The established discovery and record conventions live in `ai/meadowlark.md`:
+agents bootstrap with `/` and `@`, new metadata is explicitly typed JSON rooted
+at `@`, and source-format records connect to their source through `file`.
+Potential follow-ups are:
+
+- Define whether a repeated forager `(name, tag)` replaces an earlier manifest,
+  is rejected, or intentionally accumulates another run. Multiple matching
+  manifests and accumulated statistics are currently possible.
+- Decide whether source identities need stronger canonicalization than the
+  current rule of prefixing `./` only when a filename contains no slash.
+- Keep the TSV `columns` record defined by the first row. If callers eventually
+  need metadata for lazily tolerated extra columns, design that without adding
+  a preliminary full-file scan or weakening coordinated publication.
+- Retain missing-`type` and `@tf-idf:` handling as explicit legacy forager
+  compatibility until there is a deliberate database migration policy.
+- Require each future source adapter to define its `type` record and publish
+  that metadata atomically with its `/` marker and data.
+- Add a library-level discovery convenience only if repeated consumers need
+  one. The `@` record and `:type:` field convention already permits unknown
+  types to be inspected or ignored without global component registration.
 
 ## Directory-level locking
 

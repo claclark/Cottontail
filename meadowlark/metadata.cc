@@ -1,7 +1,9 @@
 #include "meadowlark/metadata.h"
 
+#include <cassert>
 #include <map>
 #include <string>
+#include <vector>
 
 #include "src/core.h"
 #include "src/json.h"
@@ -14,6 +16,28 @@ std::string json_metadata(const std::string &file) {
   json metadata;
   metadata["file"] = file;
   metadata["type"] = "json";
+  return metadata.dump(2, ' ', false, json::error_handler_t::replace) + "\n";
+}
+
+std::string tsv_metadata(const std::string &file,
+                         const std::string &separator, bool header,
+                         const std::vector<std::string> &headings,
+                         const std::vector<std::string> &features) {
+  assert(headings.size() == features.size());
+  json metadata;
+  metadata["columns"] = json::array();
+  metadata["file"] = file;
+  metadata["header"] = header;
+  metadata["separator"] = separator;
+  metadata["type"] = "tsv";
+  for (size_t i = 0; i < features.size(); i++) {
+    json column;
+    column["feature"] = features[i];
+    if (header)
+      column["header"] = headings[i];
+    column["index"] = i;
+    metadata["columns"].push_back(column);
+  }
   return metadata.dump(2, ' ', false, json::error_handler_t::replace) + "\n";
 }
 
