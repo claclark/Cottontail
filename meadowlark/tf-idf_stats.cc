@@ -2,6 +2,7 @@
 
 #include <cassert>
 #include <cmath>
+#include <map>
 #include <memory>
 #include <string>
 
@@ -16,38 +17,72 @@
 namespace cottontail {
 namespace meadowlark {
 
+namespace {
+std::string gcl_string(const std::string &s) {
+  std::string quoted = "\"";
+  for (char c : s) {
+    if (c == '\\' || c == '"')
+      quoted += '\\';
+    quoted += c;
+  }
+  quoted += '"';
+  return quoted;
+}
+
+std::string forager_query(const std::string &name, const std::string &tag) {
+  std::string typed = "(>> @ (>> :type: \"forager\"))";
+  std::string named =
+      "(>> " + typed + " (>> :name: " + gcl_string(name) + "))";
+  return "(>> " + named + " (>> :tag: " + gcl_string(tag) + "))";
+}
+
+void no_stats(const std::string &recipe, std::string *error) {
+  if (recipe == "")
+    safe_error(error) = "No tf-idf stats in meadow";
+  else
+    safe_error(error) = "No tf-idf stats in meadow for tag: " + recipe;
+}
+} // namespace
+
 std::shared_ptr<Stats> TfIdfStats::make(const std::string &recipe,
                                         std::shared_ptr<Warren> warren,
                                         std::string *error) {
-  std::string label = forager_label("tf-idf", recipe);
-  std::shared_ptr<Hopper> hopper =
-      warren->idx()->hopper(warren->featurizer()->featurize("@" + label));
-  if (hopper == nullptr) {
-    if (recipe == "")
-      safe_error(error) = "No tf-idf stats in meadow";
-    else
-      safe_error(error) = "No tf-idf stats in meadow for tag: " + recipe;
-    return nullptr;
-  }
   addr p, q;
-  hopper->tau(minfinity + 1, &p, &q);
-  if (p == maxfinity) {
-    if (recipe == "")
-      safe_error(error) = "No tf-idf stats in meadow";
-    else
-      safe_error(error) = "No tf-idf stats in meadow for tag: " + recipe;
-    return nullptr;
+  std::string metadata_tag = recipe;
+  std::unique_ptr<Hopper> hopper;
+  bool legacy = false;
+  if (recipe == "") {
+    hopper =
+        warren->idx()->hopper(warren->featurizer()->featurize("@tf-idf:"));
+    if (hopper != nullptr) {
+      hopper->tau(minfinity + 1, &p, &q);
+      legacy = p < maxfinity;
+    }
+    if (!legacy)
+      metadata_tag = "none";
+  }
+  if (!legacy) {
+    hopper = warren->hopper_from_gcl(forager_query("tf-idf", metadata_tag),
+                                     error);
+    if (hopper == nullptr)
+      return nullptr;
+    hopper->tau(minfinity + 1, &p, &q);
+    if (p == maxfinity) {
+      no_stats(recipe, error);
+      return nullptr;
+    }
   }
   std::string name, tag;
   std::map<std::string, std::string> parameters;
   if (!json2forager(warren->txt()->translate(p, q), &name, &tag, &parameters,
                     error))
     return nullptr;
-  if (name != "tf-idf" || tag != recipe ||
+  if (name != "tf-idf" || tag != metadata_tag ||
       parameters.find("gcl") == parameters.end()) {
     safe_error(error) = "Metadata inconsistency";
     return nullptr;
   }
+  std::string label = forager_label("tf-idf", metadata_tag);
   std::string id_query;
   if (parameters.find("id") == parameters.end())
     id_query = ":0:";
@@ -87,7 +122,7 @@ std::shared_ptr<Stats> TfIdfStats::make(const std::string &recipe,
     return nullptr;
   std::shared_ptr<TfIdfStats> stats =
       std::shared_ptr<TfIdfStats>(new TfIdfStats(warren, stemmer, tokenizer));
-  stats->tag_ = recipe;
+  stats->tag_ = metadata_tag;
   stats->label_ = label + ":";
   stats->id_query_ = id_query;
   stats->content_query_ = content_query;
@@ -100,10 +135,7 @@ std::shared_ptr<Stats> TfIdfStats::make(const std::string &recipe,
       TaggingFeaturizer::make(warren->featurizer(), label + "total", error);
   hopper = warren->idx()->hopper(total_featurizer->featurize("items"));
   if (hopper == nullptr) {
-    if (recipe == "")
-      safe_error(error) = "No tf-idf stats in meadow";
-    else
-      safe_error(error) = "No tf-idf stats in meadow for tag: " + recipe;
+    no_stats(recipe, error);
     return nullptr;
   }
   addr n, items = 0;
@@ -111,19 +143,13 @@ std::shared_ptr<Stats> TfIdfStats::make(const std::string &recipe,
        hopper->tau(p + 1, &p, &q, &n))
     items += n;
   if (items < 1) {
-    if (recipe == "")
-      safe_error(error) = "No tf-idf stats in meadow";
-    else
-      safe_error(error) = "No tf-idf stats in meadow for tag: " + recipe;
+    no_stats(recipe, error);
     return nullptr;
   }
   stats->items_ = items;
   hopper = warren->idx()->hopper(total_featurizer->featurize("length"));
   if (hopper == nullptr) {
-    if (recipe == "")
-      safe_error(error) = "No tf-idf stats in meadow";
-    else
-      safe_error(error) = "No tf-idf stats in meadow for tag: " + recipe;
+    no_stats(recipe, error);
     return nullptr;
   }
   addr length = 0;
@@ -131,10 +157,7 @@ std::shared_ptr<Stats> TfIdfStats::make(const std::string &recipe,
        hopper->tau(p + 1, &p, &q, &n))
     length += n;
   if (length < 1) {
-    if (recipe == "")
-      safe_error(error) = "No tf-idf stats in meadow";
-    else
-      safe_error(error) = "No tf-idf stats in meadow for tag: " + recipe;
+    no_stats(recipe, error);
     return nullptr;
   }
   stats->average_length_ = length / stats->items_;

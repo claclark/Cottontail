@@ -4,10 +4,18 @@
 #include <string>
 
 #include "src/core.h"
+#include "src/json.h"
 #include "src/nlohmann.h"
 
 namespace cottontail {
 namespace meadowlark {
+
+std::string json_metadata(const std::string &file) {
+  json metadata;
+  metadata["file"] = file;
+  metadata["type"] = "json";
+  return metadata.dump(2, ' ', false, json::error_handler_t::replace) + "\n";
+}
 
 std::string forager2json(const std::string &name, const std::string &tag,
                          const std::map<std::string, std::string> &parameters) {
@@ -31,13 +39,16 @@ bool json2forager(const std::string &text, std::string *name, std::string *tag,
   *tag = "";
   parameters->clear();
 
-  size_t end = text.size();
-  while (end > 0 && text[end - 1] == '\0')
+  std::string decoded = text;
+  if (text.find(open_object_token) != std::string::npos)
+    decoded = json_translate(text);
+  size_t end = decoded.size();
+  while (end > 0 && decoded[end - 1] == '\0')
     --end;
 
   json metadata;
   try {
-    metadata = json::parse(text.begin(), text.begin() + end);
+    metadata = json::parse(decoded.begin(), decoded.begin() + end);
   } catch (const json::parse_error &) {
     safe_error(error) = "Error parsing forager from json";
     return false;

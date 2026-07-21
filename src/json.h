@@ -3,6 +3,7 @@
 
 #include "src/core.h"
 #include "src/scribe.h"
+#include "src/warren.h"
 
 namespace cottontail {
 
@@ -28,7 +29,10 @@ bool json_scribe(const std::string &s, std::shared_ptr<Scribe> scribe,
                  std::string *error = nullptr);
 bool json_scribe(const std::string &s, std::shared_ptr<Scribe> scribe, addr *p,
                  addr *q, std::string *error = nullptr);
+bool json_append(const std::string &s, std::shared_ptr<Warren> warren, addr *p,
+                 addr *q, const std::string &feature = ":",
+                 std::string *error = nullptr);
 std::string json_translate(const std::string &s);
-std::string json_encode(const std::string& input);
+std::string json_encode(const std::string &input);
 } // namespace cottontail
 #endif // COTTONTAIL_SRC_JSON_H_

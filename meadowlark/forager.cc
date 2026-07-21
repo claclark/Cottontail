@@ -9,6 +9,7 @@
 #include "meadowlark/tf-idf_forager.h"
 #include "src/annotator.h"
 #include "src/core.h"
+#include "src/json.h"
 #include "src/tokenizer.h"
 #include "src/warren.h"
 
@@ -32,16 +33,18 @@ Forager::make(std::shared_ptr<Warren> warren, const std::string &name,
               const std::map<std::string, std::string> &parameters,
               std::string *error) {
   std::shared_ptr<Forager> forager = nullptr;
-  std::string combined_tag = forager_label(name, tag);
-  if (name == "null")
+  std::string normalized_name = name == "" ? "tf-idf" : name;
+  std::string normalized_tag = tag == "" ? "none" : tag;
+  std::string combined_tag = forager_label(normalized_name, normalized_tag);
+  if (normalized_name == "null")
     forager = NullForager::make(warren, combined_tag, parameters, error);
-  else if (name == "" || name == "tf-idf")
+  else if (normalized_name == "tf-idf")
     forager = TfIdfForager::make(warren, combined_tag, parameters, error);
   else
-    safe_error(error) = "No Forager named: " + name;
+    safe_error(error) = "No Forager named: " + normalized_name;
   if (forager != nullptr) {
-    forager->name_ = name;
-    forager->tag_ = tag;
+    forager->name_ = normalized_name;
+    forager->tag_ = normalized_tag;
     forager->parameters_ = parameters;
     forager->warren_ = warren;
   }
@@ -51,27 +54,21 @@ Forager::make(std::shared_ptr<Warren> warren, const std::string &name,
 bool Forager::check(const std::string &name, const std::string &tag,
                     const std::map<std::string, std::string> &parameters,
                     std::string *error) {
-  std::string combined_tag = forager_label(name, tag);
-  if (name == "null")
+  std::string normalized_name = name == "" ? "tf-idf" : name;
+  std::string normalized_tag = tag == "" ? "none" : tag;
+  std::string combined_tag = forager_label(normalized_name, normalized_tag);
+  if (normalized_name == "null")
     return NullForager::check(combined_tag, parameters, error);
-  else if (name == "" || name == "tf-idf")
+  else if (normalized_name == "tf-idf")
     return TfIdfForager::check(combined_tag, parameters, error);
-  safe_error(error) = "No Forager named: " + name;
+  safe_error(error) = "No Forager named: " + normalized_name;
   return false;
 }
 
 bool Forager::label(std::string *error) {
   addr p, q;
-  std::string label = "@" + forager_label(name_, tag_);
-  if (!warren_->appender()->append(forager2json(name_, tag_, parameters_), &p,
-                                   &q, error) ||
-      !warren_->annotator()->annotate(warren_->featurizer()->featurize(label),
-                                      p, q, error) ||
-      !warren_->annotator()->annotate(warren_->featurizer()->featurize("@"), p,
-                                      q, error))
-    return false;
-  else
-    return true;
+  return json_append(forager2json(name_, tag_, parameters_), warren_, &p, &q,
+                     "@", error);
 }
 
 } // namespace meadowlark

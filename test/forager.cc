@@ -40,6 +40,12 @@ TEST(ForagerJson, RoundtripEmptyParameters) {
   ExpectRoundtrip("alpha", "t0", {});
 }
 
+TEST(JsonMetadata, DescribesNormalizedFile) {
+  const std::string j = cottontail::meadowlark::json_metadata("./whatever");
+  EXPECT_NE(j.find("\"type\": \"json\""), std::string::npos);
+  EXPECT_NE(j.find("\"file\": \"./whatever\""), std::string::npos);
+}
+
 TEST(ForagerJson, WriterIncludesForagerType) {
   const std::string j =
       cottontail::meadowlark::forager2json("alpha", "t0", {});

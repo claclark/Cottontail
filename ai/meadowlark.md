@@ -1,6 +1,6 @@
 # Meadowlark Format And Append Plan
 
-Status date: 2026-07-20.
+Status date: 2026-07-21.
 
 This note records the current Meadowlark format, implemented ingestion
 behavior, agreed metadata conventions, and the next planned append work. It
@@ -22,10 +22,9 @@ The currently established punctuation features are:
 - `@` marks JSON metadata records that describe annotations or source formats.
 
 The normalized source identity is also featurized and used to annotate content
-that came from that source. File metadata deliberately records the same identity
-twice: as a `file` member in its JSON payload and as the feature of an annotation
-containing the metadata interval. The JSON is self-describing, while the
-annotation supports direct structural lookup.
+that came from that source. It does not annotate metadata. File metadata records
+the identity in a `file` member, whose ordinary JSON field annotation supports
+direct structural lookup.
 
 When an agent connects to a Meadowlark database, its basic discovery operations
 should include `/` and `@`:
@@ -33,24 +32,26 @@ should include `/` and `@`:
 - `/` discovers the sources represented in the meadow.
 - `@` discovers metadata that explains derived annotations and source formats.
 
-Metadata about a file must be contained in an annotation whose feature is the
-normalized file identity. A query such as
+Metadata about a file has a `:file:` field inside its `@` record. A query such
+as
 
 ```text
-(<< @ /data/hdd3/Collections/msmarco/collection.tsv)
+(>> @ (>> :file: "/data/hdd3/Collections/msmarco/collection.tsv"))
 ```
 
-can then return only the metadata records describing that file. This association
-is an agreed convention for future file metadata; TSV metadata does not yet
-implement it.
+can then return only the metadata records describing that file. The feature for
+the normalized filename applies only to data objects, so
+`(<< : /data/hdd3/Collections/msmarco/collection.tsv)` selects the ordinary
+objects from that file rather than its metadata. JSON ingestion implements
+these conventions; TSV ingestion does not yet implement its metadata record.
 
 ## Metadata Records
 
-An interval annotated with `@` contains a JSON object. The JSON is the
-serialization of the metadata payload; it does not have to be ingested through
-`json_scribe(...)` or receive the ordinary `:` object annotation. Keeping `@`
-as its Meadowlark role prevents metadata from appearing in ordinary data-object
-queries.
+An interval annotated with `@` contains a JSON object. Its members receive the
+normal colon-based JSON field annotations, such as `:type:` and `:tag:`, while
+the object itself receives `@` instead of the ordinary `:` root annotation.
+Keeping these root roles distinct prevents metadata from appearing in ordinary
+data-object queries.
 
 The top-level `type` member identifies the kind of annotations or source format
 described by the record:
@@ -70,20 +71,17 @@ The metadata object is an extensible, type-discriminated record:
 - For compatibility with existing meadows, a missing `type` is exactly
   equivalent to `"type": "forager"`.
 
-The generic `@` annotation supports discovery. A metadata type may also define
-more specific annotation features for efficient direct lookup.
+The generic `@` annotation supports discovery. The normal JSON field
+annotations support typed queries such as `(>> @ (>> :type: "forager"))`.
 
 Metadata describing a file has an additional common contract:
 
 - The JSON object contains a top-level `file` member.
 - `file` contains the normalized file identity used by Meadowlark.
-- The metadata interval annotated with `@` is contained in an annotation whose
-  feature is that same normalized file identity.
-- The JSON `file` value and the containing annotation feature must agree.
-
-This redundancy is intentional. The JSON record remains meaningful when read
-on its own, and containment makes file-specific metadata selection an index
-operation rather than a scan through every `@` record.
+- The normalized file-identity feature annotates the file's data objects, not
+  the metadata interval.
+- Consumers find file metadata through `@` and `:file:` and find file contents
+  through `:` and the normalized file-identity feature.
 
 ### Forager Metadata
 
@@ -110,8 +108,8 @@ Its core shape is:
 Forager metadata follows these conventions:
 
 - `name` identifies the forager implementation and annotation family.
-- `tag` identifies a particular output or statistics view within that family;
-  it may be empty.
+- `tag` identifies a particular output or statistics view within that family.
+  New records use the literal tag `none` when callers omit the tag.
 - `parameters` contains `start` and `end` for the processed address range.
 - Other parameters depend on the forager.
 - Other top-level keys may be added.
@@ -122,12 +120,19 @@ The existing parser already ignores unknown top-level keys, so future writers
 can emit the explicit type without making the records unreadable by current
 forager consumers.
 
-The current TF-IDF forager annotates its JSON record with both `@` and a lookup
-feature derived from its name and tag:
+Legacy TF-IDF metadata was annotated with a lookup feature derived from its
+name and empty tag:
 
 ```text
-@tf-idf:             # empty/default tag
-@tf-idf:passages:    # tag = "passages"
+@tf-idf:
+```
+
+New metadata does not add a type-specific `@tf-idf:...` feature. It is found
+through its structured fields. For example, a tagged TF-IDF manifest is
+selected by extending this base query with its `:tag:` field:
+
+```text
+(>> (>> @ (>> :type: "forager")) (>> :name: "tf-idf"))
 ```
 
 The metadata record is a manifest for the run. The numeric results live under
@@ -142,16 +147,46 @@ tf-idf:passages:total:length
 
 `TfIdfStats` uses the selected tag to find the corresponding metadata, validate
 its `name` and `tag`, recover its queries/tokenizer/stemmer, and access the same
-tagged statistics. BM25 is selected separately as a ranking method; the tag
-selects which TF-IDF statistics view BM25 consumes.
+tagged statistics. For compatibility, an empty requested tag first selects the
+first legacy `@tf-idf:` record. If none exists, the request means the literal
+new tag `none` and uses the structured metadata query. An explicit nonempty tag
+uses only the structured query. BM25 is selected separately as a ranking
+method; the tag selects which TF-IDF statistics view BM25 consumes.
 
 Current details to regularize later:
 
-- An empty forager name selects the TF-IDF implementation in some call paths,
-  but the durable metadata name should be the canonical explicit `tf-idf`.
 - Repeating a `(name, tag)` pair can create multiple manifests and accumulated
   statistics. Replacement, rejection, or another uniqueness policy has not yet
   been designed.
+
+### JSON Metadata
+
+A source ingested as JSON has a small file metadata record:
+
+```json
+{
+  "type": "json",
+  "file": "./whatever"
+}
+```
+
+The `file` value is the normalized source identity, not necessarily the string
+originally passed by the caller. The metadata declares how Meadowlark
+interpreted the source, so consumers do not have to infer its representation
+from a filename extension.
+
+The type is `"json"`, rather than `"jsonl"`, because it describes the JSON
+annotation model produced in the meadow. JSON Lines is the current input
+framing used by `append_jsonl(...)`; a separate field can record physical
+framing later if a consumer needs that distinction.
+
+The metadata object is annotated with `@`; its members have colon-path field
+annotations, while its root does not have `:` or the filename feature. The
+metadata, `/` source marker, and JSON records are committed atomically.
+`append_jsonl(...)` emits the metadata and `/` marker in the original Warren
+transaction and publishes it together with all direct-Warren JSON workers.
+Transaction-neutral `json_append(...)` writes the encoded JSON structure and
+accepts the root feature separately from its colon-based member paths.
 
 ### TSV Metadata
 
@@ -199,12 +234,12 @@ retaining numeric `:0:`, `:1:`, and similar labels when no header is declared.
 Exact policies for empty headings, extra columns, duplicate normalized labels,
 and GCL-significant non-whitespace characters should be settled before coding.
 
-The TSV JSON should be appended as metadata text and annotated with `@`. Its
-interval must be contained in an annotation for the exact normalized identity
-stored in `file`. The metadata, source marker, and TSV data should be committed
-atomically. This does not require a `Scribe`; TSV remains a direct
-Warren/Appender/Annotator ingestion path. A possible additional type-specific
-lookup annotation has not yet been chosen.
+The TSV JSON should be stored through transaction-neutral `json_append(...)`
+with an `@` root and ordinary colon-path member annotations. Its root must not
+receive the filename feature. The metadata, source marker, and TSV data should
+be committed atomically. TSV remains a direct Warren ingestion path. A possible
+additional type-specific lookup annotation has not been chosen and is not
+needed for the initial structured lookup.
 
 It is acceptable for this capability to exist first as a library API even when
 no command-line application exposes the `header` argument.
@@ -251,21 +286,18 @@ narrowest appropriate abstraction:
 3. Use that started Warren as the read snapshot and clone source.
 4. Open a transaction for the source marker and any source metadata.
 5. Create worker clones from the started Warren.
-6. Write through `Scribe` only when the input adapter requires it; otherwise
-   remain at the Warren/Appender/Annotator layer.
+6. Write through the Warren or one of its clones; transaction-neutral helpers
+   may share record encoding without owning the transaction.
 7. Ready the source transaction and every worker transaction.
 8. If any setup, write, or ready step fails, abort every transaction and end
    every clone.
 9. On success, publish all transactions through the highest applicable batch
    helper.
-10. Finalize any Scribes used by the operation.
-11. End every clone and then the original Warren on every return path.
+10. End every clone and then the original Warren on every return path.
 
-If an append path writes through `Scribe`, it should commit through
-`Scribe::commit_all(...)`. A direct Warren path should commit through
-`Warren::commit_all(...)`. These helpers can discover coordinated Bigwig
-publication; Meadowlark should not inspect or depend on the concrete Warrens or
-their shared working directory.
+Direct Warren paths commit through `Warren::commit_all(...)`, which can discover
+coordinated Bigwig publication. Meadowlark should not inspect or depend on the
+concrete Warrens or their shared working directory.
 
 Duplicate preflight may be performed by a batch caller such as the Meadowlark
 CLI. The public append APIs and their eventual non-file variants still need a
@@ -280,14 +312,18 @@ append publication:
 
 - It starts the original Warren and ends it through one top-level finish path.
 - It streams plain or gzipped input with `maybe_zipped(...)`.
-- It writes and readies the source marker through a Warren-backed `Scribe`.
+- It writes and readies the source marker and JSON metadata through the
+  original Warren.
 - It creates workers by cloning the already-started Warren.
-- It writes JSON records through per-clone Scribes.
+- It writes JSON records through `json_append(...)` on direct Warren clones.
 - It annotates each nonempty JSON record with the source-identity feature.
-- It readies all worker Scribes.
+- It readies all worker Warrens.
 - It aborts the source and workers together on failure.
-- It publishes the source marker and workers through `Scribe::commit_all(...)`.
-- It finalizes the Scribes and ends every clone and the original Warren.
+- It publishes the source transaction and workers through
+  `Warren::commit_all(...)` and ends every clone and the original Warren.
+- It emits `type = "json"` file metadata with the normalized source identity,
+  using `@` as the root and colon paths for its fields. The filename feature
+  annotates only JSON data records.
 
 The CLI performs duplicate preflight before calling this function. The append
 function itself does not currently repeat that check.
@@ -321,8 +357,8 @@ started views.
 ### JSONL From Strings
 
 Add an append operation for an array or vector of JSON strings. It should share
-the JSON record worker body and Scribe lifecycle with file JSONL while taking an
-explicit source identity from its caller.
+the JSON record worker body and direct-Warren lifecycle with file JSONL while
+taking an explicit source identity from its caller.
 
 The initial API can accept already-split strings unless a more general streaming
 input abstraction becomes clearly useful.
@@ -353,8 +389,8 @@ The next implementation area, after separate explicit coding approval, is
    features rather than only numeric features.
 4. Emit one `type = "tsv"` JSON metadata record containing the normalized
    `file` identity and its column-to-feature mapping.
-5. Annotate that metadata with `@` and contain it in an annotation for the same
-   file identity so structural file-metadata queries work.
+5. Give that metadata an `@` root and normal colon-path fields without applying
+   the filename feature to it.
 6. Keep typed input interpretation reusable for future library callers and the
    deferred static-shard builder.
 

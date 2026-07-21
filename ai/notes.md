@@ -293,11 +293,21 @@
   emits `"type":"forager"`, and accepts a missing type only for compatibility.
 - `Forager` retains forager construction and annotation behavior, while
   `TfIdfStats` consumes the metadata parser directly.
+- `append_jsonl(...)` writes `{"type":"json","file":"<normalized-path>"}`
+  metadata in the original Warren transaction, gives it an `@` root plus
+  normal colon-path fields, and publishes it with the `/` marker and direct
+  Warren JSON workers. The file feature annotates only data records.
+- `json_append(...)` in `src/json.*` writes and annotates encoded JSON through
+  a Warren without transaction management. Its root feature is independent of
+  colon-based member paths. `json_scribe(...)` shares the templated traversal.
 - `TfIdfStats::make(...)` owns its ranking-view stemmer/tokenizer through
   private base `Stats` state initialized by constructor.
-- Meadowlark ranking should use `@tf-idf:` metadata/defaults
-  (`stemmer=porter`, `tokenizer=ascii`) rather than Warren-global DNA stemmer
-  settings.
+- New foragers canonicalize omitted names to `tf-idf` and omitted tags to
+  `none`, and their metadata is selected through `@`, `:type:`, `:name:`, and
+  `:tag:`. An empty Stats recipe first checks the legacy `@tf-idf:` feature,
+  then falls back to the new literal `none` tag.
+- Meadowlark ranking uses forager metadata defaults (`stemmer=porter`,
+  `tokenizer=ascii`) rather than Warren-global DNA stemmer settings.
 - New Meadowlark creation no longer writes a Warren-global `container`
   parameter. `container` remains valid for non-Meadowlark/older Warren-style
   uses and for ranking-view metadata.
