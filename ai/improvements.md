@@ -58,11 +58,11 @@ Especially don't do these things without discussion and approval from the user.
 
 ## Restartable Builder for Static Shards
 
-- JSONL and TSV now have the coordinated, restartable Meadowlark append
-  lifecycle needed by an initial builder. Add a separately approved tool that
-  greedily balances those supported input files across standalone Hazel shards.
-  Any future input type must acquire the same lifecycle before the builder
-  accepts it. The durable manifest, serial ingestion, live Bigwig
+- JSONL, TSV, text, and code now have the coordinated, restartable Meadowlark
+  append lifecycle needed by an initial builder. Add a separately approved tool
+  that greedily balances those supported input files across standalone Hazel
+  shards. Any future input type must acquire the same lifecycle before the
+  builder accepts it. The durable manifest, ingestion, live Bigwig
   consolidation, restart, and final publication design is in
   `ai/static-shards.md`.
 

@@ -6,13 +6,13 @@ active implementation plan yet.
 
 ## Prerequisite
 
-The current JSONL and TSV append paths now provide the restartable lifecycle
-needed by an initial implementation: durable source identity, typed metadata,
-coordinated transaction publication, reliable detection of committed inputs,
-and safe retry after interruption. `static-shards` depends on being able to
-rerun Meadowlark with a complete assigned file list and have Meadowlark skip
-committed files while appending only missing files. A future input type must
-meet the same contract before `static-shards` accepts it.
+The current JSONL, TSV, text, and code append paths now provide the restartable
+lifecycle needed by an initial implementation: durable source identity, typed
+metadata, coordinated transaction publication, reliable detection of committed
+inputs, and safe retry after interruption. `static-shards` depends on being
+able to rerun Meadowlark with a complete assigned file list and have Meadowlark
+skip committed files while appending only missing files. A future input type
+must meet the same contract before `static-shards` accepts it.
 
 The new app must reuse shared Meadowlark argument/append code or invoke the
 existing `meadowlark` executable. It must not copy Meadowlark parsing and
@@ -50,8 +50,8 @@ arguments, remeasure files, or repartition inputs.
 ## Partitioning
 
 Parse the forwarded Meadowlark arguments into typed input records so each file
-retains its input kind, such as TSV or JSONL. Estimate the amount of input in
-each file, including a reasonable policy for compressed files. Logical
+retains its input kind: TSV, JSONL, text, or code. Estimate the amount of input
+in each file, including a reasonable policy for compressed files. Logical
 uncompressed size is a better estimate of indexing work when it can be obtained
 cheaply and reliably; stored size is an acceptable best-effort fallback. Record
 the chosen measurement in the plan so restart never changes the partition.

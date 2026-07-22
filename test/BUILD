@@ -16,6 +16,7 @@ cc_test(
     ],
     data = [
         "books.json",
+        "code.txt",
         "ranking.txt",
         "sonnet0.txt",
         "sonnet1.txt",

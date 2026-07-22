@@ -1,14 +1,24 @@
 #ifndef COTTONTAIL_MEADOWLARK_MEADOWLARK_H_
 #define COTTONTAIL_MEADOWLARK_MEADOWLARK_H_
 
+#include <cstddef>
 #include <map>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "src/warren.h"
 
 namespace cottontail {
 namespace meadowlark {
+
+enum class InputType { NONE, TSV, JSONL, TEXT, CODE };
+
+struct InputFile {
+  InputType type = InputType::NONE;
+  std::string filename;
+};
+
 bool is_meadow(std::shared_ptr<Warren> warren, std::string *error = nullptr);
 std::shared_ptr<Warren> create_meadow(const std::string &meadow,
                                       std::string *error = nullptr);
@@ -25,6 +35,14 @@ bool append_tsv(std::shared_ptr<Warren> warren, const std::string &filename,
 bool append_jsonl(std::shared_ptr<Warren> warren, const std::string &filename,
                   std::string *error = nullptr, size_t threads = 0,
                   bool verbose = true);
+bool append_text(std::shared_ptr<Warren> warren, const std::string &filename,
+                 std::string *error = nullptr);
+bool append_code(std::shared_ptr<Warren> warren, const std::string &filename,
+                 std::string *error = nullptr);
+bool append_all(std::shared_ptr<Warren> warren,
+                const std::vector<InputFile> &files,
+                std::string *error = nullptr, size_t threads = 0,
+                bool verbose = true);
 bool forage(std::shared_ptr<Warren> warren,
             const std::vector<std::pair<addr, addr>> &intervals,
             const std::string &name, const std::string &tag,

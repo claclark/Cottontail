@@ -9,6 +9,8 @@ namespace cottontail {
 namespace meadowlark {
 
 std::string json_metadata(const std::string &file);
+std::string text_metadata(const std::string &file);
+std::string code_metadata(const std::string &file);
 std::string tsv_metadata(const std::string &file,
                          const std::string &separator, bool header,
                          const std::vector<std::string> &headings,

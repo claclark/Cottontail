@@ -46,6 +46,18 @@ TEST(JsonMetadata, DescribesNormalizedFile) {
   EXPECT_NE(j.find("\"file\": \"./whatever\""), std::string::npos);
 }
 
+TEST(TextMetadata, DescribesNormalizedFile) {
+  const std::string j = cottontail::meadowlark::text_metadata("./whatever");
+  EXPECT_NE(j.find("\"type\": \"text\""), std::string::npos);
+  EXPECT_NE(j.find("\"file\": \"./whatever\""), std::string::npos);
+}
+
+TEST(CodeMetadata, DescribesNormalizedFile) {
+  const std::string j = cottontail::meadowlark::code_metadata("./whatever");
+  EXPECT_NE(j.find("\"type\": \"code\""), std::string::npos);
+  EXPECT_NE(j.find("\"file\": \"./whatever\""), std::string::npos);
+}
+
 TEST(TsvMetadata, DescribesHeaderMapping) {
   const std::string j = cottontail::meadowlark::tsv_metadata(
       "./table.tsv", "\t", true, {"Animal", "Favorite Food"},

@@ -12,11 +12,25 @@
 namespace cottontail {
 namespace meadowlark {
 
-std::string json_metadata(const std::string &file) {
+namespace {
+std::string file_metadata(const std::string &type, const std::string &file) {
   json metadata;
   metadata["file"] = file;
-  metadata["type"] = "json";
+  metadata["type"] = type;
   return metadata.dump(2, ' ', false, json::error_handler_t::replace) + "\n";
+}
+} // namespace
+
+std::string json_metadata(const std::string &file) {
+  return file_metadata("json", file);
+}
+
+std::string text_metadata(const std::string &file) {
+  return file_metadata("text", file);
+}
+
+std::string code_metadata(const std::string &file) {
+  return file_metadata("code", file);
 }
 
 std::string tsv_metadata(const std::string &file,

@@ -98,26 +98,24 @@
 
 ## Meadowlark Map
 
-- `meadowlark/meadowlark.*`: Meadowlark lifecycle and ingestion helpers.
-- `create_meadow(...)` creates a Bigwig-based meadow with UTF-8 tokenizer, JSON
-  featurizer, zlib text/fvalue compression, and post posting compression.
-- `append_tsv(...)` and `append_jsonl(...)` ingest datasets, clone Warrens for
-  parallel work, and atomically publish source identity, typed `@` metadata,
-  and source-annotated data records.
-- Meadowlark's machine-discovery roots are `/` for source identities and `@`
-  for metadata; `(<< :type: @)` enumerates explicit metadata types. Ordinary
-  data objects use `:`, and an optional TSV header uses `::`.
-- `apps/meadowlark.cc` preflights typed input files in one started-Warren pass
-  using `meadowlark::already_appended(...)`, then skips already-present files
-  before dispatching appends.
+- `meadowlark/meadowlark.*` owns Meadowlark creation and format-specific file
+  ingestion; `meadowlark/metadata.*` owns typed metadata creation and forager
+  metadata parsing.
+- `meadowlark::append_all(...)`, declared in `meadowlark/meadowlark.h`, owns the
+  reusable typed input plan, duplicate preflight, and dispatch used by
+  `apps/meadowlark`.
 - `meadowlark/forager.*`: pluggable annotation passes over intervals or GCL
   query results.
 - Current foragers include `tf-idf_forager.*` and `null_forager.h`.
+- The durable format, metadata, provenance, and restart conventions are in
+  `ai/meadowlark.md`. The concise model bootstrap is
+  `ai/exploring-meadowlark.md`.
 
 ## CLI Surfaces
 
-- `apps/meadowlark.cc`: create/open a meadow, preflight existing input files,
-  and append missing `--tsv`/`--jsonl` inputs.
+- `apps/meadowlark.cc`: create/open a meadow, parse `--tsv`, `--jsonl`/`--json`,
+  `--text`, and `--code` inputs, and delegate the typed plan to the public
+  `meadowlark::append_all(...)` library operation.
 - `apps/forage.cc`: run a Meadowlark forager over a query; supports
   `--key value` and `--key=value` parameters.
 - `apps/fluffy.cc`: interactive GCL query shell over a burrow or Hazel.
@@ -290,37 +288,10 @@
   itself. Focused regression coverage checks that a started Bigwig clone stays
   readable after the parent ends and after the parent commits new content.
 
-## Current Meadowlark/Ranking Notes
+## Current Ranking Notes
 
-- `meadowlark/metadata.*` owns JSON, TSV, and forager metadata creation plus
-  forager metadata parsing. It uses the existing nlohmann single-header JSON
-  library, emits explicit `type` fields, and accepts a missing type only as a
-  legacy forager record.
-- Current metadata types are `json`, `tsv`, and `forager`. Metadata roots use
-  `@`; ordinary colon-path JSON fields support discovery and selection. File
-  metadata has a `file` member, while the source-identity feature annotates only
-  file contents. Direct C++ consumers pass translated metadata text through
-  `json_translate(...)` before treating it as presentation JSON.
-- File appends write one canonical normalized filename annotated with `/` and
-  `//` beside the source metadata. Every nonempty data transaction writes its
-  own `//` filename. `/.` wraps each filename and its transaction-local metadata
-  or data, so `(<< // (>> /. Q))` recovers the source of `Q`. Forager metadata is
-  outside these file segments.
 - `Forager` retains forager construction and annotation behavior, while
   `TfIdfStats` consumes the metadata parser directly.
-- `append_jsonl(...)` writes `{"type":"json","file":"<normalized-path>"}`
-  metadata in the original Warren transaction, gives it an `@` root plus
-  normal colon-path fields, and publishes it with the `/` marker and direct
-  Warren JSON workers. The file feature annotates only data records.
-- `append_tsv(...)` now uses the same coordinated direct-Warren lifecycle and
-  streaming worker pattern as `append_jsonl(...)`. It emits `type=tsv`
-  metadata with its separator, header status, and initial column-to-feature
-  mapping after buffering only the first record. Header whitespace runs become
-  `_`; other characters are preserved. No-header columns remain numeric, and
-  unexpected extra fields are assigned numeric features lazily.
-- `json_append(...)` in `src/json.*` writes and annotates encoded JSON through
-  a Warren without transaction management. Its root feature is independent of
-  colon-based member paths. `json_scribe(...)` shares the templated traversal.
 - `TfIdfStats::make(...)` owns its ranking-view stemmer/tokenizer through
   private base `Stats` state initialized by constructor.
 - New foragers canonicalize omitted names to `tf-idf` and omitted tags to
@@ -333,10 +304,6 @@
 - User verified the current compatibility path against older `b.meadow` and
   `c.meadow` indexes with pre-current metadata field names; both remained
   usable.
-- A fresh MSMARCO meadow built on 2026-07-21 exposed `tsv` and `forager`
-  records through `@`; `(<< :type: @)` returned those two type values, while
-  `/` returned the collection source identity. The forager record used
-  `tag=none`, `contents=:1:`, `container=:`, and `id=:0:`.
 - Meadowlark ranking uses forager metadata defaults (`stemmer=porter`,
   `tokenizer=ascii`) rather than Warren-global DNA stemmer settings.
 - New Meadowlark creation no longer writes a Warren-global `container`

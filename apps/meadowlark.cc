@@ -1,23 +1,15 @@
+#include <iostream>
 #include <memory>
 #include <string>
 #include <vector>
 
-#include "meadowlark/forager.h"
 #include "meadowlark/meadowlark.h"
-#include "src/cottontail.h"
 
 void usage(std::string program_name) {
   std::cerr << "usage: " << program_name << " [--meadow meadow] [--create]"
-            << " [--tsv file...] [--jsonl|--json file...]...\n";
+            << " [--tsv file...] [--jsonl|--json file...]"
+            << " [--text file...] [--code file...]...\n";
 }
-
-enum class InputType { NONE, TSV, JSONL };
-
-struct InputFile {
-  InputType type;
-  std::string filename;
-  bool already_appended = false;
-};
 
 int main(int argc, char **argv) {
   std::string program_name = argv[0];
@@ -55,9 +47,10 @@ int main(int argc, char **argv) {
     std::cerr << program_name << ": " << error << "\n";
     return 1;
   }
-  InputType input_type = InputType::NONE;
+  cottontail::meadowlark::InputType input_type =
+      cottontail::meadowlark::InputType::NONE;
   bool expecting_file = false;
-  std::vector<InputFile> inputs;
+  std::vector<cottontail::meadowlark::InputFile> inputs;
   while (argc > 1) {
     std::string argument = argv[1];
     if (argument == "--tsv") {
@@ -67,7 +60,7 @@ int main(int argc, char **argv) {
         usage(program_name);
         return 1;
       }
-      input_type = InputType::TSV;
+      input_type = cottontail::meadowlark::InputType::TSV;
       expecting_file = true;
     } else if (argument == "--jsonl" || argument == "--json") {
       if (expecting_file) {
@@ -76,19 +69,37 @@ int main(int argc, char **argv) {
         usage(program_name);
         return 1;
       }
-      input_type = InputType::JSONL;
+      input_type = cottontail::meadowlark::InputType::JSONL;
+      expecting_file = true;
+    } else if (argument == "--text") {
+      if (expecting_file) {
+        std::cerr << program_name << ": Missing file before " << argument
+                  << "\n";
+        usage(program_name);
+        return 1;
+      }
+      input_type = cottontail::meadowlark::InputType::TEXT;
+      expecting_file = true;
+    } else if (argument == "--code") {
+      if (expecting_file) {
+        std::cerr << program_name << ": Missing file before " << argument
+                  << "\n";
+        usage(program_name);
+        return 1;
+      }
+      input_type = cottontail::meadowlark::InputType::CODE;
       expecting_file = true;
     } else if (!argument.empty() && argument[0] == '-') {
       std::cerr << program_name << ": Invalid argument " << argument << "\n";
       usage(program_name);
       return 1;
-    } else if (input_type == InputType::NONE) {
+    } else if (input_type == cottontail::meadowlark::InputType::NONE) {
       std::cerr << program_name << ": Missing input type for " << argument
                 << "\n";
       usage(program_name);
       return 1;
     } else {
-      inputs.push_back({input_type, argument, false});
+      inputs.push_back({input_type, argument});
       expecting_file = false;
     }
     argc--;
@@ -99,36 +110,9 @@ int main(int argc, char **argv) {
     usage(program_name);
     return 1;
   }
-  if (!inputs.empty()) {
-    warren->start();
-    for (auto &input : inputs) {
-      if (!cottontail::meadowlark::already_appended(
-              warren, input.filename, &input.already_appended, &error)) {
-        warren->end();
-        std::cerr << program_name << ": " << error << "\n";
-        return 1;
-      }
-    }
-    warren->end();
-  }
-  for (auto &input : inputs) {
-    if (input.already_appended) {
-      std::cerr << "Skipping existing file " << input.filename << "\n"
-                << std::flush;
-      continue;
-    }
-    if (input.type == InputType::TSV) {
-      if (!cottontail::meadowlark::append_tsv(warren, input.filename, &error)) {
-        std::cerr << program_name << ": " << error << "\n";
-        return 1;
-      }
-    } else if (input.type == InputType::JSONL) {
-      if (!cottontail::meadowlark::append_jsonl(warren, input.filename,
-                                                &error)) {
-        std::cerr << program_name << ": " << error << "\n";
-        return 1;
-      }
-    }
+  if (!cottontail::meadowlark::append_all(warren, inputs, &error)) {
+    std::cerr << program_name << ": " << error << "\n";
+    return 1;
   }
   return 0;
 }

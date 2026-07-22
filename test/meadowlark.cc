@@ -1,5 +1,6 @@
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "gtest/gtest.h"
 
@@ -210,5 +211,134 @@ TEST(Meadowlark, TSVWithoutHeaderUsesNumericColumns) {
   cottontail::addr p, q;
   hopper->rho(0, &p, &q);
   EXPECT_EQ(warren->txt()->translate(p, q).substr(0, 3), "Pig");
+  warren->end();
+}
+
+TEST(Meadowlark, TextFileIsOneObject) {
+  const std::string path = "test/code.txt";
+  std::string error;
+  std::shared_ptr<cottontail::Warren> warren =
+      cottontail::meadowlark::create_meadow("text.meadow", &error);
+  ASSERT_NE(warren, nullptr) << error;
+  ASSERT_TRUE(cottontail::meadowlark::append_text(warren, path, &error))
+      << error;
+
+  warren->start();
+  std::unique_ptr<cottontail::Hopper> metadata =
+      warren->hopper_from_gcl("(>> @ (>> :type: \"text\"))", &error);
+  ASSERT_NE(metadata, nullptr) << error;
+  cottontail::addr metadata_p, metadata_q;
+  metadata->tau(cottontail::minfinity + 1, &metadata_p, &metadata_q);
+  ASSERT_NE(metadata_p, cottontail::maxfinity);
+
+  std::shared_ptr<cottontail::Hopper> objects =
+      warren->idx()->hopper(warren->featurizer()->featurize(":"));
+  ASSERT_NE(objects, nullptr);
+  cottontail::addr object_p, object_q;
+  objects->tau(cottontail::minfinity + 1, &object_p, &object_q);
+  ASSERT_NE(object_p, cottontail::maxfinity);
+  std::string object = warren->txt()->translate(object_p, object_q);
+  EXPECT_NE(object.find("alpha beta"), std::string::npos);
+  EXPECT_NE(object.find("charlie delta"), std::string::npos);
+  objects->tau(object_p + 1, &object_p, &object_q);
+  EXPECT_EQ(object_p, cottontail::maxfinity);
+
+  std::unique_ptr<cottontail::Hopper> metadata_source =
+      warren->hopper_from_gcl("(<< // (>> /. @))", &error);
+  ASSERT_NE(metadata_source, nullptr) << error;
+  cottontail::addr p, q;
+  metadata_source->tau(cottontail::minfinity + 1, &p, &q);
+  ASSERT_NE(p, cottontail::maxfinity);
+  EXPECT_EQ(warren->txt()->translate(p, q).substr(0, path.size()), path);
+
+  std::unique_ptr<cottontail::Hopper> data_source =
+      warren->hopper_from_gcl("(<< // (>> /. :))", &error);
+  ASSERT_NE(data_source, nullptr) << error;
+  data_source->tau(cottontail::minfinity + 1, &p, &q);
+  ASSERT_NE(p, cottontail::maxfinity);
+  EXPECT_EQ(warren->txt()->translate(p, q).substr(0, path.size()), path);
+  warren->end();
+}
+
+TEST(Meadowlark, CodeLinesCarryPhysicalLineNumbers) {
+  const std::string path = "test/code.txt";
+  std::string error;
+  std::shared_ptr<cottontail::Warren> warren =
+      cottontail::meadowlark::create_meadow("code.meadow", &error);
+  ASSERT_NE(warren, nullptr) << error;
+  ASSERT_TRUE(cottontail::meadowlark::append_code(warren, path, &error))
+      << error;
+
+  warren->start();
+  std::unique_ptr<cottontail::Hopper> metadata =
+      warren->hopper_from_gcl("(>> @ (>> :type: \"code\"))", &error);
+  ASSERT_NE(metadata, nullptr) << error;
+  cottontail::addr p, q;
+  metadata->tau(cottontail::minfinity + 1, &p, &q);
+  ASSERT_NE(p, cottontail::maxfinity);
+
+  std::shared_ptr<cottontail::Hopper> lines =
+      warren->idx()->hopper(warren->featurizer()->featurize("#"));
+  ASSERT_NE(lines, nullptr);
+  cottontail::addr line_number;
+  lines->tau(cottontail::minfinity + 1, &p, &q, &line_number);
+  ASSERT_NE(p, cottontail::maxfinity);
+  EXPECT_EQ(line_number, 1);
+  EXPECT_NE(warren->txt()->translate(p, q).find("alpha beta"),
+            std::string::npos);
+  lines->tau(p + 1, &p, &q, &line_number);
+  ASSERT_NE(p, cottontail::maxfinity);
+  EXPECT_EQ(line_number, 3);
+  EXPECT_NE(warren->txt()->translate(p, q).find("charlie delta"),
+            std::string::npos);
+  lines->tau(p + 1, &p, &q, &line_number);
+  EXPECT_EQ(p, cottontail::maxfinity);
+
+  std::unique_ptr<cottontail::Hopper> source =
+      warren->hopper_from_gcl("(<< // (>> /. #))", &error);
+  ASSERT_NE(source, nullptr) << error;
+  source->tau(cottontail::minfinity + 1, &p, &q);
+  ASSERT_NE(p, cottontail::maxfinity);
+  EXPECT_EQ(warren->txt()->translate(p, q).substr(0, path.size()), path);
+  warren->end();
+}
+
+TEST(Meadowlark, AppendPlanMixesTextAndCode) {
+  std::string error;
+  std::shared_ptr<cottontail::Warren> warren =
+      cottontail::meadowlark::create_meadow("append-plan.meadow", &error);
+  ASSERT_NE(warren, nullptr) << error;
+  std::vector<cottontail::meadowlark::InputFile> files = {
+      {cottontail::meadowlark::InputType::TEXT, "test/sonnet0.txt"},
+      {cottontail::meadowlark::InputType::JSONL, "test/books.json"},
+      {cottontail::meadowlark::InputType::CODE, "test/code.txt"},
+      {cottontail::meadowlark::InputType::TSV, "test/test.tsv"},
+      {cottontail::meadowlark::InputType::TEXT, "test/sonnet1.txt"},
+  };
+  ASSERT_TRUE(
+      cottontail::meadowlark::append_all(warren, files, &error, 2, false))
+      << error;
+  ASSERT_TRUE(
+      cottontail::meadowlark::append_all(warren, files, &error, 2, false))
+      << error;
+
+  warren->start();
+  std::shared_ptr<cottontail::Hopper> sources =
+      warren->idx()->hopper(warren->featurizer()->featurize("/"));
+  ASSERT_NE(sources, nullptr);
+  cottontail::addr p, q;
+  size_t count = 0;
+  for (sources->tau(cottontail::minfinity + 1, &p, &q);
+       p < cottontail::maxfinity; sources->tau(p + 1, &p, &q))
+    count++;
+  EXPECT_EQ(count, files.size());
+  for (const std::string &type :
+       std::vector<std::string>{"text", "json", "code", "tsv"}) {
+    std::unique_ptr<cottontail::Hopper> metadata = warren->hopper_from_gcl(
+        "(>> @ (>> :type: \"" + type + "\"))", &error);
+    ASSERT_NE(metadata, nullptr) << error;
+    metadata->tau(cottontail::minfinity + 1, &p, &q);
+    EXPECT_NE(p, cottontail::maxfinity) << type;
+  }
   warren->end();
 }
