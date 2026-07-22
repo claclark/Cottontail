@@ -301,6 +301,11 @@
   metadata has a `file` member, while the source-identity feature annotates only
   file contents. Direct C++ consumers pass translated metadata text through
   `json_translate(...)` before treating it as presentation JSON.
+- File appends write one canonical normalized filename annotated with `/` and
+  `//` beside the source metadata. Every nonempty data transaction writes its
+  own `//` filename. `/.` wraps each filename and its transaction-local metadata
+  or data, so `(<< // (>> /. Q))` recovers the source of `Q`. Forager metadata is
+  outside these file segments.
 - `Forager` retains forager construction and annotation behavior, while
   `TfIdfStats` consumes the metadata parser directly.
 - `append_jsonl(...)` writes `{"type":"json","file":"<normalized-path>"}`

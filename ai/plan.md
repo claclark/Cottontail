@@ -21,7 +21,9 @@ The JSONL and TSV file appenders now share a consistent, restartable lifecycle.
 The remaining append surfaces are future steps rather than active work.
 
 - Preserve the coordinated streaming, start/end, source identity, metadata,
-  commit, abort, and restart behavior of the JSONL and TSV file paths.
+  commit, abort, and restart behavior of the JSONL and TSV file paths,
+  including canonical `/` identities and transaction-local `//` names inside
+  `/.` source segments.
 - Keep Meadowlark argument parsing and typed input records reusable so future
   callers do not duplicate the CLI's interpretation of input files.
 - Finish the planned append surfaces only after discussing each one: JSONL from

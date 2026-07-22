@@ -70,7 +70,8 @@ Especially don't do these things without discussion and approval from the user.
 
 The established discovery and record conventions live in `ai/meadowlark.md`:
 agents bootstrap with `/` and `@`, new metadata is explicitly typed JSON rooted
-at `@`, and source-format records connect to their source through `file`.
+at `@`, source-format records connect to their source through `file`, and `//`
+inside `/.` supports inverse lookup from an interval to its source filename.
 Potential follow-ups are:
 
 - Define whether a repeated forager `(name, tag)` replaces an earlier manifest,
@@ -83,8 +84,9 @@ Potential follow-ups are:
   a preliminary full-file scan or weakening coordinated publication.
 - Retain missing-`type` and `@tf-idf:` handling as explicit legacy forager
   compatibility until there is a deliberate database migration policy.
-- Require each future source adapter to define its `type` record and publish
-  that metadata atomically with its `/` marker and data.
+- Require each future file-source adapter to define its `type` record, emit
+  transaction-local `//` and `/.` provenance, and publish that metadata
+  atomically with its canonical `/` marker and data.
 - Add a library-level discovery convenience only if repeated consumers need
   one. The `@` record and `:type:` field convention already permits unknown
   types to be inspected or ignored without global component registration.

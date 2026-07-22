@@ -46,6 +46,39 @@ TEST(Meadowlark, JSONMetadata) {
   EXPECT_EQ(described_p, p);
   EXPECT_EQ(described_q, q);
 
+  std::unique_ptr<cottontail::Hopper> metadata_source =
+      warren->hopper_from_gcl("(<< // (>> /. @))", &error);
+  ASSERT_NE(metadata_source, nullptr) << error;
+  cottontail::addr metadata_name_p, metadata_name_q;
+  metadata_source->tau(cottontail::minfinity + 1, &metadata_name_p,
+                       &metadata_name_q);
+  ASSERT_NE(metadata_name_p, cottontail::maxfinity);
+  EXPECT_EQ(warren->txt()
+                ->translate(metadata_name_p, metadata_name_q)
+                .substr(0, path.size()),
+            path);
+
+  std::unique_ptr<cottontail::Hopper> data_source =
+      warren->hopper_from_gcl("(<< // (>> /. :))", &error);
+  ASSERT_NE(data_source, nullptr) << error;
+  cottontail::addr data_name_p, data_name_q;
+  data_source->tau(cottontail::minfinity + 1, &data_name_p, &data_name_q);
+  ASSERT_NE(data_name_p, cottontail::maxfinity);
+  EXPECT_EQ(warren->txt()
+                ->translate(data_name_p, data_name_q)
+                .substr(0, path.size()),
+            path);
+
+  std::shared_ptr<cottontail::Hopper> sources =
+      warren->idx()->hopper(warren->featurizer()->featurize("/"));
+  ASSERT_NE(sources, nullptr);
+  cottontail::addr canonical_p, canonical_q;
+  sources->tau(cottontail::minfinity + 1, &canonical_p, &canonical_q);
+  ASSERT_EQ(canonical_p, metadata_name_p);
+  EXPECT_EQ(canonical_q, metadata_name_q);
+  sources->tau(canonical_p + 1, &canonical_p, &canonical_q);
+  EXPECT_EQ(canonical_p, cottontail::maxfinity);
+
   std::shared_ptr<cottontail::Hopper> file =
       warren->idx()->hopper(warren->featurizer()->featurize(path));
   ASSERT_NE(file, nullptr);
@@ -103,6 +136,23 @@ TEST(Meadowlark, TSV) {
   described->tau(cottontail::minfinity + 1, &described_p, &described_q);
   EXPECT_EQ(described_p, metadata_p);
   EXPECT_EQ(described_q, metadata_q);
+
+  std::unique_ptr<cottontail::Hopper> metadata_source =
+      warren->hopper_from_gcl("(<< // (>> /. @))", &error);
+  ASSERT_NE(metadata_source, nullptr) << error;
+  cottontail::addr source_p, source_q;
+  metadata_source->tau(cottontail::minfinity + 1, &source_p, &source_q);
+  ASSERT_NE(source_p, cottontail::maxfinity);
+  EXPECT_EQ(warren->txt()->translate(source_p, source_q).substr(0, path.size()),
+            path);
+
+  std::unique_ptr<cottontail::Hopper> data_source =
+      warren->hopper_from_gcl("(<< // (>> /. :))", &error);
+  ASSERT_NE(data_source, nullptr) << error;
+  data_source->tau(cottontail::minfinity + 1, &source_p, &source_q);
+  ASSERT_NE(source_p, cottontail::maxfinity);
+  EXPECT_EQ(warren->txt()->translate(source_p, source_q).substr(0, path.size()),
+            path);
 
   std::shared_ptr<cottontail::Hopper> file =
       warren->idx()->hopper(warren->featurizer()->featurize(path));

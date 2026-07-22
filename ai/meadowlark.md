@@ -1,6 +1,6 @@
 # Meadowlark Format, Metadata, And Append Conventions
 
-Status date: 2026-07-21.
+Status date: 2026-07-22.
 
 This note records the current Meadowlark format, its machine-discovery and
 metadata conventions, implemented ingestion behavior, and possible future
@@ -19,7 +19,11 @@ a query surface designed primarily for people.
 
 The established root features are:
 
-- `/` marks source identity strings, currently normalized filenames.
+- `/` marks the canonical source identity string, currently a normalized
+  filename. File appenders write it once per source.
+- `//` marks a segment-local copy of the source identity string.
+- `/.` marks a file or file-segment envelope containing a `//` source identity
+  followed by the metadata or data belonging to that segment.
 - `:` marks ordinary input objects or records.
 - `::` marks a TSV header record when `append_tsv(..., header = true)` is used.
 - `@` marks JSON metadata records that describe annotations or source formats.
@@ -32,18 +36,26 @@ metadata object a `:` root.
 
 ### Source Identity
 
-File ingestion connects three distinct representations of a source:
+File ingestion connects several representations of a source:
 
-1. An interval containing the normalized source string is annotated with `/`.
-2. The normalized source string is itself featurized and annotates the data
+1. The source/metadata transaction begins with the normalized source string.
+   That canonical interval receives both `/` and `//`.
+2. Every worker transaction that consumes at least one input record begins
+   with another copy of the normalized source string, annotated only with `//`.
+3. A `/.` annotation wraps each such source string together with the metadata
+   or data written in that transaction. Empty worker transactions emit neither
+   a source-string copy nor an empty segment.
+4. The normalized source string is itself featurized and annotates the data
    intervals written from that source.
-3. Each source-format metadata record contains the same identity in its
+5. Each source-format metadata record contains the same identity in its
    top-level `file` member.
 
 The source-identity feature applies to file contents, including a TSV header
-when present, but not to metadata. The `/` marker is the durable identity used
-for append preflight; the `file` field makes metadata-to-source association
-queryable; the source-identity feature selects the actual data.
+when present, but not to metadata or the segment-local filename. The `/` marker
+is the durable, once-per-source identity used for append preflight. The `//`
+and `/.` pair supports inverse provenance lookup from an interval to its source.
+The `file` field makes metadata-to-source association explicit inside JSON, and
+the source-identity feature selects the actual data.
 
 ### Agent Bootstrap
 
@@ -53,12 +65,15 @@ on the current read snapshot are:
 - `/` discovers the sources represented in the meadow.
 - `@` discovers metadata that explains derived annotations and source formats.
 - `(<< :type: @)` discovers the explicit metadata types in a current meadow.
+- Given an interval query `Q`, `(<< // (>> /. Q))` returns the segment-local
+  filename identifying its source.
 
 The agent can then interpret each `@` record according to its `type`, associate
-source-format records with `/` entries through `file`, and use forager records
-to discover derived annotation and ranking views. This is the bootstrap
-contract: a new consumer does not need an external schema or filename-extension
-guesses to determine how the meadow was populated.
+source-format records with `/` entries through `file` or their `/.` envelope,
+recover the source of data through `//`, and use forager records to discover
+derived annotation and ranking views. This is the bootstrap contract: a new
+consumer does not need an external schema or filename-extension guess to
+determine how the meadow was populated.
 
 The type-discovery query only returns records with an explicit `type`. When
 reading an older meadow, an agent must also accept an `@` record with no `type`
@@ -80,7 +95,15 @@ can then return only the metadata records describing that file. The feature for
 the normalized filename applies only to data objects, so
 `(<< : /data/hdd3/Collections/msmarco/collection.tsv)` selects the ordinary
 objects from that file rather than its metadata. JSON and TSV ingestion both
-implement these conventions.
+implement these conventions. Conversely,
+
+```text
+(<< // (>> /. Q))
+```
+
+returns the normalized filename stored at the beginning of the file segment
+containing `Q`. For file-format metadata, that filename interval also has `/`;
+for a data segment, it has only `//`.
 
 ## Metadata Records
 
@@ -123,10 +146,13 @@ Metadata describing a file has an additional common contract:
 
 - The JSON object contains a top-level `file` member.
 - `file` contains the normalized file identity used by Meadowlark.
+- The source-format metadata and a `//` copy of that identity share a `/.`
+  source segment; that identity copy is also the canonical `/` interval.
 - The normalized file-identity feature annotates the file's data objects, not
-  the metadata interval.
+  the metadata interval or filename copy.
 - Consumers find file metadata through `@` and `:file:` and find file contents
-  through `:` and the normalized file-identity feature.
+  through `:` and the normalized file-identity feature. Consumers can recover
+  a containing segment's filename through `//` and `/.`.
 
 ### Forager Metadata
 
@@ -168,6 +194,11 @@ Existing forager records contain `name`, `tag`, and `parameters` but omit
 `type`. They remain valid and must be interpreted as `type = "forager"`.
 `json2forager(...)` accepts a missing type, requires any explicit type to be
 `forager`, and ignores unknown top-level keys.
+
+Foraging is an annotation pass over already ingested data, not a file append.
+Its metadata records therefore remain outside `/.` source segments and have no
+associated `//` filename unless a future, separately designed convention says
+otherwise.
 
 Legacy TF-IDF metadata was annotated with a lookup feature derived from its
 name and empty tag:
@@ -244,9 +275,10 @@ framing later if a consumer needs that distinction.
 
 The metadata object is annotated with `@`; its members have colon-path field
 annotations, while its root does not have `:` or the filename feature. The
-metadata, `/` source marker, and JSON records are committed atomically.
-`append_jsonl(...)` emits the metadata and `/` marker in the original Warren
-transaction and publishes it together with all direct-Warren JSON workers.
+original Warren transaction begins with the normalized filename annotated by
+both `/` and `//`; `/.` wraps that filename and the metadata. Each nonempty JSON
+worker begins with its own `//` filename and wraps that filename and its records
+with `/.`. All of those transactions are committed atomically.
 Transaction-neutral `json_append(...)` writes the encoded JSON structure and
 accepts the root feature separately from its colon-based member paths.
 
@@ -312,9 +344,12 @@ file contents selected by the source-identity feature.
 
 The TSV JSON is stored through transaction-neutral `json_append(...)`
 with an `@` root and ordinary colon-path member annotations. Its root must not
-receive the filename feature. The metadata, source marker, and TSV data are
-committed atomically. TSV remains a direct Warren ingestion path and does
-not add a type-specific lookup annotation beyond its structured fields.
+receive the filename feature. As with JSONL, the source/metadata transaction
+and every nonempty data worker begin with a `//` filename and receive a `/.`
+envelope; only the canonical source/metadata filename also receives `/`. The
+metadata, source marker, and TSV data are committed atomically. TSV remains a
+direct Warren ingestion path and does not add a type-specific lookup annotation
+beyond its structured fields.
 
 It is acceptable for this capability to exist first as a library API even when
 no command-line application exposes the `header` argument.
@@ -326,10 +361,14 @@ File-based appends currently use a normalized filename. Non-file appends must
 receive an explicit source label or append id; otherwise duplicate detection is
 not well-defined.
 
-The durable marker/content identity mechanism has two annotation forms:
+The durable marker/content identity mechanism has four annotation forms:
 
-1. The normalized source string is appended as text and annotated with `/`.
-2. The featurized source string annotates the content written from that source.
+1. The canonical normalized source string is appended as text and annotated
+   with `/` and `//`.
+2. Each nonempty data transaction has another normalized source string
+   annotated with `//`.
+3. `/.` wraps each filename copy and its transaction-local metadata or data.
+4. The featurized source string annotates the content written from that source.
 
 Source-format metadata separately repeats the identity in its `file` field, as
 described above.
@@ -362,10 +401,13 @@ narrowest appropriate abstraction:
 1. Establish or receive the durable source identity.
 2. Start the original Warren at the top of the append operation.
 3. Use that started Warren as the read snapshot and clone source.
-4. Open a transaction for the source marker and any source metadata.
+4. Open a transaction for the canonical `/` and `//` source marker, source
+   metadata, and their `/.` envelope.
 5. Create worker clones from the started Warren.
-6. Write through the Warren or one of its clones; transaction-neutral helpers
-   may share record encoding without owning the transaction.
+6. In each worker that consumes data, write a `//` source string first, append
+   through the Warren or clone, and wrap the local name and data with `/.`.
+   Transaction-neutral helpers may share record encoding without owning the
+   transaction.
 7. Ready the source transaction and every worker transaction.
 8. If any setup, write, or ready step fails, abort every transaction and end
    every clone.
@@ -391,9 +433,11 @@ append publication:
 - It starts the original Warren and ends it through one top-level finish path.
 - It streams plain or gzipped input with `maybe_zipped(...)`.
 - It writes and readies the source marker and JSON metadata through the
-  original Warren.
+  original Warren, with a `/.` envelope and a filename carrying `/` and `//`.
 - It creates workers by cloning the already-started Warren.
 - It writes JSON records through `json_append(...)` on direct Warren clones.
+- Each nonempty worker writes a leading `//` filename and wraps it and its JSON
+  records with `/.`.
 - It annotates each nonempty JSON record with the source-identity feature.
 - It readies all worker Warrens.
 - It aborts the source and workers together on failure.
@@ -415,9 +459,12 @@ function itself does not currently repeat that check.
 - It buffers only the first record to derive the recorded column mapping from
   the header or first row; it does not pre-scan the remaining rows.
 - It writes and readies the source marker and `type = "tsv"` metadata through
-  the original Warren.
+  the original Warren, with a `/.` envelope and a filename carrying `/` and
+  `//`.
 - It creates direct Warren transactions by cloning the started original.
 - Its workers parse and append one TSV record at a time from the shared stream.
+- Each nonempty worker writes a leading `//` filename and wraps it and its TSV
+  records with `/.`.
 - It annotates ordinary rows with `:` and an optional header row with `::`.
 - It uses header-derived features when requested and numeric features otherwise.
 - It annotates file contents, but not metadata, with the filename feature.
