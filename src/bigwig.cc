@@ -511,7 +511,6 @@ std::shared_ptr<Bigwig> Bigwig::make(const std::string &burrow,
   std::map<std::string, std::string> extra_parameters;
   std::string container_query;
   std::shared_ptr<Stemmer> stemmer;
-  std::string do_merge;
   if (parameters.find("parameters") != parameters.end()) {
     if (!cook(parameters["parameters"], &extra_parameters, error))
       return nullptr;
@@ -527,14 +526,10 @@ std::shared_ptr<Bigwig> Bigwig::make(const std::string &burrow,
       if (stemmer == nullptr)
         return nullptr;
     }
-    auto do_merge_element = extra_parameters.find("merge");
-    if (do_merge_element != extra_parameters.end())
-      do_merge = do_merge_element->second;
   }
   std::shared_ptr<Fluffle> fluffle = Fluffle::make();
   fluffle->working = working;
   (*fluffle->parameters) = extra_parameters;
-  fluffle->merge = (do_merge == "" || okay(do_merge));
   SanitizedInventory inventory;
   if (!sanitize(working, &inventory, error))
     return nullptr;
@@ -657,14 +652,12 @@ std::shared_ptr<Bigwig> Bigwig::make(
   return bigwig;
 }
 
-void Bigwig::merge(bool on) {
+void Bigwig::merge(bool on, bool convert) {
+  if (on)
+    set_parameter("convert", okay(convert));
   set_parameter("merge", okay(on));
-  if (on) {
-    fluffle_->merge = true;
+  if (on)
     try_merge();
-  } else {
-    fluffle_->merge = false;
-  }
 }
 
 std::shared_ptr<Warren> Bigwig::clone_(std::string *error) {
@@ -819,6 +812,16 @@ const addr small_shard = 8 * 1024 * 1024;
 const addr medium_shard = 256 * 1024 * 1024;
 const addr large_shard = 2 * medium_shard;
 
+// The caller holds fluffle->lock while consulting live policy parameters.
+bool fluffle_parameter_enabled(std::shared_ptr<Fluffle> fluffle,
+                               const std::string &key) {
+  assert(fluffle != nullptr);
+  if (fluffle->parameters == nullptr)
+    return true;
+  auto parameter = fluffle->parameters->find(key);
+  return parameter == fluffle->parameters->end() || okay(parameter->second);
+}
+
 bool find_sequence(const std::vector<bool> &a, size_t *start, size_t *end) {
   size_t best_len = 0;
   size_t best_start = 0;
@@ -901,6 +904,7 @@ bool find_tiny_fiver_run(std::shared_ptr<Fluffle> fluffle, size_t *start,
 
 bool find_smallest_fiver_pair(std::shared_ptr<Fluffle> fluffle, size_t *start,
                               size_t *end) {
+  bool convert = fluffle_parameter_enabled(fluffle, "convert");
   bool found = false;
   size_t best = 0;
   addr best_sum = 0;
@@ -912,8 +916,9 @@ bool find_smallest_fiver_pair(std::shared_ptr<Fluffle> fluffle, size_t *start,
       continue;
     addr left_size = left->estimated_size();
     addr right_size = right->estimated_size();
-    if (left_size < 0 || right_size < 0 || left_size >= medium_shard ||
-        right_size >= medium_shard)
+    if (left_size < 0 || right_size < 0 ||
+        (convert &&
+         (left_size >= medium_shard || right_size >= medium_shard)))
       continue;
     addr sum = left_size + right_size;
     if (!found || sum < best_sum) {
@@ -933,6 +938,8 @@ bool find_smallest_fiver_pair(std::shared_ptr<Fluffle> fluffle, size_t *start,
 
 bool find_stranded_fiver_conversion(std::shared_ptr<Fluffle> fluffle,
                                     size_t *start, size_t *end) {
+  if (!fluffle_parameter_enabled(fluffle, "convert"))
+    return false;
   if (fluffle->warrens.size() >= 2) {
     auto warren = fluffle->warrens[0];
     auto right = fluffle->warrens[1];
@@ -965,6 +972,8 @@ bool find_stranded_fiver_conversion(std::shared_ptr<Fluffle> fluffle,
 
 bool find_oldest_large_fiver_conversion(std::shared_ptr<Fluffle> fluffle,
                                         size_t *start, size_t *end) {
+  if (!fluffle_parameter_enabled(fluffle, "convert"))
+    return false;
   for (size_t i = 0; i < fluffle->warrens.size(); i++) {
     auto warren = fluffle->warrens[i];
     if (eligible(fluffle, warren) && warren->name() == "fiver" &&
@@ -1041,6 +1050,8 @@ bool find_hazel_action(std::shared_ptr<Fluffle> fluffle, size_t *start,
 
 bool find_lone_fiver_cleanup(std::shared_ptr<Fluffle> fluffle, size_t *start,
                              size_t *end) {
+  if (!fluffle_parameter_enabled(fluffle, "convert"))
+    return false;
   bool found_fiver = false;
   bool fiver_eligible = false;
   size_t fiver_index = 0;
@@ -1094,6 +1105,8 @@ bool find_fiver_action(std::shared_ptr<Fluffle> fluffle, size_t *start,
 
 bool find_merge_action(std::shared_ptr<Fluffle> fluffle, size_t *start,
                        size_t *end) {
+  if (!fluffle_parameter_enabled(fluffle, "merge"))
+    return false;
   if (find_fiver_action(fluffle, start, end))
     return true;
   if (find_hazel_action(fluffle, start, end))
@@ -1349,14 +1362,12 @@ void merge_worker(std::shared_ptr<Fluffle> fluffle) {
 } // namespace
 
 void Bigwig::try_merge() {
-  if (fluffle_->merge) {
-    fluffle_->lock.lock();
-    if (fluffle_->workers < fluffle_->max_workers) {
-      fluffle_->workers++;
-      std::thread t(merge_worker, fluffle_);
-      t.detach();
-    }
-    fluffle_->lock.unlock();
+  std::lock_guard<std::mutex> _(fluffle_->lock);
+  if (fluffle_parameter_enabled(fluffle_, "merge") &&
+      fluffle_->workers < fluffle_->max_workers) {
+    fluffle_->workers++;
+    std::thread t(merge_worker, fluffle_);
+    t.detach();
   }
 }
 

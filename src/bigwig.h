@@ -38,7 +38,7 @@ public:
                 posting_compressor, fvalue_compressor, text_compressor);
   };
   static bool commit_all(std::vector<std::shared_ptr<Bigwig>> bigwigs);
-  void merge(bool on = true);
+  void merge(bool on = true, bool convert = true);
 
   virtual ~Bigwig(){};
   Bigwig(const Bigwig &) = delete;

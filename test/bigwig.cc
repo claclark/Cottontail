@@ -194,6 +194,42 @@ TEST(Bigwig, Basic) {
   basic(true);
 }
 
+TEST(Bigwig, MergePolicyParameters) {
+  std::shared_ptr<cottontail::Featurizer> featurizer =
+      cottontail::Featurizer::make("hashing", "");
+  ASSERT_NE(featurizer, nullptr);
+  std::shared_ptr<cottontail::Tokenizer> tokenizer =
+      cottontail::Tokenizer::make("ascii", "");
+  ASSERT_NE(tokenizer, nullptr);
+  std::shared_ptr<cottontail::Bigwig> bigwig =
+      cottontail::Bigwig::make(nullptr, featurizer, tokenizer);
+  ASSERT_NE(bigwig, nullptr);
+
+  std::string value;
+  ASSERT_TRUE(bigwig->get_parameter("merge", &value));
+  EXPECT_EQ(value, "");
+  ASSERT_TRUE(bigwig->get_parameter("convert", &value));
+  EXPECT_EQ(value, "");
+
+  bigwig->merge(false, false);
+  ASSERT_TRUE(bigwig->get_parameter("merge", &value));
+  EXPECT_EQ(value, "no");
+  ASSERT_TRUE(bigwig->get_parameter("convert", &value));
+  EXPECT_EQ(value, "");
+
+  bigwig->merge(true, false);
+  ASSERT_TRUE(bigwig->get_parameter("merge", &value));
+  EXPECT_EQ(value, "yes");
+  ASSERT_TRUE(bigwig->get_parameter("convert", &value));
+  EXPECT_EQ(value, "no");
+
+  bigwig->merge();
+  ASSERT_TRUE(bigwig->get_parameter("merge", &value));
+  EXPECT_EQ(value, "yes");
+  ASSERT_TRUE(bigwig->get_parameter("convert", &value));
+  EXPECT_EQ(value, "yes");
+}
+
 TEST(Bigwig, Two) {
   std::shared_ptr<cottontail::Featurizer> featurizer =
       cottontail::Featurizer::make("hashing", "");
