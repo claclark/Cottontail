@@ -153,10 +153,104 @@ conversion and the final Hazel merge consumed about 92% of the foreground
 time, with the Hazel merge the largest single phase. Peak resident memory was
 reported as 16,848,612 KiB.
 
-### Next Check
+### Likely Shared Cost
 
-For a clean bound on the new path, repeat creation with `convert:no` and run
-foreground consolidation with `--verbose`. That should prevent completed
-Hazels from entering the inventory, leaving one wide Fiver merge followed by
-one Fiver-to-Hazel conversion and no final Hazel/Hazel merge. Compare that
-result before changing either static operation.
+The index paths converge on `SimplePosting`:
+
+- Fiver merging uses `SimplePostingFactory::posting_from_merge(...)`.
+- Fiver-to-Hazel conversion serializes each list with
+  `SimplePosting::write(...)`.
+- Hazel merging decodes source lists into `SimplePosting`, merges them, and
+  serializes them again with `SimplePosting::write(...)`.
+
+Meadowlark configures `zlib` for feature values. Before the current experiment,
+every value-bearing posting list allocated a value-compression buffer with
+64 KiB of extra capacity and initialized a fresh `Z_BEST_COMPRESSION` stream.
+Hazel decoding performed the matching fresh inflate initialization per list.
+The 29-Fiver suffix was produced by foraging and is dominated by value-bearing
+annotations, yet its Fiver-to-Hazel conversion took 505 seconds. This makes
+per-list value compression and allocation the strongest common hypothesis.
+
+The ordered fast path in `posting_from_merge(...)` also copies every element
+through `get`/`push` despite the existing bulk `SimplePosting::append(...)`
+operation. This can affect both Fiver and Hazel merges, although the measured
+wide Fiver merge was much smaller than serialization.
+
+Hazel merging has an additional format-specific cost: it flushes the posting
+checkpoint after every non-singleton list and the directory checkpoint after
+every feature. With millions of features, this should be measured separately
+from the shared `SimplePosting` path.
+
+### Zlib Experiment Result
+
+`ZlibCompressor` now keeps one lazily initialized deflater and inflater per
+thread. Each operation uses `deflateReset(...)` or `inflateReset(...)`, which
+preserves independent zlib blobs while retaining internal allocation. The
+shared compressor object remains stateless and thread-safe. Output capacity now
+uses `compressBound(...)` rather than adding a fixed 64 KiB.
+
+Focused coverage compares repeated output byte-for-byte with fresh
+`compress2(..., Z_BEST_COMPRESSION)` output and exercises one shared compressor
+from eight threads. The library, aggregate test binary, and all three
+`build.sh` applications compile.
+
+The user's large benchmark moved foreground consolidation from 1,269,902 ms to
+1,259,340 ms, a 10,562 ms (0.83%) improvement. Fiver conversion moved from
+505,442 ms to 501,577 ms (0.76%), and Hazel merging moved from 665,872 ms to
+661,538 ms (0.65%). Ingestion and foraging were effectively unchanged. This is
+small enough to overlap normal run variation, so repeated zlib initialization
+is not the main bottleneck.
+
+Keep the zlib change as a small, format-compatible cleanup: it removes needless
+per-call zlib allocation and the fixed 64 KiB output allowance without adding
+substantial complexity. Do not treat it as the performance fix.
+
+### Planned SimplePosting Cleanup
+
+Keep this work small and preserve the current compact representation:
+
+- Empty `qostings_` means every annotation is a point (`q == p`).
+- Empty `fostings_` means every feature value is zero.
+- Expanded vectors may still contain points or zero values alongside intervals
+  or nonzero values.
+
+Before optimizing, add table-driven coverage for the four source shapes:
+point/no-value, point/value, interval/no-value, and interval/value. Exercise
+all ordered pairs through both appendable and interleaved merges, verify the
+result triples and invariants, serialize/deserialize the result, and inspect
+the serialized record to ensure qostings and fostings remain absent whenever
+the merged data permits it. Retain focused coverage for duplicate resolution
+and exclusion filtering.
+
+Then make three local `SimplePosting` changes:
+
+1. In the ordered `posting_from_merge(...)` fast path, use the existing bulk
+   `append(...)` operation instead of copying every entry through `get(...)`
+   and `push(...)`. The existing append logic already expands missing
+   qostings with `p` and missing fostings with zero only when another input
+   requires the expanded representation.
+2. In `posting_from_compressed_blob(...)` and `posting_from_file(...)`, resize
+   only the vectors present in the serialized record and decompress directly
+   into their storage. Remove the temporary decoded array and per-element
+   `push_back(...)` copies.
+3. Give `SimplePosting::write(...)` a small thread-local scratch object holding
+   posting, qosting, and fvalue byte buffers. Resize qosting and fvalue buffers
+   only when those vectors are present. This removes per-list heap allocation
+   without changing the public API or file format.
+
+Compile after each change, then let the user run the regression suite and
+`build.sh` once for the combined `SimplePosting` cleanup.
+
+After that measurement, make a separate small Hazel-driver cleanup:
+
+- Reuse one source-posting vector across features rather than allocating it in
+  every loop iteration.
+- Use the already maintained sequential directory positions to identify and
+  load sources for the current feature instead of binary-searching every Hazel
+  directory again.
+- Reserve known directory/checkpoint capacity where an inexpensive upper bound
+  is already available.
+
+Do not yet change the posting format, singleton encoding, priority-queue merge,
+exclusion semantics, or checkpoint flush/recovery policy. Those require
+separate evidence and discussion.

@@ -39,7 +39,7 @@ private:
   size_t crush_(char *in, size_t length, char *out, size_t available) final;
   size_t tang_(char *in, size_t length, char *out, size_t available) final;
   bool destructive_() final { return false; };
-  addr extra_(addr n) final { return 64 * 1024; };
+  addr extra_(addr n) final;
 };
 
 } // namespace cottontail

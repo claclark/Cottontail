@@ -1,7 +1,13 @@
+#include <atomic>
+#include <cstring>
 #include <memory>
 #include <string>
+#include <thread>
+#include <vector>
 
 #include "gtest/gtest.h"
+
+#include <zlib.h>
 
 #include "src/zlib_compressor.h"
 
@@ -59,4 +65,71 @@ TEST(ZlibCompressor, Basic) {
       "hooray hooray hooray hooray hooray hooray hooray hooray hooray hooray "
       "hello world hello world the cat in the hat THE END",
       55);
+}
+
+TEST(ZlibCompressor, ReusePreservesZlibFormat) {
+  std::shared_ptr<cottontail::Compressor> compressor =
+      cottontail::ZlibCompressor::make();
+  std::vector<std::string> samples = {
+      "a",
+      "the cat in the hat",
+      std::string("\0\1\2\3\4\5\6\7", 8),
+      std::string(4096, 'x'),
+  };
+  for (size_t repeat = 0; repeat < 3; repeat++)
+    for (auto &sample : samples) {
+      size_t available = sample.size() + compressor->extra(sample.size());
+      EXPECT_EQ(available, compressBound(sample.size()));
+      std::vector<char> actual(available);
+      size_t actual_size = compressor->crush(
+          sample.data(), sample.size(), actual.data(), actual.size());
+
+      uLongf expected_size = compressBound(sample.size());
+      std::vector<Bytef> expected(expected_size);
+      ASSERT_EQ(compress2(expected.data(), &expected_size,
+                          reinterpret_cast<const Bytef *>(sample.data()),
+                          sample.size(), Z_BEST_COMPRESSION),
+                Z_OK);
+      ASSERT_EQ(actual_size, expected_size);
+      EXPECT_EQ(memcmp(actual.data(), expected.data(), actual_size), 0);
+
+      std::vector<char> restored(sample.size());
+      size_t restored_size =
+          compressor->tang(actual.data(), actual_size, restored.data(),
+                           restored.size());
+      ASSERT_EQ(restored_size, sample.size());
+      EXPECT_EQ(memcmp(restored.data(), sample.data(), sample.size()), 0);
+    }
+}
+
+TEST(ZlibCompressor, SharedCompressorIsThreadSafe) {
+  std::shared_ptr<cottontail::Compressor> compressor =
+      cottontail::ZlibCompressor::make();
+  std::atomic<bool> okay = true;
+  std::vector<std::thread> workers;
+  for (size_t worker = 0; worker < 8; worker++)
+    workers.emplace_back([compressor, worker, &okay]() {
+      for (size_t iteration = 0; iteration < 100; iteration++) {
+        std::string sample =
+            "worker " + std::to_string(worker) + " iteration " +
+            std::to_string(iteration) + " " +
+            std::string(32 + worker + iteration,
+                        static_cast<char>('a' + worker));
+        size_t available = sample.size() + compressor->extra(sample.size());
+        std::vector<char> crushed(available);
+        size_t crushed_size =
+            compressor->crush(sample.data(), sample.size(), crushed.data(),
+                              crushed.size());
+        std::vector<char> restored(sample.size());
+        size_t restored_size =
+            compressor->tang(crushed.data(), crushed_size, restored.data(),
+                             restored.size());
+        if (restored_size != sample.size() ||
+            memcmp(restored.data(), sample.data(), sample.size()) != 0)
+          okay = false;
+      }
+    });
+  for (auto &worker : workers)
+    worker.join();
+  EXPECT_TRUE(okay);
 }
