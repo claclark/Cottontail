@@ -24,33 +24,56 @@ Meadowlark is no longer the active design area. Preserve its discovery,
 metadata, provenance, transaction, and restart contracts, but do not continue
 with another append surface unless the user explicitly returns to it.
 
-## Next Step
+## Active Step
 
-The parameter-driven Fiver-only consolidation experiment is implemented and
-compile-checked. Runtime tests and the benchmark have not been run.
+Explicit foreground Bigwig consolidation is implemented and compile-checked.
+The user's first regression run exposed two incorrect new test expectations;
+both are corrected and the affected test targets compile. A regression rerun
+and the full benchmark remain pending.
 
-### Benchmark
+### Foreground Consolidation
+
+- `Bigwig::make(...)` and `Bigwig::consolidate(...)` share burrow DNA parsing,
+  component construction, parameter loading, and sanitized inventory creation.
+  Activation and consolidation remain separate.
+- `Bigwig::consolidate(...)` is an offline operation. It discards returned
+  partial Hazel-merge recoveries, verifies one contiguous shard sequence,
+  merges each maximal Fiver run once in memory, converts it directly to Hazel
+  without pickling, and performs at most one final Hazel merge.
+- Source shards remain in place until a replacement has been published.
+  Sanitization then removes covered Fivers and Hazels. An interruption before
+  publication leaves the sources intact; an interruption after publication is
+  resolved by the next sanitization.
+- `HazelMergeRecovery::discard(...)` removes its restart files idempotently.
+  If that removal is interrupted, Hazel sanitization recognizes an incomplete
+  recovery and removes the remainder.
+- Verbose progress and phase timings are emitted only by
+  `Bigwig::consolidate(...)`. `finish-merging --verbose` opts into them; the
+  library operation is silent by default.
+- `finish-merging` now invokes foreground consolidation directly instead of
+  activating background workers and polling.
+
+### Benchmark History
 
 `build.sh` is the end-to-end benchmark. On the current MS MARCO workload, the
 user reports this approximate wall-time shape:
 
 - Meadowlark creation and TSV ingestion: 1 minute.
 - TF-IDF foraging: 2 minutes.
-- `finish-merging a.meadow`: nearly 30 minutes, dominated by slow Hazel/Hazel
-  merges.
+- `finish-merging a.meadow`: nearly 30 minutes in background consolidation.
 
-`finish-merging` does not implement a separate foreground merge. Opening the
-burrow starts Bigwig's normal background merge workers, and the application
-polls every ten seconds until only one Fiver or Hazel shard remains. The final
-stage therefore measures the automatic conversion and consolidation policy as
-a whole.
+Before the foreground operation was added, `finish-merging` opened the burrow
+to start Bigwig's normal background merge workers and polled every ten seconds
+until only one Fiver or Hazel shard remained. The historical final-stage
+measurements therefore cover the automatic conversion and consolidation policy
+as a whole.
 
 This host reports 28 logical CPUs. TSV ingestion and foraging each default to
 `hardware_concurrency() + 1`, so each operation may publish 29 worker
 transactions in addition to TSV source metadata. Earlier shards may consolidate
-in the background while the forager is running, but `finish-merging` still sees
-a many-shard, multi-level merge workload rather than the older three-large-shard
-microbenchmark.
+in the background while the forager is running, but the old `finish-merging`
+path still saw a many-shard, multi-level merge workload rather than the older
+three-large-shard microbenchmark.
 
 ### Implemented Experiment Support
 
@@ -110,18 +133,30 @@ strengthens the CPU/work-amplification diagnosis without identifying which of
 text compression, posting reconstruction, posting compression, or allocation
 is dominant.
 
-### Next Discussion
+### Foreground Consolidation Result
 
-The next investigation should first separate time spent in Fiver text assembly,
-posting reconstruction, text compression, posting compression/writing, and
-publication. After that, merge scheduling and fan-in remain strong design
-candidates. Both merge implementations already accept vectors of inputs, so
-wider groups or an explicit wide final merge may reduce the number of times the
-corpus is copied and recompressed. The memory and concurrency tradeoffs need to
-be considered separately for normal incremental maintenance and the explicit
-`finish-merging` operation before any code is changed.
+The user's first large run used normal background conversion during ingestion
+and foraging. Foreground consolidation found two partial Hazel merges, five
+completed Hazels, and 29 Fivers covering sequence 30-58. It completed in
+21:11.05 elapsed at 99% CPU:
 
-The checkpoint-aware unique-source Hazel raw-copy path in
-`ai/improvements.md` may still be worthwhile, but it is now a secondary
-optimization; historically it improved a different three-large-Hazel workload
-by only about 2.75%.
+- Opening and sanitizing: 235 ms.
+- Discarding two partial Hazel merges: 145 ms.
+- Loading 29 Fivers: 31,871 ms.
+- Merging 29 Fivers once in memory: 59,545 ms.
+- Converting the merged Fiver to Hazel: 505,442 ms.
+- Merging the resulting six Hazels: 665,872 ms.
+- Final sanitization: 886 ms.
+
+The wide dynamic Fiver work took only about 91 seconds. Fiver-to-Hazel
+conversion and the final Hazel merge consumed about 92% of the foreground
+time, with the Hazel merge the largest single phase. Peak resident memory was
+reported as 16,848,612 KiB.
+
+### Next Check
+
+For a clean bound on the new path, repeat creation with `convert:no` and run
+foreground consolidation with `--verbose`. That should prevent completed
+Hazels from entering the inventory, leaving one wide Fiver merge followed by
+one Fiver-to-Hazel conversion and no final Hazel/Hazel merge. Compare that
+result before changing either static operation.

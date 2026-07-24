@@ -62,6 +62,8 @@ struct HazelMergeRecovery {
   bool operator<(const HazelMergeRecovery &other) const {
     return target < other.target;
   }
+  bool discard(std::shared_ptr<Working> working,
+               std::string *error = nullptr) const;
 };
 
 std::string seq2str(addr sequence);

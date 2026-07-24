@@ -37,6 +37,9 @@ public:
     return make(working, featurizer, tokenizer, fluffle, error,
                 posting_compressor, fvalue_compressor, text_compressor);
   };
+  static bool consolidate(const std::string &burrow,
+                          std::string *error = nullptr,
+                          bool verbose = false);
   static bool commit_all(std::vector<std::shared_ptr<Bigwig>> bigwigs);
   void merge(bool on = true, bool convert = true);
 

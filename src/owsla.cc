@@ -77,6 +77,24 @@ bool owsla_range_contains(const OwslaShard &outer, const OwslaShard &inner) {
   return outer.start <= inner.start && inner.end <= outer.end;
 }
 
+bool HazelMergeRecovery::discard(std::shared_ptr<Working> working,
+                                 std::string *error) const {
+  if (working == nullptr) {
+    safe_error(error) = "Hazel merge recovery needs a working directory";
+    return false;
+  }
+  OwslaShard parsed;
+  if (!owsla_parse_shard_name(target.name, "hazel", &parsed) ||
+      parsed.start != target.start || parsed.end != target.end) {
+    safe_error(error) = "Hazel merge recovery has a bad target";
+    return false;
+  }
+  for (const char *prefix : {"mrg.", "pst.", "dct."})
+    if (!working->remove(std::string(prefix) + target.name, error))
+      return false;
+  return true;
+}
+
 namespace {
 
 void write_string(std::ostream *out, const std::string &value) {

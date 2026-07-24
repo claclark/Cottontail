@@ -189,6 +189,33 @@ cottontail::addr count_gcl(std::shared_ptr<cottontail::Warren> warren,
 
 } // namespace
 
+TEST(Bigwig, Consolidate) {
+  std::string burrow_name = "bigwig.consolidate.burrow";
+  std::shared_ptr<cottontail::Working> working =
+      cottontail::Working::mkdir(burrow_name);
+  ASSERT_NE(working, nullptr);
+  basic(false, working);
+  ASSERT_GT(working->ls("fiver").size(), size_t(1));
+
+  std::string error;
+  ASSERT_TRUE(cottontail::Bigwig::consolidate(burrow_name, &error)) << error;
+  EXPECT_TRUE(working->ls("fiver").empty());
+  ASSERT_EQ(working->ls("hazel").size(), size_t(1));
+
+  std::shared_ptr<cottontail::Bigwig> bigwig =
+      cottontail::Bigwig::make(burrow_name, &error);
+  ASSERT_NE(bigwig, nullptr) << error;
+  bigwig->start();
+  EXPECT_EQ(count_gcl(bigwig, "line:"), 11);
+  EXPECT_EQ(count_gcl(bigwig, "sleep"), 5);
+  bigwig->end();
+  bigwig.reset();
+
+  ASSERT_TRUE(cottontail::Bigwig::consolidate(burrow_name, &error)) << error;
+  EXPECT_TRUE(working->ls("fiver").empty());
+  EXPECT_EQ(working->ls("hazel").size(), size_t(1));
+}
+
 TEST(Bigwig, Basic) {
   basic(false);
   basic(true);

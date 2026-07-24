@@ -2,9 +2,11 @@
 
 #include <algorithm>
 #include <cassert>
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
+#include <iostream>
 #include <map>
 #include <memory>
 #include <regex>
@@ -423,6 +425,102 @@ const std::string default_dna = "["
                                 "  warren:\"bigwig\","
                                 "]";
 
+struct BigwigContext {
+  std::shared_ptr<Working> working;
+  std::shared_ptr<Featurizer> featurizer;
+  std::shared_ptr<Tokenizer> tokenizer;
+  std::shared_ptr<Compressor> posting_compressor;
+  std::shared_ptr<Compressor> fvalue_compressor;
+  std::shared_ptr<Compressor> text_compressor;
+  std::shared_ptr<Stemmer> stemmer;
+  std::map<std::string, std::string> parameters;
+  std::string container_query;
+  std::string txt_recipe;
+  SanitizedInventory inventory;
+};
+
+bool load_bigwig_context(const std::string &burrow, BigwigContext *context,
+                         std::string *error) {
+  if (context == nullptr) {
+    safe_error(error) = "Bigwig needs a context";
+    return false;
+  }
+  std::string the_burrow = burrow;
+  if (the_burrow == "")
+    the_burrow = DEFAULT_BURROW;
+  BigwigContext found;
+  found.working = Working::make(the_burrow, error);
+  if (found.working == nullptr)
+    return false;
+  std::string dna;
+  if (!read_dna(found.working, &dna, error))
+    return false;
+  std::map<std::string, std::string> dna_parameters;
+  if (!cook(dna, &dna_parameters, error))
+    return false;
+  std::map<std::string, std::string> featurizer_parameters;
+  if (!cook(dna_parameters["featurizer"], &featurizer_parameters, error))
+    return false;
+  found.featurizer =
+      Featurizer::make(featurizer_parameters["name"],
+                       featurizer_parameters["recipe"], error, found.working);
+  if (found.featurizer == nullptr)
+    return false;
+  std::map<std::string, std::string> tokenizer_parameters;
+  if (!cook(dna_parameters["tokenizer"], &tokenizer_parameters, error))
+    return false;
+  found.tokenizer = Tokenizer::make(tokenizer_parameters["name"],
+                                    tokenizer_parameters["recipe"], error);
+  if (found.tokenizer == nullptr)
+    return false;
+  std::map<std::string, std::string> idx_parameters;
+  if (!cook(dna_parameters["idx"], &idx_parameters, error))
+    return false;
+  std::map<std::string, std::string> idx_recipe_parameters;
+  if (!cook(idx_parameters["recipe"], &idx_recipe_parameters, error))
+    return false;
+  found.posting_compressor = Compressor::make(
+      idx_recipe_parameters["posting_compressor"],
+      idx_recipe_parameters["posting_compressor_recipe"], error);
+  if (found.posting_compressor == nullptr)
+    return false;
+  found.fvalue_compressor = Compressor::make(
+      idx_recipe_parameters["fvalue_compressor"],
+      idx_recipe_parameters["fvalue_compressor_recipe"], error);
+  if (found.fvalue_compressor == nullptr)
+    return false;
+  std::map<std::string, std::string> txt_parameters;
+  if (!cook(dna_parameters["txt"], &txt_parameters, error))
+    return false;
+  std::map<std::string, std::string> txt_recipe_parameters;
+  if (!cook(txt_parameters["recipe"], &txt_recipe_parameters, error))
+    return false;
+  found.text_compressor =
+      Compressor::make(txt_recipe_parameters["compressor"],
+                       txt_recipe_parameters["compressor_recipe"], error);
+  if (found.text_compressor == nullptr)
+    return false;
+  found.txt_recipe = txt_parameters["recipe"];
+  if (dna_parameters.find("parameters") != dna_parameters.end()) {
+    if (!cook(dna_parameters["parameters"], &found.parameters, error))
+      return false;
+    auto container_element = found.parameters.find("container");
+    if (container_element != found.parameters.end())
+      found.container_query = container_element->second;
+    auto stemmer_element = found.parameters.find("stemmer");
+    if (stemmer_element != found.parameters.end() &&
+        stemmer_element->second != "") {
+      found.stemmer = Stemmer::make(stemmer_element->second, "", error);
+      if (found.stemmer == nullptr)
+        return false;
+    }
+  }
+  if (!sanitize(found.working, &found.inventory, error))
+    return false;
+  *context = found;
+  return true;
+}
+
 } // namespace
 
 std::shared_ptr<Bigwig> Bigwig::make(const std::string &burrow,
@@ -454,90 +552,17 @@ std::shared_ptr<Bigwig> Bigwig::make(const std::string &burrow,
 
 std::shared_ptr<Bigwig> Bigwig::make(const std::string &burrow,
                                      std::string *error) {
-  std::string the_burrow = burrow;
-  if (the_burrow == "")
-    the_burrow = DEFAULT_BURROW;
-  std::shared_ptr<Working> working = Working::make(the_burrow, error);
-  if (working == nullptr)
+  BigwigContext context;
+  if (!load_bigwig_context(burrow, &context, error))
     return nullptr;
-  std::string dna;
-  if (!read_dna(working, &dna, error))
-    return nullptr;
-  std::map<std::string, std::string> parameters;
-  if (!cook(dna, &parameters, error))
-    return nullptr;
-  std::map<std::string, std::string> featurizer_parameters;
-  if (!cook(parameters["featurizer"], &featurizer_parameters, error))
-    return nullptr;
-  std::shared_ptr<Featurizer> featurizer =
-      Featurizer::make(featurizer_parameters["name"],
-                       featurizer_parameters["recipe"], error, working);
-  if (featurizer == nullptr)
-    return nullptr;
-  std::map<std::string, std::string> tokenizer_parameters;
-  if (!cook(parameters["tokenizer"], &tokenizer_parameters, error))
-    return nullptr;
-  std::shared_ptr<Tokenizer> tokenizer = Tokenizer::make(
-      tokenizer_parameters["name"], tokenizer_parameters["recipe"], error);
-  if (tokenizer == nullptr)
-    return nullptr;
-  std::map<std::string, std::string> idx_parameters;
-  if (!cook(parameters["idx"], &idx_parameters, error))
-    return nullptr;
-  std::map<std::string, std::string> idx_recipe_parameters;
-  if (!cook(idx_parameters["recipe"], &idx_recipe_parameters, error))
-    return nullptr;
-  std::shared_ptr<Compressor> posting_compressor = Compressor::make(
-      idx_recipe_parameters["posting_compressor"],
-      idx_recipe_parameters["posting_compressor_recipe"], error);
-  if (posting_compressor == nullptr)
-    return nullptr;
-  std::shared_ptr<Compressor> fvalue_compressor = Compressor::make(
-      idx_recipe_parameters["fvalue_compressor"],
-      idx_recipe_parameters["fvalue_compressor_recipe"], error);
-  if (fvalue_compressor == nullptr)
-    return nullptr;
-  std::map<std::string, std::string> txt_parameters;
-  if (!cook(parameters["txt"], &txt_parameters, error))
-    return nullptr;
-  std::map<std::string, std::string> txt_recipe_parameters;
-  if (!cook(txt_parameters["recipe"], &txt_recipe_parameters, error))
-    return nullptr;
-  std::shared_ptr<Compressor> text_compressor =
-      Compressor::make(txt_recipe_parameters["compressor"],
-                       txt_recipe_parameters["compressor_recipe"], error);
-  if (text_compressor == nullptr)
-    return nullptr;
-  std::map<std::string, std::string> extra_parameters;
-  std::string container_query;
-  std::shared_ptr<Stemmer> stemmer;
-  if (parameters.find("parameters") != parameters.end()) {
-    if (!cook(parameters["parameters"], &extra_parameters, error))
-      return nullptr;
-    auto container_element = extra_parameters.find("container");
-    if (container_element != extra_parameters.end())
-      container_query = container_element->second;
-    std::string stemmer_name, stemmer_recipe;
-    auto stemmer_element = extra_parameters.find("stemmer");
-    if (stemmer_element != extra_parameters.end())
-      stemmer_name = stemmer_element->second;
-    if (stemmer_name != "") {
-      stemmer = Stemmer::make(stemmer_name, stemmer_recipe, error);
-      if (stemmer == nullptr)
-        return nullptr;
-    }
-  }
   std::shared_ptr<Fluffle> fluffle = Fluffle::make();
-  fluffle->working = working;
-  (*fluffle->parameters) = extra_parameters;
-  SanitizedInventory inventory;
-  if (!sanitize(working, &inventory, error))
-    return nullptr;
-  fluffle->hazel_merges = inventory.hazel_merges;
+  fluffle->working = context.working;
+  (*fluffle->parameters) = context.parameters;
+  fluffle->hazel_merges = context.inventory.hazel_merges;
   std::vector<std::shared_ptr<Owsla>> visible;
-  for (auto &shard : inventory.shards) {
+  for (auto &shard : context.inventory.shards) {
     if (shard.name.compare(0, 6, "hazel.") == 0) {
-      std::string hazelname = working->make_name(shard.name);
+      std::string hazelname = context.working->make_name(shard.name);
       std::shared_ptr<Warren> warren = Warren::make(hazelname, error);
       if (warren == nullptr)
         return nullptr;
@@ -550,11 +575,12 @@ std::shared_ptr<Bigwig> Bigwig::make(const std::string &burrow,
       visible.push_back(hazel);
       fluffle->warrens.push_back(hazel);
     } else if (shard.name.compare(0, 6, "fiver.") == 0) {
-      std::string fivername = working->make_name(shard.name);
+      std::string fivername = context.working->make_name(shard.name);
       std::shared_ptr<Fiver> fiver =
-          Fiver::unpickle(fivername, working, featurizer, tokenizer, error,
-                          posting_compressor, fvalue_compressor,
-                          text_compressor);
+          Fiver::unpickle(fivername, context.working, context.featurizer,
+                          context.tokenizer, error,
+                          context.posting_compressor,
+                          context.fvalue_compressor, context.text_compressor);
       if (fiver == nullptr)
         return nullptr;
       fiver->start();
@@ -575,27 +601,174 @@ std::shared_ptr<Bigwig> Bigwig::make(const std::string &burrow,
         break;
       }
     }
-    sequence = inventory.shards.back().end + 1;
+    sequence = context.inventory.shards.back().end + 1;
   }
   fluffle->address = address;
   fluffle->sequence = sequence;
   std::shared_ptr<Bigwig> bigwig = std::shared_ptr<Bigwig>(
-      new Bigwig(working, featurizer, tokenizer, nullptr, nullptr));
+      new Bigwig(context.working, context.featurizer, context.tokenizer, nullptr,
+                 nullptr));
   assert(bigwig != nullptr);
   bigwig->fiver_ = nullptr;
   bigwig->fluffle_ = fluffle;
-  bigwig->posting_compressor_ = posting_compressor;
-  bigwig->fvalue_compressor_ = fvalue_compressor;
-  bigwig->posting_factory_ =
-      SimplePostingFactory::make(posting_compressor, fvalue_compressor);
-  bigwig->text_compressor_ = text_compressor;
-  bigwig->txt_recipe_ = txt_parameters["recipe"];
-  if (stemmer != nullptr)
-    bigwig->set_stemmer(stemmer);
-  if (container_query != "")
-    bigwig->set_default_container(container_query);
+  bigwig->posting_compressor_ = context.posting_compressor;
+  bigwig->fvalue_compressor_ = context.fvalue_compressor;
+  bigwig->posting_factory_ = SimplePostingFactory::make(
+      context.posting_compressor, context.fvalue_compressor);
+  bigwig->text_compressor_ = context.text_compressor;
+  bigwig->txt_recipe_ = context.txt_recipe;
+  if (context.stemmer != nullptr)
+    bigwig->set_stemmer(context.stemmer);
+  if (context.container_query != "")
+    bigwig->set_default_container(context.container_query);
   bigwig->try_merge();
   return bigwig;
+}
+
+bool Bigwig::consolidate(const std::string &burrow, std::string *error,
+                         bool verbose) {
+  using SteadyClock = std::chrono::steady_clock;
+  auto timestamp = []() {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(
+               std::chrono::system_clock::now().time_since_epoch())
+        .count();
+  };
+  auto elapsed = [](const SteadyClock::time_point &start) {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(
+               SteadyClock::now() - start)
+        .count();
+  };
+  auto report = [&](const std::string &message) {
+    if (verbose)
+      std::cerr << "Bigwig::consolidate [" << timestamp()
+                << " ms]: " << message << "\n";
+  };
+
+  auto total_start = SteadyClock::now();
+  auto phase_start = SteadyClock::now();
+  report("Opening and sanitizing " +
+         (burrow == "" ? std::string(DEFAULT_BURROW) : burrow) + "...");
+  BigwigContext context;
+  if (!load_bigwig_context(burrow, &context, error))
+    return false;
+  report("Opening and sanitizing took " + std::to_string(elapsed(phase_start)) +
+         " ms");
+
+  if (!context.inventory.hazel_merges.empty()) {
+    phase_start = SteadyClock::now();
+    report("Discarding " +
+           std::to_string(context.inventory.hazel_merges.size()) +
+           " partial Hazel merge(s)...");
+    for (auto &recovery : context.inventory.hazel_merges)
+      if (!recovery.discard(context.working, error))
+        return false;
+    report("Discarding partial Hazel merges took " +
+           std::to_string(elapsed(phase_start)) + " ms");
+  }
+
+  if (context.inventory.shards.empty()) {
+    safe_error(error) = "Bigwig consolidation found no shards";
+    return false;
+  }
+  for (size_t i = 1; i < context.inventory.shards.size(); i++) {
+    auto &previous = context.inventory.shards[i - 1];
+    auto &current = context.inventory.shards[i];
+    if (previous.end == maxfinity || current.start != previous.end + 1) {
+      safe_error(error) = "Bigwig consolidation found a shard sequence gap "
+                          "around: " +
+                          previous.name + " and " + current.name;
+      return false;
+    }
+  }
+
+  addr sequence_start = context.inventory.shards.front().start;
+  addr sequence_end = context.inventory.shards.back().end;
+  std::string parameters = freeze(context.parameters);
+  std::vector<std::string> hazels;
+  for (size_t i = 0; i < context.inventory.shards.size();) {
+    auto &shard = context.inventory.shards[i];
+    if (shard.name.compare(0, 6, "hazel.") == 0) {
+      hazels.push_back(shard.name);
+      i++;
+      continue;
+    }
+    if (shard.name.compare(0, 6, "fiver.") != 0) {
+      safe_error(error) =
+          "Bigwig consolidation found unknown shard: " + shard.name;
+      return false;
+    }
+
+    size_t end = i;
+    while (end < context.inventory.shards.size() &&
+           context.inventory.shards[end].name.compare(0, 6, "fiver.") == 0)
+      end++;
+
+    std::vector<std::shared_ptr<Fiver>> fivers;
+    fivers.reserve(end - i);
+    phase_start = SteadyClock::now();
+    report("Loading " + std::to_string(end - i) + " Fiver(s)...");
+    for (size_t j = i; j < end; j++) {
+      auto &fiver_shard = context.inventory.shards[j];
+      std::shared_ptr<Fiver> fiver = Fiver::unpickle(
+          fiver_shard.name, context.working, context.featurizer,
+          context.tokenizer, error, context.posting_compressor,
+          context.fvalue_compressor, context.text_compressor);
+      if (fiver == nullptr)
+        return false;
+      fivers.push_back(fiver);
+    }
+    report("Loading Fivers took " + std::to_string(elapsed(phase_start)) +
+           " ms");
+
+    phase_start = SteadyClock::now();
+    report("Merging " + std::to_string(fivers.size()) + " Fiver(s)...");
+    std::shared_ptr<Fiver> merged = Fiver::merge(fivers, error);
+    if (merged == nullptr)
+      return false;
+    report("Fiver merge took " + std::to_string(elapsed(phase_start)) + " ms");
+
+    addr run_start = context.inventory.shards[i].start;
+    addr run_end = context.inventory.shards[end - 1].end;
+    phase_start = SteadyClock::now();
+    report("Converting Fiver sequence " + std::to_string(run_start) + "-" +
+           std::to_string(run_end) + " to Hazel...");
+    merged->start();
+    std::shared_ptr<Hazel> hazel =
+        merged->hazel(error, 64 * 1024, parameters);
+    merged->end();
+    if (hazel == nullptr)
+      return false;
+    report("Fiver conversion took " + std::to_string(elapsed(phase_start)) +
+           " ms");
+    hazels.push_back(hazel_default_name(run_start, run_end));
+    i = end;
+  }
+
+  if (hazels.size() > 1) {
+    phase_start = SteadyClock::now();
+    report("Merging " + std::to_string(hazels.size()) + " Hazel(s)...");
+    if (!Hazel::merge(context.working, hazels, parameters, error))
+      return false;
+    report("Hazel merge took " + std::to_string(elapsed(phase_start)) + " ms");
+  }
+
+  phase_start = SteadyClock::now();
+  report("Sanitizing consolidated shards...");
+  SanitizedInventory final_inventory;
+  if (!sanitize(context.working, &final_inventory, error))
+    return false;
+  report("Final sanitization took " + std::to_string(elapsed(phase_start)) +
+         " ms");
+  if (!final_inventory.fivers.empty() || final_inventory.hazels.size() != 1 ||
+      final_inventory.shards.size() != 1 ||
+      final_inventory.hazels[0].start != sequence_start ||
+      final_inventory.hazels[0].end != sequence_end) {
+    safe_error(error) =
+        "Bigwig consolidation did not produce one complete Hazel";
+    return false;
+  }
+  report("Consolidation took " + std::to_string(elapsed(total_start)) + " ms");
+  return true;
 }
 
 std::shared_ptr<Bigwig> Bigwig::make(

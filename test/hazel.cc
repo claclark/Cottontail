@@ -215,6 +215,12 @@ void append_text_file(std::shared_ptr<cottontail::Bigwig> bigwig,
   bigwig->commit();
 }
 
+void touch(std::shared_ptr<cottontail::Working> working,
+           const std::string &name) {
+  std::ofstream out(working->make_name(name), std::ios::binary);
+  ASSERT_FALSE(out.fail()) << name;
+}
+
 std::shared_ptr<cottontail::Bigwig>
 build_bigwig(const std::string &burrow,
              const std::vector<std::string> &filenames,
@@ -505,7 +511,7 @@ void run_bigwig_hazel_activation_regression(
   ASSERT_NE(fiver, nullptr) << error;
   fiver->start();
   std::shared_ptr<cottontail::Hazel> hazel =
-      fiver->hazel(&error, 16, "");
+      fiver->hazel(&error, 64 * 1024, "");
   ASSERT_NE(hazel, nullptr) << error;
   fiver->end();
   ASSERT_TRUE(working->remove(fivers.front().name, &error)) << error;
@@ -515,9 +521,58 @@ void run_bigwig_hazel_activation_regression(
   expect_warrens_eq(source, mixed);
   mixed->end();
   source->end();
+  mixed.reset();
+  source.reset();
+  fiver.reset();
+  hazel.reset();
+
+  ASSERT_TRUE(cottontail::Bigwig::consolidate(burrow, &error)) << error;
+  EXPECT_TRUE(working->ls("fiver").empty());
+  EXPECT_EQ(working->ls("hazel").size(), size_t(1));
+  std::shared_ptr<cottontail::Warren> consolidated = open_started(burrow);
+  ASSERT_NE(consolidated, nullptr);
+  expect_gcl_eq(consolidated, consolidated, "\"Let me count the ways\"", true);
+  consolidated->end();
 }
 
 } // namespace
+
+TEST(HazelMergeRecovery, DiscardIsIdempotentAndPartialDiscardIsSanitized) {
+  std::string burrow = test_root() + "/hazel_recovery_discard.burrow";
+  std::string error;
+  std::shared_ptr<cottontail::Working> working =
+      cottontail::Working::mkdir(burrow, &error);
+  ASSERT_NE(working, nullptr) << error;
+
+  std::string first = shard_name("hazel", 0, 0);
+  std::string second = shard_name("hazel", 1, 1);
+  std::string target = shard_name("hazel", 0, 1);
+  touch(working, first);
+  touch(working, second);
+  touch(working, "mrg." + target);
+  touch(working, "pst." + target);
+  touch(working, "dct." + target);
+
+  std::vector<cottontail::OwslaShard> hazels;
+  std::vector<cottontail::HazelMergeRecovery> recoveries;
+  ASSERT_TRUE(
+      cottontail::Hazel::sanitize(working, &hazels, &recoveries, &error))
+      << error;
+  ASSERT_EQ(hazels.size(), size_t(2));
+  ASSERT_EQ(recoveries.size(), size_t(1));
+  EXPECT_TRUE(working->ls("mrg").empty());
+  ASSERT_TRUE(recoveries[0].discard(working, &error)) << error;
+  EXPECT_TRUE(working->ls("pst").empty());
+  EXPECT_TRUE(working->ls("dct").empty());
+  ASSERT_TRUE(recoveries[0].discard(working, &error)) << error;
+
+  touch(working, "pst." + target);
+  ASSERT_TRUE(
+      cottontail::Hazel::sanitize(working, &hazels, &recoveries, &error))
+      << error;
+  EXPECT_TRUE(recoveries.empty());
+  EXPECT_TRUE(working->ls("pst").empty());
+}
 
 TEST(BigwigHazelActivation, PreservesHazelPrefixFiverSuffix) {
   run_bigwig_hazel_activation_regression(
