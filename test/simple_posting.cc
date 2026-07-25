@@ -1,4 +1,7 @@
+#include <algorithm>
+#include <cstring>
 #include <fstream>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -7,6 +10,69 @@
 #include "src/array_hopper.h"
 #include "src/compressor.h"
 #include "src/simple_posting.h"
+
+namespace {
+
+enum class PostingShape {
+  point,
+  point_value,
+  interval,
+  interval_value,
+};
+
+bool has_intervals(PostingShape shape) {
+  return shape == PostingShape::interval ||
+         shape == PostingShape::interval_value;
+}
+
+bool has_values(PostingShape shape) {
+  return shape == PostingShape::point_value ||
+         shape == PostingShape::interval_value;
+}
+
+struct PostingValue {
+  cottontail::addr p;
+  cottontail::addr q;
+  cottontail::fval v;
+};
+
+std::shared_ptr<cottontail::SimplePosting> shaped_posting(
+    std::shared_ptr<cottontail::SimplePostingFactory> factory,
+    PostingShape shape, const std::vector<cottontail::addr> &positions) {
+  auto posting = factory->posting_from_feature(123);
+  for (auto p : positions) {
+    cottontail::addr q = has_intervals(shape) ? p + 3 : p;
+    cottontail::fval v = has_values(shape) ? p + 0.25 : 0.0;
+    posting->push(p, q, v);
+  }
+  return posting;
+}
+
+std::vector<PostingValue>
+posting_values(std::shared_ptr<cottontail::SimplePosting> posting) {
+  std::vector<PostingValue> values;
+  for (size_t i = 0; i < posting->size(); i++) {
+    PostingValue value;
+    EXPECT_TRUE(posting->get(i, &value.p, &value.q, &value.v));
+    values.push_back(value);
+  }
+  return values;
+}
+
+void expect_posting_values(std::shared_ptr<cottontail::SimplePosting> posting,
+                           const std::vector<PostingValue> &expected) {
+  ASSERT_EQ(posting->size(), expected.size());
+  for (size_t i = 0; i < expected.size(); i++) {
+    cottontail::addr p, q;
+    cottontail::fval v;
+    ASSERT_TRUE(posting->get(i, &p, &q, &v));
+    EXPECT_EQ(p, expected[i].p) << i;
+    EXPECT_EQ(q, expected[i].q) << i;
+    EXPECT_DOUBLE_EQ(v, expected[i].v) << i;
+  }
+}
+
+} // namespace
 
 TEST(SimplePosting, Tokens) {
   std::string error;
@@ -194,6 +260,71 @@ TEST(SimplePosting, Annotations) {
   ASSERT_TRUE(p == 6);
   ASSERT_TRUE(q == 12);
   ASSERT_TRUE(v == 0.0);
+}
+
+TEST(SimplePosting, MergeRepresentationMatrix) {
+  std::shared_ptr<cottontail::Compressor> compressor =
+      cottontail::Compressor::make("null", "");
+  ASSERT_NE(compressor, nullptr);
+  std::shared_ptr<cottontail::SimplePostingFactory> factory =
+      cottontail::SimplePostingFactory::make(compressor, compressor);
+  ASSERT_NE(factory, nullptr);
+
+  std::vector<PostingShape> shapes = {
+      PostingShape::point, PostingShape::point_value, PostingShape::interval,
+      PostingShape::interval_value};
+  for (auto left_shape : shapes)
+    for (auto right_shape : shapes)
+      for (bool interleaved : {false, true}) {
+        SCOPED_TRACE(::testing::Message()
+                     << "left=" << static_cast<int>(left_shape)
+                     << " right=" << static_cast<int>(right_shape)
+                     << " interleaved=" << interleaved);
+        auto left = shaped_posting(factory, left_shape, {10, 30});
+        auto right = shaped_posting(
+            factory, right_shape, interleaved
+                                      ? std::vector<cottontail::addr>{20, 40}
+                                      : std::vector<cottontail::addr>{100, 120});
+        std::vector<PostingValue> expected = posting_values(left);
+        std::vector<PostingValue> right_values = posting_values(right);
+        expected.insert(expected.end(), right_values.begin(),
+                        right_values.end());
+        std::sort(expected.begin(), expected.end(),
+                  [](const PostingValue &a, const PostingValue &b) {
+                    return a.p < b.p;
+                  });
+
+        std::vector<std::shared_ptr<cottontail::SimplePosting>> sources = {
+            left, right};
+        auto merged = factory->posting_from_merge(sources);
+        ASSERT_NE(merged, nullptr);
+        std::string error;
+        EXPECT_TRUE(merged->invariants(&error)) << error;
+        expect_posting_values(merged, expected);
+
+        std::ostringstream out(std::ios::out | std::ios::binary);
+        merged->write(&out);
+        std::string blob = out.str();
+        ASSERT_GE(blob.size(), sizeof(cottontail::PstRecord));
+        cottontail::PstRecord record;
+        std::memcpy(&record, blob.data(), sizeof(record));
+        EXPECT_EQ(record.n, static_cast<cottontail::addr>(expected.size()));
+        if (has_intervals(left_shape) || has_intervals(right_shape))
+          EXPECT_GT(record.qst, 0);
+        else
+          EXPECT_EQ(record.qst, 0);
+        if (has_values(left_shape) || has_values(right_shape))
+          EXPECT_GT(record.fst, 0);
+        else
+          EXPECT_EQ(record.fst, 0);
+
+        auto decoded = factory->posting_from_compressed_blob(
+            blob.data(), blob.size(), &error);
+        ASSERT_NE(decoded, nullptr) << error;
+        EXPECT_TRUE(decoded->invariants(&error)) << error;
+        EXPECT_TRUE(*merged == *decoded);
+        expect_posting_values(decoded, expected);
+      }
 }
 
 TEST(SimplePosting, Append) {

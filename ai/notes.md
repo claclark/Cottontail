@@ -32,6 +32,9 @@
 - `Fiver` is the mutable/transaction shard format used by Bigwig.
 - `Hazel` is the immutable single-file shard format produced from Fivers and
   opened as a standalone Warren.
+- Major objects are intended to be safe for concurrent use unless documented
+  otherwise. Hoppers are the important exception: they are stateful cursors
+  and should be created and owned independently by each thread.
 
 ## Main Component Families
 

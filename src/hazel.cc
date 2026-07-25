@@ -856,6 +856,8 @@ bool HazelIdx::merge(const std::vector<std::shared_ptr<HazelIdx>> &idxs,
            idxs[i]->directory_[positions[i]].feature <= last_feature)
       positions[i]++;
 
+  std::vector<std::shared_ptr<SimplePosting>> postings;
+  postings.reserve(idxs.size());
   for (;;) {
     addr next = maxfinity;
     for (size_t i = 0; i < idxs.size(); i++)
@@ -864,10 +866,19 @@ bool HazelIdx::merge(const std::vector<std::shared_ptr<HazelIdx>> &idxs,
     if (next == maxfinity)
       break;
 
-    for (size_t i = 0; i < idxs.size(); i++)
+    postings.clear();
+    for (size_t i = 0; i < idxs.size(); i++) {
       if (positions[i] < idxs[i]->directory_.size() &&
-          idxs[i]->directory_[positions[i]].feature == next)
+          idxs[i]->directory_[positions[i]].feature == next) {
+        if (next != text_chunk_feature) {
+          auto source = idxs[i]->posting_at(positions[i], error);
+          if (source == nullptr)
+            return false;
+          postings.push_back(source);
+        }
         positions[i]++;
+      }
+    }
 
     std::shared_ptr<SimplePosting> posting;
     if (next == text_chunk_feature) {
@@ -875,9 +886,6 @@ bool HazelIdx::merge(const std::vector<std::shared_ptr<HazelIdx>> &idxs,
       if (has_source_feature(text_chunk_feature) && posting == nullptr)
         return false;
     } else {
-      std::vector<std::shared_ptr<SimplePosting>> postings;
-      if (!postings_for_feature(next, &postings, error))
-        return false;
       posting = factory->posting_from_merge(postings, exclude);
     }
 

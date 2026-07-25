@@ -115,44 +115,41 @@ SimplePostingFactory::posting_from_compressed_blob(const char *data,
     return posting;
   addr postings_size = idx.n * sizeof(addr);
   addr fvalues_size = idx.n * sizeof(fval);
-  std::unique_ptr<char[]> tanged =
-      std::unique_ptr<char[]>(new char[std::max(postings_size, fvalues_size)]);
 
+  posting->postings_.resize(idx.n);
   addr posting_size =
       posting_compressor_->tang(const_cast<char *>(data + header), idx.pst,
-                                tanged.get(), postings_size);
+                                reinterpret_cast<char *>(
+                                    posting->postings_.data()),
+                                postings_size);
   if (posting_size != postings_size) {
     safe_error(error) = "Compressed posting blob has bad postings";
     return nullptr;
   }
-  addr *pstart = reinterpret_cast<addr *>(tanged.get());
-  addr *pend = pstart + idx.n;
-  for (addr *p = pstart; p < pend; p++)
-    posting->postings_.push_back(*p);
 
   if (idx.qst > 0) {
+    posting->qostings_.resize(idx.n);
     posting_size =
         posting_compressor_->tang(const_cast<char *>(data + qoffset), idx.qst,
-                                  tanged.get(), postings_size);
+                                  reinterpret_cast<char *>(
+                                      posting->qostings_.data()),
+                                  postings_size);
     if (posting_size != postings_size) {
       safe_error(error) = "Compressed posting blob has bad qostings";
       return nullptr;
     }
-    for (addr *q = pstart; q < pend; q++)
-      posting->qostings_.push_back(*q);
   }
   if (idx.fst > 0) {
+    posting->fostings_.resize(idx.n);
     posting_size =
         fvalue_compressor_->tang(const_cast<char *>(data + foffset), idx.fst,
-                                 tanged.get(), fvalues_size);
+                                 reinterpret_cast<char *>(
+                                     posting->fostings_.data()),
+                                 fvalues_size);
     if (posting_size != fvalues_size) {
       safe_error(error) = "Compressed posting blob has bad fostings";
       return nullptr;
     }
-    fval *fstart = reinterpret_cast<fval *>(tanged.get());
-    fval *fend = fstart + idx.n;
-    for (fval *f = fstart; f < fend; f++)
-      posting->fostings_.push_back(*f);
   }
   return posting;
 }
@@ -270,45 +267,48 @@ SimplePostingFactory::posting_from_file(std::fstream *f) {
   addr crushed_size = std::max(std::max(idx.pst, idx.qst), idx.fst) + 1;
   std::unique_ptr<char[]> crushed =
       std::unique_ptr<char[]>(new char[crushed_size]);
-  addr tanged_size = std::max(idx.n * sizeof(addr), idx.n * sizeof(fval));
-  std::unique_ptr<char[]> tanged =
-      std::unique_ptr<char[]>(new char[tanged_size]);
+  addr postings_size = idx.n * sizeof(addr);
+  addr fvalues_size = idx.n * sizeof(fval);
+  posting->postings_.resize(idx.n);
   f->read(crushed.get(), idx.pst);
   assert(!f->fail());
-  addr posting_size = posting_compressor_->tang(crushed.get(), idx.pst,
-                                                tanged.get(), tanged_size);
-  assert(posting_size % sizeof(addr) == 0 &&
-         posting_size / (addr)sizeof(addr) == idx.n);
-  addr *start = reinterpret_cast<addr *>(tanged.get());
-  addr *end = start + idx.n;
-  for (addr *p = start; p < end; p++)
-    posting->postings_.push_back(*p);
+  addr posting_size = posting_compressor_->tang(
+      crushed.get(), idx.pst,
+      reinterpret_cast<char *>(posting->postings_.data()), postings_size);
+  assert(posting_size == postings_size);
   if (idx.qst > 0) {
+    posting->qostings_.resize(idx.n);
     f->read(crushed.get(), idx.qst);
     assert(!f->fail());
-    posting_size = posting_compressor_->tang(crushed.get(), idx.qst,
-                                             tanged.get(), tanged_size);
-    assert(posting_size % sizeof(addr) == 0 &&
-           posting_size / (addr)sizeof(addr) == idx.n);
-    for (addr *q = start; q < end; q++)
-      posting->qostings_.push_back(*q);
+    posting_size = posting_compressor_->tang(
+        crushed.get(), idx.qst,
+        reinterpret_cast<char *>(posting->qostings_.data()), postings_size);
+    assert(posting_size == postings_size);
   }
   if (idx.fst > 0) {
+    posting->fostings_.resize(idx.n);
     f->read(crushed.get(), idx.fst);
     assert(!f->fail());
-    posting_size = fvalue_compressor_->tang(crushed.get(), idx.fst,
-                                            tanged.get(), tanged_size);
-    assert(posting_size % sizeof(addr) == 0 &&
-           posting_size / (addr)sizeof(addr) == idx.n);
-    fval *start = reinterpret_cast<fval *>(tanged.get());
-    fval *end = start + idx.n;
-    for (fval *f = start; f < end; f++)
-      posting->fostings_.push_back(*f);
+    posting_size = fvalue_compressor_->tang(
+        crushed.get(), idx.fst,
+        reinterpret_cast<char *>(posting->fostings_.data()), fvalues_size);
+    assert(posting_size == fvalues_size);
   }
   return posting;
 }
 
 namespace {
+struct SimplePostingWriteBuffers {
+  std::vector<char> postings;
+  std::vector<char> qostings;
+  std::vector<char> fostings;
+};
+
+SimplePostingWriteBuffers &simple_posting_write_buffers() {
+  thread_local SimplePostingWriteBuffers buffers;
+  return buffers;
+}
+
 class Element {
 public:
   Element() = delete;
@@ -414,15 +414,8 @@ std::shared_ptr<SimplePosting> SimplePostingFactory::posting_from_merge(
   }
   std::shared_ptr<SimplePosting> merged_posting = posting_from_feature(feature);
   if (can_append) {
-    for (auto &posting : postings) {
-      addr p, q;
-      fval v;
-      size_t n = posting->size();
-      for (size_t i = 0; i < n; i++) {
-        posting->get(i, &p, &q, &v);
-        merged_posting->push(p, q, v);
-      }
-    }
+    for (auto &posting : postings)
+      merged_posting->append(posting);
   } else {
     std::priority_queue<Element, std::vector<Element>, Compare> queue;
     for (size_t i = 0; i < postings.size(); i++)
@@ -527,46 +520,45 @@ void SimplePosting::write(std::ostream *f) {
   addr postings_size = sizeof(addr) * n;
   addr postings_buffer_size =
       postings_size + posting_compressor_->extra(postings_size);
-  std::unique_ptr<char[]> postings_buffer =
-      std::unique_ptr<char[]>(new char[postings_buffer_size + 1]);
+  SimplePostingWriteBuffers &buffers = simple_posting_write_buffers();
+  if ((addr)buffers.postings.size() < postings_buffer_size)
+    buffers.postings.resize(postings_buffer_size);
   addr postings_compressed = posting_compressor_->crush(
       reinterpret_cast<char *>(&postings_[0]), postings_size,
-      postings_buffer.get(), postings_buffer_size);
+      buffers.postings.data(), postings_buffer_size);
   addr qostings_compressed = 0;
-  std::unique_ptr<char[]> qostings_buffer = nullptr;
   if (qostings_.size() != 0) {
     assert((addr)qostings_.size() == n);
-    qostings_buffer =
-        std::unique_ptr<char[]>(new char[postings_buffer_size + 1]);
+    if ((addr)buffers.qostings.size() < postings_buffer_size)
+      buffers.qostings.resize(postings_buffer_size);
     qostings_compressed = posting_compressor_->crush(
         reinterpret_cast<char *>(&qostings_[0]), postings_size,
-        qostings_buffer.get(), postings_buffer_size);
+        buffers.qostings.data(), postings_buffer_size);
   }
   addr fostings_compressed = 0;
-  std::unique_ptr<char[]> fostings_buffer = nullptr;
   if (fostings_.size() != 0) {
     assert((addr)fostings_.size() == n);
     addr fostings_size = sizeof(fval) * n;
     addr fostings_buffer_size =
         fostings_size + fvalue_compressor_->extra(fostings_size);
-    fostings_buffer =
-        std::unique_ptr<char[]>(new char[fostings_buffer_size + 1]);
+    if ((addr)buffers.fostings.size() < fostings_buffer_size)
+      buffers.fostings.resize(fostings_buffer_size);
     fostings_compressed = fvalue_compressor_->crush(
         reinterpret_cast<char *>(&fostings_[0]), fostings_size,
-        fostings_buffer.get(), fostings_buffer_size);
+        buffers.fostings.data(), fostings_buffer_size);
   }
   PstRecord idx(feature_, n, postings_compressed, qostings_compressed,
                 fostings_compressed);
   f->write(reinterpret_cast<char *>(&idx), sizeof(PstRecord));
   assert(!f->fail());
-  f->write(postings_buffer.get(), postings_compressed);
+  f->write(buffers.postings.data(), postings_compressed);
   assert(!f->fail());
   if (qostings_compressed > 0) {
-    f->write(qostings_buffer.get(), qostings_compressed);
+    f->write(buffers.qostings.data(), qostings_compressed);
     assert(!f->fail());
   }
   if (fostings_compressed > 0) {
-    f->write(fostings_buffer.get(), fostings_compressed);
+    f->write(buffers.fostings.data(), fostings_compressed);
     assert(!f->fail());
   }
 }

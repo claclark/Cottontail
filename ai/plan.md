@@ -205,51 +205,79 @@ Keep the zlib change as a small, format-compatible cleanup: it removes needless
 per-call zlib allocation and the fixed 64 KiB output allowance without adding
 substantial complexity. Do not treat it as the performance fix.
 
-### Planned SimplePosting Cleanup
+### Implemented SimplePosting and Hazel-Loop Cleanup
 
-Keep this work small and preserve the current compact representation:
+The cleanup remains small and preserves the current compact representation:
 
 - Empty `qostings_` means every annotation is a point (`q == p`).
 - Empty `fostings_` means every feature value is zero.
 - Expanded vectors may still contain points or zero values alongside intervals
   or nonzero values.
 
-Before optimizing, add table-driven coverage for the four source shapes:
-point/no-value, point/value, interval/no-value, and interval/value. Exercise
-all ordered pairs through both appendable and interleaved merges, verify the
-result triples and invariants, serialize/deserialize the result, and inspect
-the serialized record to ensure qostings and fostings remain absent whenever
-the merged data permits it. Retain focused coverage for duplicate resolution
-and exclusion filtering.
+Table-driven coverage now exercises the four source shapes:
+point/no-value, point/value, interval/no-value, and interval/value. It exercises
+all ordered pairs through both appendable and interleaved merges. It verifies
+the result triples and invariants, serializes and decodes each result, and
+inspects the serialized record to ensure qostings and fostings remain absent
+whenever the merged data permits it. Existing focused coverage for duplicate
+resolution and exclusion filtering remains in place.
 
-Then make three local `SimplePosting` changes:
+Three local `SimplePosting` changes are implemented:
 
-1. In the ordered `posting_from_merge(...)` fast path, use the existing bulk
+1. The ordered `posting_from_merge(...)` fast path uses the existing bulk
    `append(...)` operation instead of copying every entry through `get(...)`
    and `push(...)`. The existing append logic already expands missing
    qostings with `p` and missing fostings with zero only when another input
    requires the expanded representation.
-2. In `posting_from_compressed_blob(...)` and `posting_from_file(...)`, resize
-   only the vectors present in the serialized record and decompress directly
-   into their storage. Remove the temporary decoded array and per-element
+2. `posting_from_compressed_blob(...)` and `posting_from_file(...)` resize only
+   the vectors present in the serialized record and decompress directly into
+   their storage. This removes the temporary decoded array and per-element
    `push_back(...)` copies.
-3. Give `SimplePosting::write(...)` a small thread-local scratch object holding
-   posting, qosting, and fvalue byte buffers. Resize qosting and fvalue buffers
-   only when those vectors are present. This removes per-list heap allocation
-   without changing the public API or file format.
+3. `SimplePosting::write(...)` uses a small thread-local scratch object holding
+   posting, qosting, and fvalue byte buffers. It grows qosting and fvalue
+   buffers only when those vectors are present. This removes per-list heap
+   allocation without changing the public API or file format.
 
-Compile after each change, then let the user run the regression suite and
-`build.sh` once for the combined `SimplePosting` cleanup.
+Two small Hazel-driver changes are implemented:
 
-After that measurement, make a separate small Hazel-driver cleanup:
+- One source-posting vector is reused across features rather than allocated in
+  every loop iteration. It reserves only enough room for one posting per input
+  Hazel.
+- The already maintained sequential directory positions identify and load
+  sources for the current feature instead of binary-searching every Hazel
+  directory again. Matching positions are consumed before advancing them, so
+  checkpoint resume behavior remains unchanged.
 
-- Reuse one source-posting vector across features rather than allocating it in
-  every loop iteration.
-- Use the already maintained sequential directory positions to identify and
-  load sources for the current feature instead of binary-searching every Hazel
-  directory again.
-- Reserve known directory/checkpoint capacity where an inexpensive upper bound
-  is already available.
+The special null-feature and text-chunk paths remain unchanged; each runs at
+most once and its existing lookup code is clearer. The checkpoint vector is
+not broadly reserved from the sum of source-directory sizes because that upper
+bound can substantially exceed the number of output features.
+
+The library, aggregate tests, focused Hazel tests, build applications, and
+standalone conversion/merge applications compile. Runtime regressions remain
+with the user.
+
+### SimplePosting and Hazel-Loop Benchmark Result
+
+Against the immediately preceding zlib-reuse run, the user's `build.sh`
+measurement reduced foreground consolidation from 1,259,340 ms to 1,231,490
+ms, an improvement of 27,850 ms (2.21%). The phase comparison is:
+
+- Fiver loading: 29,638 ms to 23,919 ms, down 5,719 ms (19.30%).
+- Wide Fiver merge: 59,379 ms to 59,225 ms, effectively unchanged.
+- Fiver-to-Hazel conversion: 501,577 ms to 501,426 ms, effectively unchanged.
+- Hazel merge: 661,538 ms to 639,682 ms, down 21,856 ms (3.30%).
+
+Peak resident memory fell from 16,837,072 KiB to 15,913,188 KiB, about 5.49%,
+although a single-run memory comparison may include normal variation. Meadow
+creation was unchanged, while foraging moved from 3:12.02 to 3:03.53.
+
+The phase results fit the intended changes: direct decode materially helps
+Fiver loading, and sequential directory consumption plus vector reuse helps
+Hazel merging. Bulk append and reusable output buffers did not materially
+change the wide Fiver merge or Fiver conversion. Further posting-allocation
+micro-cleanup is therefore unlikely to address the remaining 501-second
+conversion and 640-second Hazel merge times.
 
 Do not yet change the posting format, singleton encoding, priority-queue merge,
 exclusion semantics, or checkpoint flush/recovery policy. Those require
