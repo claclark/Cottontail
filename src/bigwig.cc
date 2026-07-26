@@ -1,6 +1,7 @@
 #include "src/bigwig.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cassert>
 #include <chrono>
 #include <cstdio>
@@ -9,6 +10,7 @@
 #include <iostream>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <regex>
 #include <set>
 #include <sstream>
@@ -278,6 +280,10 @@ private:
 };
 
 namespace {
+const addr small_shard = 8 * 1024 * 1024;
+const addr medium_shard = 256 * 1024 * 1024;
+const addr large_shard = 2 * medium_shard;
+
 struct SanitizedInventory {
   std::vector<OwslaShard> fivers;
   std::vector<OwslaShard> hazels;
@@ -294,8 +300,8 @@ bool verify_shard_order(const std::string &kind,
       return false;
     }
     if (i > 0 && shards[i - 1].end >= shards[i].start) {
-      safe_error(error) = "Overlapping " + kind + " shards around: " +
-                          shards[i].name;
+      safe_error(error) =
+          "Overlapping " + kind + " shards around: " + shards[i].name;
       return false;
     }
   }
@@ -328,9 +334,8 @@ bool combine_shards(std::shared_ptr<Working> working,
             "Fiver shard contains Hazel shard around: " + fiver.name + " and " +
             inventory->hazels[hazel].name;
       } else {
-        safe_error(error) =
-            "Mixed fiver/hazel overlap around: " + fiver.name + " and " +
-            inventory->hazels[hazel].name;
+        safe_error(error) = "Mixed fiver/hazel overlap around: " + fiver.name +
+                            " and " + inventory->hazels[hazel].name;
       }
       return false;
     }
@@ -339,12 +344,68 @@ bool combine_shards(std::shared_ptr<Working> working,
   inventory->fivers = fivers;
 
   inventory->shards.clear();
-  inventory->shards.reserve(inventory->hazels.size() + inventory->fivers.size());
+  inventory->shards.reserve(inventory->hazels.size() +
+                            inventory->fivers.size());
   inventory->shards.insert(inventory->shards.end(), inventory->hazels.begin(),
                            inventory->hazels.end());
   inventory->shards.insert(inventory->shards.end(), inventory->fivers.begin(),
                            inventory->fivers.end());
   std::sort(inventory->shards.begin(), inventory->shards.end());
+  return verify_shard_order("combined", inventory->shards, error);
+}
+
+bool same_shard(const OwslaShard &a, const OwslaShard &b) {
+  return a.start == b.start && a.end == b.end && a.name == b.name;
+}
+
+bool recovery_matches_inventory(const HazelMergeRecovery &recovery,
+                                const std::vector<OwslaShard> &shards) {
+  if (recovery.sources.size() < 2 ||
+      recovery.sources.front().start != recovery.target.start ||
+      recovery.sources.back().end != recovery.target.end)
+    return false;
+  for (size_t first = 0; first < shards.size(); first++) {
+    if (!same_shard(shards[first], recovery.sources.front()))
+      continue;
+    if (first + recovery.sources.size() > shards.size())
+      return false;
+    for (size_t i = 0; i < recovery.sources.size(); i++)
+      if (!same_shard(shards[first + i], recovery.sources[i]))
+        return false;
+    return true;
+  }
+  return false;
+}
+
+bool reconcile_hazel_merges(std::shared_ptr<Working> working,
+                            SanitizedInventory *inventory, std::string *error) {
+  std::vector<HazelMergeRecovery> coherent;
+  for (auto &recovery : inventory->hazel_merges) {
+    if (recovery_matches_inventory(recovery, inventory->shards)) {
+      coherent.push_back(recovery);
+    } else if (!remove_hazel_merge_segments(working, recovery, error)) {
+      return false;
+    }
+  }
+
+  std::vector<bool> conflicting(coherent.size(), false);
+  for (size_t i = 0; i < coherent.size(); i++)
+    for (size_t j = i + 1; j < coherent.size(); j++)
+      if (owsla_ranges_overlap(coherent[i].target, coherent[j].target)) {
+        conflicting[i] = true;
+        conflicting[j] = true;
+      }
+
+  inventory->hazel_merges.clear();
+  for (size_t i = 0; i < coherent.size(); i++) {
+    if (conflicting[i]) {
+      if (!remove_hazel_merge_segments(working, coherent[i], error))
+        return false;
+    } else {
+      inventory->hazel_merges.push_back(coherent[i]);
+    }
+  }
+  std::sort(inventory->hazel_merges.begin(), inventory->hazel_merges.end());
   return true;
 }
 
@@ -388,7 +449,8 @@ bool sanitize(std::shared_ptr<Working> working, SanitizedInventory *inventory,
   if (!finalize_commits(working, error) ||
       !Fiver::sanitize(working, &found.fivers, error) ||
       !Hazel::sanitize(working, &found.hazels, &found.hazel_merges, error) ||
-      !combine_shards(working, &found, error))
+      !combine_shards(working, &found, error) ||
+      !reconcile_hazel_merges(working, &found, error))
     return false;
   if (inventory != nullptr)
     *inventory = found;
@@ -578,8 +640,7 @@ std::shared_ptr<Bigwig> Bigwig::make(const std::string &burrow,
       std::string fivername = context.working->make_name(shard.name);
       std::shared_ptr<Fiver> fiver =
           Fiver::unpickle(fivername, context.working, context.featurizer,
-                          context.tokenizer, error,
-                          context.posting_compressor,
+                          context.tokenizer, error, context.posting_compressor,
                           context.fvalue_compressor, context.text_compressor);
       if (fiver == nullptr)
         return nullptr;
@@ -605,9 +666,9 @@ std::shared_ptr<Bigwig> Bigwig::make(const std::string &burrow,
   }
   fluffle->address = address;
   fluffle->sequence = sequence;
-  std::shared_ptr<Bigwig> bigwig = std::shared_ptr<Bigwig>(
-      new Bigwig(context.working, context.featurizer, context.tokenizer, nullptr,
-                 nullptr));
+  std::shared_ptr<Bigwig> bigwig =
+      std::shared_ptr<Bigwig>(new Bigwig(context.working, context.featurizer,
+                                         context.tokenizer, nullptr, nullptr));
   assert(bigwig != nullptr);
   bigwig->fiver_ = nullptr;
   bigwig->fluffle_ = fluffle;
@@ -640,8 +701,8 @@ bool Bigwig::consolidate(const std::string &burrow, std::string *error,
   };
   auto report = [&](const std::string &message) {
     if (verbose)
-      std::cerr << "Bigwig::consolidate [" << timestamp()
-                << " ms]: " << message << "\n";
+      std::cerr << "Bigwig::consolidate [" << timestamp() << " ms]: " << message
+                << "\n";
   };
 
   auto total_start = SteadyClock::now();
@@ -654,37 +715,24 @@ bool Bigwig::consolidate(const std::string &burrow, std::string *error,
   report("Opening and sanitizing took " + std::to_string(elapsed(phase_start)) +
          " ms");
 
-  if (!context.inventory.hazel_merges.empty()) {
-    phase_start = SteadyClock::now();
-    report("Discarding " +
-           std::to_string(context.inventory.hazel_merges.size()) +
-           " partial Hazel merge(s)...");
-    for (auto &recovery : context.inventory.hazel_merges)
-      if (!recovery.discard(context.working, error))
-        return false;
-    report("Discarding partial Hazel merges took " +
-           std::to_string(elapsed(phase_start)) + " ms");
-  }
-
   if (context.inventory.shards.empty()) {
     safe_error(error) = "Bigwig consolidation found no shards";
     return false;
-  }
-  for (size_t i = 1; i < context.inventory.shards.size(); i++) {
-    auto &previous = context.inventory.shards[i - 1];
-    auto &current = context.inventory.shards[i];
-    if (previous.end == maxfinity || current.start != previous.end + 1) {
-      safe_error(error) = "Bigwig consolidation found a shard sequence gap "
-                          "around: " +
-                          previous.name + " and " + current.name;
-      return false;
-    }
   }
 
   addr sequence_start = context.inventory.shards.front().start;
   addr sequence_end = context.inventory.shards.back().end;
   std::string parameters = freeze(context.parameters);
+
+  struct FiverGroup {
+    std::vector<OwslaShard> shards;
+    std::vector<std::shared_ptr<Fiver>> fivers;
+  };
+  std::vector<FiverGroup> groups;
   std::vector<std::string> hazels;
+  phase_start = SteadyClock::now();
+  report("Loading " + std::to_string(context.inventory.fivers.size()) +
+         " Fiver(s)...");
   for (size_t i = 0; i < context.inventory.shards.size();) {
     auto &shard = context.inventory.shards[i];
     if (shard.name.compare(0, 6, "hazel.") == 0) {
@@ -703,46 +751,154 @@ bool Bigwig::consolidate(const std::string &burrow, std::string *error,
            context.inventory.shards[end].name.compare(0, 6, "fiver.") == 0)
       end++;
 
-    std::vector<std::shared_ptr<Fiver>> fivers;
-    fivers.reserve(end - i);
-    phase_start = SteadyClock::now();
-    report("Loading " + std::to_string(end - i) + " Fiver(s)...");
+    FiverGroup group;
+    addr group_size = 0;
     for (size_t j = i; j < end; j++) {
       auto &fiver_shard = context.inventory.shards[j];
-      std::shared_ptr<Fiver> fiver = Fiver::unpickle(
-          fiver_shard.name, context.working, context.featurizer,
-          context.tokenizer, error, context.posting_compressor,
-          context.fvalue_compressor, context.text_compressor);
+      std::shared_ptr<Fiver> fiver =
+          Fiver::unpickle(fiver_shard.name, context.working, context.featurizer,
+                          context.tokenizer, error, context.posting_compressor,
+                          context.fvalue_compressor, context.text_compressor);
       if (fiver == nullptr)
         return false;
-      fivers.push_back(fiver);
+      addr estimate = fiver->estimated_size();
+      if (estimate < 0) {
+        safe_error(error) =
+            "Bigwig consolidation got bad Fiver estimate: " + fiver_shard.name;
+        return false;
+      }
+      group.shards.push_back(fiver_shard);
+      group.fivers.push_back(fiver);
+      if (estimate > maxfinity - group_size)
+        group_size = maxfinity;
+      else
+        group_size += estimate;
+      if (group_size >= medium_shard) {
+        hazels.push_back(hazel_default_name(group.shards.front().start,
+                                            group.shards.back().end));
+        groups.push_back(std::move(group));
+        group = FiverGroup();
+        group_size = 0;
+      }
     }
-    report("Loading Fivers took " + std::to_string(elapsed(phase_start)) +
-           " ms");
-
-    phase_start = SteadyClock::now();
-    report("Merging " + std::to_string(fivers.size()) + " Fiver(s)...");
-    std::shared_ptr<Fiver> merged = Fiver::merge(fivers, error);
-    if (merged == nullptr)
-      return false;
-    report("Fiver merge took " + std::to_string(elapsed(phase_start)) + " ms");
-
-    addr run_start = context.inventory.shards[i].start;
-    addr run_end = context.inventory.shards[end - 1].end;
-    phase_start = SteadyClock::now();
-    report("Converting Fiver sequence " + std::to_string(run_start) + "-" +
-           std::to_string(run_end) + " to Hazel...");
-    merged->start();
-    std::shared_ptr<Hazel> hazel =
-        merged->hazel(error, 64 * 1024, parameters);
-    merged->end();
-    if (hazel == nullptr)
-      return false;
-    report("Fiver conversion took " + std::to_string(elapsed(phase_start)) +
-           " ms");
-    hazels.push_back(hazel_default_name(run_start, run_end));
+    if (!group.fivers.empty()) {
+      hazels.push_back(hazel_default_name(group.shards.front().start,
+                                          group.shards.back().end));
+      groups.push_back(std::move(group));
+    }
     i = end;
   }
+  report("Loading Fivers took " + std::to_string(elapsed(phase_start)) + " ms");
+
+  if (!groups.empty()) {
+    size_t worker_count =
+        std::min(groups.size(), std::max<size_t>(1, allowed_threads(0)));
+    phase_start = SteadyClock::now();
+    report("Merging and converting " + std::to_string(groups.size()) +
+           " Fiver group(s) with " + std::to_string(worker_count) +
+           " worker(s)...");
+
+    std::atomic<size_t> next_group(0);
+    std::atomic<bool> failed(false);
+    std::mutex failure_lock;
+    std::string failure;
+    auto fail = [&](const std::string &message) {
+      bool expected = false;
+      if (failed.compare_exchange_strong(expected, true)) {
+        std::lock_guard<std::mutex> lock(failure_lock);
+        failure = message;
+      }
+    };
+    auto work = [&]() {
+      while (!failed.load()) {
+        size_t index = next_group.fetch_add(1);
+        if (index >= groups.size())
+          return;
+        auto &group = groups[index];
+        std::string group_error;
+        try {
+          std::shared_ptr<Fiver> merged;
+          if (group.fivers.size() == 1)
+            merged = group.fivers.front();
+          else
+            merged = Fiver::merge(group.fivers, &group_error);
+          if (merged == nullptr) {
+            fail(group_error == "" ? "Bigwig consolidation failed to merge "
+                                     "a Fiver group"
+                                   : group_error);
+            return;
+          }
+
+          merged->start();
+          std::shared_ptr<Hazel> hazel =
+              merged->hazel(&group_error, 64 * 1024, parameters);
+          merged->end();
+          if (hazel == nullptr) {
+            fail(group_error == "" ? "Bigwig consolidation failed to convert "
+                                     "a Fiver group"
+                                   : group_error);
+            return;
+          }
+
+          for (auto &shard : group.shards)
+            if (!context.working->remove(shard.name, &group_error)) {
+              fail(group_error);
+              return;
+            }
+          hazel.reset();
+          merged.reset();
+          group.fivers.clear();
+        } catch (const std::exception &exception) {
+          fail("Bigwig consolidation worker failed: " +
+               std::string(exception.what()));
+          return;
+        } catch (...) {
+          fail("Bigwig consolidation worker failed");
+          return;
+        }
+      }
+    };
+
+    std::vector<std::thread> workers;
+    workers.reserve(worker_count);
+    try {
+      for (size_t i = 0; i < worker_count; i++)
+        workers.emplace_back(work);
+    } catch (const std::exception &exception) {
+      fail("Bigwig consolidation can't start worker: " +
+           std::string(exception.what()));
+    } catch (...) {
+      fail("Bigwig consolidation can't start worker");
+    }
+    for (auto &worker : workers)
+      worker.join();
+    if (failed.load()) {
+      std::lock_guard<std::mutex> lock(failure_lock);
+      safe_error(error) = failure;
+      return false;
+    }
+    report("Fiver merging and conversion took " +
+           std::to_string(elapsed(phase_start)) + " ms; removed " +
+           std::to_string(context.inventory.fivers.size()) +
+           " source Fiver(s)");
+  }
+
+  size_t discarded_recoveries = 0;
+  for (auto &recovery : context.inventory.hazel_merges) {
+    bool reusable = recovery.target.start == sequence_start &&
+                    recovery.target.end == sequence_end &&
+                    recovery.sources.size() == hazels.size();
+    for (size_t i = 0; reusable && i < hazels.size(); i++)
+      reusable = recovery.sources[i].name == hazels[i];
+    if (!reusable) {
+      if (!remove_hazel_merge_segments(context.working, recovery, error))
+        return false;
+      discarded_recoveries++;
+    }
+  }
+  if (discarded_recoveries > 0)
+    report("Discarded " + std::to_string(discarded_recoveries) +
+           " unused partial Hazel merge(s)");
 
   if (hazels.size() > 1) {
     phase_start = SteadyClock::now();
@@ -750,6 +906,10 @@ bool Bigwig::consolidate(const std::string &burrow, std::string *error,
     if (!Hazel::merge(context.working, hazels, parameters, error))
       return false;
     report("Hazel merge took " + std::to_string(elapsed(phase_start)) + " ms");
+    for (auto &hazel : hazels)
+      if (!context.working->remove(hazel, error))
+        return false;
+    report("Removed " + std::to_string(hazels.size()) + " source Hazel(s)");
   }
 
   phase_start = SteadyClock::now();
@@ -817,9 +977,8 @@ std::shared_ptr<Bigwig> Bigwig::make(
     bigwig->text_compressor_ = null_compressor;
   else
     bigwig->text_compressor_ = text_compressor;
-  bigwig->posting_factory_ =
-      SimplePostingFactory::make(bigwig->posting_compressor_,
-                                 bigwig->fvalue_compressor_);
+  bigwig->posting_factory_ = SimplePostingFactory::make(
+      bigwig->posting_compressor_, bigwig->fvalue_compressor_);
   if (working != nullptr && !write_dna(working, bigwig->recipe(), error))
     return nullptr;
   return bigwig;
@@ -981,10 +1140,6 @@ bool Bigwig::ready_(std::string *error) {
 }
 
 namespace {
-const addr small_shard = 8 * 1024 * 1024;
-const addr medium_shard = 256 * 1024 * 1024;
-const addr large_shard = 2 * medium_shard;
-
 // The caller holds fluffle->lock while consulting live policy parameters.
 bool fluffle_parameter_enabled(std::shared_ptr<Fluffle> fluffle,
                                const std::string &key) {
@@ -1090,8 +1245,7 @@ bool find_smallest_fiver_pair(std::shared_ptr<Fluffle> fluffle, size_t *start,
     addr left_size = left->estimated_size();
     addr right_size = right->estimated_size();
     if (left_size < 0 || right_size < 0 ||
-        (convert &&
-         (left_size >= medium_shard || right_size >= medium_shard)))
+        (convert && (left_size >= medium_shard || right_size >= medium_shard)))
       continue;
     addr sum = left_size + right_size;
     if (!found || sum < best_sum) {
@@ -1116,9 +1270,8 @@ bool find_stranded_fiver_conversion(std::shared_ptr<Fluffle> fluffle,
   if (fluffle->warrens.size() >= 2) {
     auto warren = fluffle->warrens[0];
     auto right = fluffle->warrens[1];
-    if (warren != nullptr && right != nullptr &&
-        warren->name() == "fiver" && right->name() == "hazel" &&
-        eligible(fluffle, warren)) {
+    if (warren != nullptr && right != nullptr && warren->name() == "fiver" &&
+        right->name() == "hazel" && eligible(fluffle, warren)) {
       if (start != nullptr && end != nullptr)
         *start = *end = 0;
       return true;
@@ -1306,10 +1459,9 @@ bool validate_fiver_conversion(
   return true;
 }
 
-bool validate_fiver_merge(
-    std::shared_ptr<Fluffle> fluffle,
-    const std::vector<std::shared_ptr<Owsla>> &selected,
-    std::vector<std::shared_ptr<Fiver>> *fivers) {
+bool validate_fiver_merge(std::shared_ptr<Fluffle> fluffle,
+                          const std::vector<std::shared_ptr<Owsla>> &selected,
+                          std::vector<std::shared_ptr<Fiver>> *fivers) {
   if (selected.size() < 2)
     return false;
   if (fivers != nullptr)
@@ -1337,20 +1489,30 @@ bool hazel_recovery_conflicts(const HazelMergeRecovery &recovery,
   return false;
 }
 
-void clear_conflicting_hazel_recoveries(std::shared_ptr<Fluffle> fluffle,
-                                        const OwslaShard &action) {
+bool prepare_hazel_recoveries(std::shared_ptr<Fluffle> fluffle,
+                              const OwslaShard &action, std::string *error) {
   std::vector<HazelMergeRecovery> hazel_merges;
-  for (auto &recovery : fluffle->hazel_merges)
-    if (!hazel_recovery_conflicts(recovery, action))
+  for (auto &recovery : fluffle->hazel_merges) {
+    if (recovery.target.start == action.start &&
+        recovery.target.end == action.end)
+      continue;
+    if (hazel_recovery_conflicts(recovery, action)) {
+      if (!remove_hazel_merge_segments(fluffle->working, recovery, error))
+        return false;
+    } else {
       hazel_merges.push_back(recovery);
+    }
+  }
   fluffle->hazel_merges = hazel_merges;
+  return true;
 }
 
 bool validate_hazel_action(
     std::shared_ptr<Fluffle> fluffle,
     const std::vector<std::shared_ptr<Owsla>> &selected,
     std::vector<std::shared_ptr<Hazel>> *hazels, std::string *destination,
-    std::shared_ptr<std::map<std::string, std::string>> *parameters) {
+    std::shared_ptr<std::map<std::string, std::string>> *parameters,
+    std::string *error) {
   if (fluffle == nullptr || fluffle->working == nullptr || selected.size() < 2)
     return false;
   if (hazels != nullptr)
@@ -1370,8 +1532,7 @@ bool validate_hazel_action(
     addr current_end;
     hazel->get_sequence(&current_start, &current_end);
     if (current_start < 0 || current_end < current_start ||
-        (i > 0 &&
-         (previous_end == maxfinity || current_start != previous_end + 1)))
+        (i > 0 && current_start <= previous_end))
       return false;
     if (i == 0)
       sequence_start = current_start;
@@ -1381,17 +1542,15 @@ bool validate_hazel_action(
       hazels->push_back(hazel);
   }
   if (destination != nullptr)
-    *destination =
-        fluffle->working->make_name(hazel_default_name(sequence_start,
-                                                       sequence_end));
+    *destination = fluffle->working->make_name(
+        hazel_default_name(sequence_start, sequence_end));
   if (parameters != nullptr) {
     *parameters = std::make_shared<std::map<std::string, std::string>>();
     if (fluffle->parameters != nullptr)
       **parameters = *fluffle->parameters;
   }
-  clear_conflicting_hazel_recoveries(
-      fluffle, OwslaShard(sequence_start, sequence_end, ""));
-  return true;
+  return prepare_hazel_recoveries(
+      fluffle, OwslaShard(sequence_start, sequence_end, ""), error);
 }
 
 void merge_worker(std::shared_ptr<Fluffle> fluffle) {
@@ -1410,6 +1569,7 @@ void merge_worker(std::shared_ptr<Fluffle> fluffle) {
     std::string fiver_hazel_parameters;
     std::string hazel_merge_destination;
     std::shared_ptr<std::map<std::string, std::string>> hazel_parameters;
+    std::string action_error;
     {
       std::lock_guard<std::mutex> _(fluffle->lock);
       bool cleanup = false;
@@ -1457,7 +1617,7 @@ void merge_worker(std::shared_ptr<Fluffle> fluffle) {
         action = MergeAction::fiver_merge;
       } else if (validate_hazel_action(fluffle, selected, &hazels,
                                        &hazel_merge_destination,
-                                       &hazel_parameters)) {
+                                       &hazel_parameters, &action_error)) {
         action = MergeAction::hazel_merge;
       }
 
@@ -1488,8 +1648,7 @@ void merge_worker(std::shared_ptr<Fluffle> fluffle) {
                             &error);
     } else if (action == MergeAction::fiver_to_hazel) {
       std::string error;
-      output = fiver_to_hazel->hazel(&error, 64 * 1024,
-                                     fiver_hazel_parameters);
+      output = fiver_to_hazel->hazel(&error, 64 * 1024, fiver_hazel_parameters);
     }
     {
       std::lock_guard<std::mutex> _(fluffle->lock);

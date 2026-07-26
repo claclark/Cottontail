@@ -1,8 +1,8 @@
 # Hazel Consolidated Notes
 
-This is the durable Hazel reference after the Hazel/Bigwig integration sequence
-completed on 2026-06-20. It folds together the old Hazel format note, merge
-restart note, progress log, and finished plan checkpoint.
+This is the durable Hazel reference after the Hazel/Bigwig integration and
+restartable parallel-merge work through 2026-07-26. It folds together the
+format, activation, recovery, consolidation, and performance checkpoints.
 
 Hazel is an immutable single-file shard format. It can be opened as a
 standalone Warren and can also participate as a visible Bigwig shard through
@@ -15,9 +15,9 @@ the shared `Owsla` interface.
 - `Fiver` and `Hazel` both subclass `Owsla`. The common shard surface is
   `posting(feature)`, `estimated_size()`, `get_sequence(...)`, and
   `discard(...)`.
-- Bigwig startup runs `sanitize(...)`, activates the sanitized Hazel prefix
-  before the Fiver suffix, and stores the visible snapshot as
-  `std::vector<std::shared_ptr<Owsla>>`.
+- Bigwig startup runs `sanitize(...)`, activates the sanitized Fiver/Hazel
+  sequence in range order, and stores the visible snapshot as
+  `std::vector<std::shared_ptr<Owsla>>`. Sequence gaps are valid.
 - Bigwig read snapshots compose postings from visible `Owsla` children.
   Normal multi-shard posting merges are cached through `OwslaCache`;
   `text_chunk_tag` remains mergeable but uncached.
@@ -25,11 +25,14 @@ the shared `Owsla` interface.
   unstarted Hazel. The explicit-filename overload remains a bool-returning
   writer.
 - `Hazel::merge(hazels, dst, ...)` writes and activates an unstarted output
-  Hazel. The working/name adapter remains a bool-returning compatibility
-  surface for command-line callers.
-- Source shard deletion is lifecycle policy in `merge_worker`, not part of
-  Fiver-to-Hazel conversion. After successful Fluffle publication, selected
-  sources are discarded through `Owsla::discard(...)`.
+  Hazel through the canonical restartable posting-log procedure. Background
+  two-Hazel merges use one posting worker; many-Hazel consolidation uses the
+  available worker budget. The working/name adapter remains a bool-returning
+  compatibility surface.
+- Source shard deletion is caller lifecycle policy, not part of
+  Fiver-to-Hazel conversion or the activated Hazel merge. `merge_worker`
+  discards selected objects after Fluffle publication; foreground consolidation
+  removes source files only after each replacement is published.
 
 ## Single-File Envelope
 
@@ -279,64 +282,80 @@ preserved after merge.
 There are two `Hazel::merge(...)` surfaces:
 
 - `Hazel::merge(working, hazel_names, parameters, error)` is the compatibility
-  adapter used by `apps/fiver2hazel --merge`. It parses old named-shard inputs,
-  activates each Hazel through `Warren::make(...)`, checks filename/DNA
-  sequence agreement when sequence metadata is present, and delegates to the
-  activated overload with a null parameter pointer.
+  adapter used by named-shard callers. It parses and activates each Hazel,
+  validates filename/DNA sequence agreement and increasing non-overlapping
+  ranges, chooses the combined destination name, and delegates. Gaps are
+  allowed.
 - `Hazel::merge(hazels, dst, parameters, error)` is the real implementation.
   The caller supplies activated Hazel objects and a final destination path
   `dst`; on success it returns the activated but unstarted output Hazel.
 
-The activated merge is interruptible and retryable under a simple
-single-writer directory assumption. It assembles a complete `mrg.<dst-name>`,
-publishes it by hard-linking that temp file to `dst`, and then deletes
-associated sidecars. If `dst` already exists, merge reports success after
-deleting associated intermediates. If `mrg.<dst-name>` exists without `dst`,
-the temp assembly is discarded.
+The activated merge is a two-pass, interruptible procedure under the normal
+single-process-per-Warren assumption.
 
-Only idx construction is durably checkpointed. Sidecars live beside `dst`:
+### Posting Logs
 
-- `mrg.<dst-name>` is the final assembly temp.
-- `pst.<dst-name>` stores merged idx posting payload bytes.
-- `dct.<dst-name>` stores three-`addr` Hazel posting directory records for
-  completed output features.
+Restart files live beside the target Hazel:
 
-On restart, `HazelIdx::merge(...)`:
+```text
+merge.<segment>.<sequence-start>.<sequence-end>
+```
 
-1. Truncates `dct.<dst-name>` to a whole number of directory records.
-2. Reads complete directory records.
-3. Checks the actual `pst.<dst-name>` size.
-4. Keeps the largest sane directory prefix with strictly increasing features,
-   non-decreasing `end` offsets, and posting bytes covered by the actual
-   checkpoint file.
-5. Truncates `dct.<dst-name>` and `pst.<dst-name>` to that surviving prefix.
-6. Resumes with the first feature greater than the last committed feature.
+The segment number is zero-based and padded consistently for the segment
+count. Each file is an append-only, feature-ordered sequence of complete
+`SimplePosting` records. There is no checkpoint dictionary or separate merge
+marker.
 
-If there is no complete directory record, the posting checkpoint is treated as
-empty. If interruption leaves posting bytes without a complete directory
-record, those bytes are uncommitted and trimmed. If a directory record points
-past present posting bytes, that record and later records are trimmed.
+- Exactly two inputs use one posting worker.
+- Three or more inputs use `allowed_threads(0)`, capped by available features.
+- The initial contiguous segment set fixes the durable segment count.
+  Recovery never widens it.
+- If a later activation permits fewer workers, excess segments remain frozen
+  but participate in completion tracking and final assembly.
 
-The idx merge:
+The posting pass enumerates the union of the sorted source directories.
+`null_feature` is merged serially and retained as immutable exclusion input.
+The adjusted `text_chunk_tag` posting is also constructed before workers
+start, but it is written only when its sorted feature position is claimed.
 
-- treats activated Hazel inputs as immutable read-only handles;
-- requires at least two inputs;
-- verifies compatible idx recipes and normalized Hazel DNA;
-- processes `null_feature` first as the deletion/exclusion posting;
-- synthesizes `text_chunk_tag` by adjusting input raw text byte anchors by
-  cumulative text lengths;
-- merges ordinary feature postings through `SimplePostingFactory`.
+Workers dynamically claim features, read source postings through the
+non-caching directory-position path, merge sources in chronological shard
+order through `SimplePostingFactory`, apply exclusion semantics, and append one
+complete posting record. An empty filtered result is written as an `n == 0`
+completion marker.
 
-The current restartable path decodes participating postings and writes the
-merged result. The earlier unique-source raw-copy optimization was removed
-when the restartable checkpoint path replaced the old merge implementation.
-Restoring a narrow checkpoint-aware version of that fast path is a possible
-future optimization.
+`SimplePostingFactory::posting_from_merge(...)` supplies the annotation merge
+semantics: innermost intervals survive; when intervals have identical
+`(p, q)`, the value from the newest source survives. Fiver and Hazel callers
+preserve oldest-to-newest shard order, so chronological merge grouping retains
+those semantics.
 
-The txt merge has no durable checkpoint. `HazelTxt::merge(...)` copies
-already-compressed text chunks from activated inputs into the output stream,
-builds a new cumulative txt directory, and patches the txt blob header. It
-checks that all activated `target_chunk_size_` values match.
+### Recovery and Assembly
+
+Recovery assumes every visible byte came from the segment's single sequential
+writer, with only the final record potentially truncated. It does not attempt
+power-loss, media-corruption, checksum, or hostile-filesystem recovery.
+
+Each segment scan validates record fields, bounds, overflow, and strict feature
+ordering. A partial trailing header or payload is truncated to the last
+complete record. Structurally bad interior data invalidates the group.
+Completed features from all segments are compared with the source feature
+union. Active segments may be truncated to restore a common ordered append
+point; frozen segments remain byte-for-byte unchanged.
+
+After all features are complete, final assembly k-way scans the logs:
+
+- `n == 0` completion markers are omitted;
+- eligible plain singletons become normal inline Hazel directory entries;
+- all other compressed posting records are copied into the final idx posting
+  area without decompression or recompression.
+
+`HazelTxt::merge(...)` continues to copy already-compressed text chunks, build
+the cumulative txt directory, and require matching source chunk sizes. The
+idx, txt, DNA, and blob dictionary are assembled in the ordinary
+`dst + ".tmp"` file and then published as `dst`. Source Hazels and posting logs
+remain until publication succeeds. If the target already exists, it wins and
+its remaining logs are removed.
 
 Output parameter handling:
 
@@ -347,12 +366,11 @@ Output parameter handling:
 
 Sequence metadata handling:
 
-- If input Hazels have `hazel.sequence_start` and `hazel.sequence_end`, all
-  inputs must have them.
-- Input ranges must be contiguous in caller-supplied order.
+- Merge inputs must have `hazel.sequence_start` and `hazel.sequence_end`.
+- Input ranges must be increasing and non-overlapping in caller-supplied order;
+  gaps are allowed.
 - Output DNA writes the first input's `sequence_start` and the last input's
   `sequence_end`.
-- If sequence metadata is absent, merge does not invent it.
 
 ## Sanitization
 
@@ -360,41 +378,30 @@ Sequence metadata handling:
 
 - strict parsing of live Hazel shard names;
 - same-type contained-shard cleanup;
-- old sidecar cleanup;
-- private merge sidecar cleanup;
-- production of logical restartable Hazel merge records.
-
-Current Hazel merge sidecars use the `mrg.`, `pst.`, and `dct.` prefixes, for
-example:
-
-```text
-mrg.hazel.<start>.<end>
-pst.hazel.<start>.<end>
-dct.hazel.<start>.<end>
-```
-
-The merge path still cleans old-style `hazel.<start>.<end>.*` sidecars as a
-transition aid.
+- removal of legacy `mrg.*`, `pst.*`, `dct.*`, and old private sidecars;
+- parsing and grouping of contiguous `merge.*` segment sets;
+- production of `HazelMergeRecovery` records carrying target range, source
+  Hazels, and segment count.
 
 `Fiver::sanitize(...)` owns strict Fiver parsing, same-type contained-shard
 cleanup, and `kitten*` removal. Generic `temp.*` cleanup lives in `Working`
 construction so all Working users get the same startup cleanup behavior.
 
-Bigwig's sanitizer coordinator combines Fiver and Hazel inventories into the
-required visible shape:
+Bigwig's sanitizer coordinator combines Fivers and Hazels in sequence order.
+Gaps from aborted commits are valid. A Fiver fully covered by a single Hazel is
+deleted so the Hazel wins. A Fiver containing a Hazel, a partial mixed overlap,
+or an unexplained same-type overlap is rejected.
 
-```text
-[ Hazel prefix ][ Fiver suffix ]
-```
-
-The final Hazel may shadow leading Fivers at the boundary; those Fivers are
-deleted so the Hazel wins. Other mixed Hazel/Fiver overlap or out-of-order
-Fiver-before-Hazel relationships are rejected.
+A recovered merge is coherent only if its sources match a consecutive set of
+living Hazels spanning its target. Invalid groups are deleted. If coherent
+recoveries overlap each other, every conflicting group is deleted; startup
+does not guess which one to keep.
 
 Fluffle owns sanitized pending Hazel merge recovery records as
-`hazel_merges`. Startup copies them from the sanitized inventory for future
-consolidation-worker restart handling. Current policy schedules recovered Hazel
-merges ahead of new Hazel/Hazel merges when Hazel work is allowed.
+`hazel_merges`. Startup copies them from the sanitized inventory. Background
+policy schedules recovered Hazel merges ahead of new Hazel/Hazel merges when
+Hazel work is allowed. Foreground consolidation reuses a recovery only when it
+matches the complete final Hazel input and deletes other partial merges.
 
 ## Bigwig Merge Worker
 
@@ -475,8 +482,13 @@ The comparisons cover:
   matching phrases, and absent phrases;
 - started Hazel clones that remain started and readable after the source Hazel
   is ended;
-- Bigwig activation of a Hazel prefix plus Fiver suffix;
+- Bigwig activation of mixed Fiver/Hazel sequences;
 - non-empty Hazel `estimated_size()` behavior.
+
+Focused recovery tests cover valid segment resume, incomplete groups,
+aborted-transaction gaps, Fivers appearing inside a recovery range,
+conflicting partial merges, legacy-file cleanup, and idempotent segment
+removal.
 
 The regression is built with multiple compressor/chunk profiles:
 
@@ -489,6 +501,9 @@ The regression is built with multiple compressor/chunk profiles:
 Repository rule: agents should run compile/build checks only. Do not run test
 cases, ranking runs, evals, or benchmarks unless the user explicitly asks for
 that specific runtime work.
+
+The user reports that the full `make testing` run passes at the 2026-07-26
+commit checkpoint.
 
 ## Performance Shape
 
@@ -526,6 +541,15 @@ TSV and metadata changes reported `14863 ms` in the hot ranking loop,
 known fake-result topics. The MRR lies within the previously observed
 build-order variation and is not evidence of a semantic change.
 
+At the 2026-07-26 checkpoint, independently built final Hazels reported
+MRR@10 values `0.18948731068358557` and `0.1895927707281574`, each stable
+across repeated runs. Comparing their saved top tens found 883 changed topics:
+724 retained the same top-10 set in a different order, 159 changed at the
+cutoff, and only 40 changed reciprocal rank. Those 40 changes exactly explain
+the MRR delta. Ranking sorts by score without a document-id tie-break, so this
+pattern is consistent with equal-score traversal-order churn between physical
+merge layouts rather than a partial semantic failure.
+
 Historical first-pass Hazel activation before decoded idx posting caching was
 correct but unusably slow: around 43 minutes wall time and roughly 30 GB RSS
 on the merged `a.meadow` Hazel. Adding the Hazel idx decoded posting cache
@@ -561,6 +585,12 @@ Interpretation:
 
 Maintenance timing observations:
 
+- The completed foreground pipeline greedily grouped 29 consecutive Fivers,
+  merged and converted the groups with 29 workers in 32.002 seconds, and then
+  merged 37 Hazels in 260.583 seconds. Total consolidation was 317.915 seconds,
+  down from roughly 14 minutes for the preceding serial Fiver-conversion
+  pipeline. Source Fivers and Hazels were removed after their replacements
+  were published.
 - Converting the existing three very large `a.meadow` Fivers to per-Fiver
   Hazels took about 12.5 minutes total. This is a stress case; normal Bigwig
   lifecycle should convert bounded-size active Fivers, not old giant pickles.
@@ -583,11 +613,8 @@ Likely next discussions, not standing authorization:
   classification/publication paths.
 - Revisit the Hazel work gate if the current shard-count approximation does
   not give the desired worker mix under heavy concurrency.
-- Decide whether recovered `HazelMergeRecovery` records should be scheduled
-  ahead of new Hazel/Hazel merges.
 - Improve lower-level error propagation from `ready_()` paths so failures do
   not collapse into only `"Transaction cannot be commited."`
 - Consider concurrent shard activation after `sanitize(...)` has established a
   deterministic inventory order.
-- Consider a checkpoint-aware unique-source fast path inside restartable
-  `HazelIdx::merge`.
+- Consider a posting-log-aware unique-source compressed-record fast path.

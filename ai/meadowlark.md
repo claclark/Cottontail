@@ -1,6 +1,6 @@
 # Meadowlark Database Conventions
 
-Status date: 2026-07-22.
+Status date: 2026-07-25.
 
 This is the durable reference for Meadowlark's machine-facing structure,
 metadata, source provenance, and append invariants. Completed implementation
@@ -307,3 +307,23 @@ affected coordinated append rather than publishing its canonical marker alone.
 Any future file adapter must preserve the same contract: an explicit typed
 metadata record, a canonical `/` identity, transaction-local `//` provenance
 inside `/.`, a filename feature on data only, and coordinated publication.
+
+## Create-Time Warren Parameters
+
+The Meadowlark command accepts Warren parameter assignments immediately after
+`--create` and before the first input flag:
+
+```text
+meadowlark --create convert:no --tsv collection.tsv
+```
+
+Each assignment has the form `ID:value`. `ID` begins with an ASCII letter and
+then contains only letters, digits, `_`, or `-`; the value is nonempty and may
+contain additional colons. An argument beginning with `-` starts the ordinary
+input-option parser and is not accepted as a parameter assignment.
+
+After creating the Bigwig, the app applies every assignment through
+`Warren::set_parameter(...)` before calling `append_all(...)`. The operation
+therefore updates both the live Fluffle parameter package and the burrow DNA.
+These are Warren activation controls, not Meadowlark metadata records, and
+they do not alter the `@`, `/`, `//`, or `/.` discovery contracts above.

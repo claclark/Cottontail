@@ -93,13 +93,14 @@ Potential follow-ups are:
 
 ## Directory-level locking
 
-- Ensure only one process (i.e., one flufle) is manipulating the databases at
+- Ensure only one process (that is, one Fluffle) is manipulating a database at
   any one time.
 - Implement via a lock file with a clearly explained clean-up process.
 - Probably call the lock file "LOCKED.sh" and you should be able to unlock by
   running it. With internal documentation explaining it.
-- Clean-up should include deleting partial Hazel merges, since we are assuming
-  a hard crash, rather than a clean shutdown.
+- Unlock cleanup should run the normal shard sanitizers. Valid restartable
+  merge state should remain recoverable; incomplete, obsolete, or conflicting
+  merge files should be discarded by the same rules used at ordinary startup.
 
 ## Working File Operations
 
@@ -118,7 +119,7 @@ Potential follow-ups are:
   invariants.
 - Preserve deterministic Fluffle ordering: concurrent workers may open/start
   shards in parallel, but publication into `fluffle->warrens` should follow the
-  sanitized `[ Hazel prefix ][ Fiver suffix ]` inventory order.
+  sanitized sequence-range inventory order.
 
 ## SimpleIdx Cache Policy
 
@@ -221,31 +222,18 @@ Potential follow-ups are:
 - Consider adding a dedicated exclusion/null merge helper instead of relying on
   ordinary posting-list merge behavior.
 
-## Hazel Merge Unique-Source Fast Path
+## Hazel Posting-Log Follow-Ups
 
-- Reintroduce a narrow fast path inside restartable `HazelIdx::merge` for
-  ordinary features that occur in exactly one input Hazel when there is no
-  active `null_feature` exclusion posting.
-- For non-inline postings, copy the source compressed posting bytes into the
-  checkpoint `.pst` file and then append the corresponding `.dct` entry as the
-  commit marker.
-- Preserve inline singleton postings as dictionary-only checkpoint entries
-  without decoding/re-encoding.
-- Do not apply this path to `null_feature` or the text-chunk posting. The
-  text-chunk posting still needs text-base value adjustment during merge.
+The restartable posting-log Hazel merge is complete. These are possible
+follow-ups, not standing authorization:
 
-## Hazel Merge Disk Usage
-
-- Restructure Hazel posting-list merge so merged postings can be written
-  directly into the restartable `mrg.*` files instead of first materializing a
-  separate full posting output and then checkpointing or publishing it.
-- Large Hazel/Hazel merges can currently require roughly twice the final disk
-  footprint during the merge. Direct-to-`mrg.*` output should reduce peak disk
-  pressure, which matters for multi-terabyte builds.
-- This may require separating posting merge production from current file
-  publication assumptions so dictionary/checkpoint entries remain the durable
-  commit markers while posting bytes stream directly to their final recoverable
-  merge location.
+- After measuring the posting-log merge, consider copying a non-inline source
+  record directly into a worker segment when an ordinary feature occurs in
+  exactly one Hazel and no exclusion posting can change it.
+- Measure peak disk use while restart logs, source Hazels, and final assembly
+  coexist. The initial design favors simple recovery and compressed-record
+  assembly; a later design may need to reduce that overlap for very large
+  static shards.
 
 ## Split Test Targets and improve regression testing generally
 

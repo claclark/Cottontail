@@ -14,39 +14,44 @@ are welcome, but they also require discussion before implementation.
 
 ## Current Checkpoint
 
-The Meadowlark JSONL, TSV, text, and code ingestion work is complete. The
-current worktree has passed compile checks, and the user is running the
-regression tests. Durable database and metadata conventions are recorded in
-`ai/meadowlark.md`; the model-facing database bootstrap guide is
-`ai/exploring-meadowlark.md`.
+The Meadowlark JSONL, TSV, text, and code ingestion work is complete. Durable
+database and metadata conventions are recorded in `ai/meadowlark.md`; the
+model-facing database bootstrap guide is `ai/exploring-meadowlark.md`.
 
 Meadowlark is no longer the active design area. Preserve its discovery,
 metadata, provenance, transaction, and restart contracts, but do not continue
 with another append surface unless the user explicitly returns to it.
 
-## Active Step
+Restartable parallel Hazel merging and the revised foreground-consolidation
+pipeline are implemented and have passed the user's full regression suite,
+large MS MARCO consolidation, repeated ranking checks, and interrupted
+background-merge testing.
 
-Explicit foreground Bigwig consolidation is implemented and compile-checked.
-The user's first regression run exposed two incorrect new test expectations;
-both are corrected and the affected test targets compile. A regression rerun
-and the full benchmark remain pending.
+The worktree is at a commit checkpoint. There is no active coding step after
+this checkpoint; select and discuss the next change before modifying source.
+
+## Completed Step: Foreground Consolidation
+
+Explicit foreground Bigwig consolidation is implemented and tested. The
+user's initial regression failures exposed incorrect test expectations and
+were corrected; a later full `make testing` run passed. The large foreground
+benchmarks and subsequent performance work are recorded below.
 
 ### Foreground Consolidation
 
 - `Bigwig::make(...)` and `Bigwig::consolidate(...)` share burrow DNA parsing,
   component construction, parameter loading, and sanitized inventory creation.
   Activation and consolidation remain separate.
-- `Bigwig::consolidate(...)` is an offline operation. It discards returned
-  partial Hazel-merge recoveries, verifies one contiguous shard sequence,
-  merges each maximal Fiver run once in memory, converts it directly to Hazel
-  without pickling, and performs at most one final Hazel merge.
-- Source shards remain in place until a replacement has been published.
-  Sanitization then removes covered Fivers and Hazels. An interruption before
-  publication leaves the sources intact; an interruption after publication is
-  resolved by the next sanitization.
-- `HazelMergeRecovery::discard(...)` removes its restart files idempotently.
-  If that removal is interrupted, Hazel sanitization recognizes an incomplete
-  recovery and removes the remainder.
+- `Bigwig::consolidate(...)` is an offline operation. Gaps caused by aborted
+  commits are allowed. It greedily partitions each consecutive Fiver run into
+  estimated-medium-sized groups, merges and converts those groups in parallel,
+  and then performs at most one final Hazel merge.
+- Each Fiver group removes its source Fivers only after its replacement Hazel
+  has been published. The final Hazel merge similarly removes its source
+  Hazels after publication, so consolidation cleans up as it progresses.
+- A coherent `merge.*` recovery covering the final consolidation input is
+  resumed. Unused, invalid, legacy, or conflicting recoveries are discarded.
+  Cleanup uses the explicit `remove_hazel_merge_segments(...)` operation.
 - Verbose progress and phase timings are emitted only by
   `Bigwig::consolidate(...)`. `finish-merging --verbose` opts into them; the
   library operation is silent by default.
@@ -279,6 +284,90 @@ change the wide Fiver merge or Fiver conversion. Further posting-allocation
 micro-cleanup is therefore unlikely to address the remaining 501-second
 conversion and 640-second Hazel merge times.
 
-Do not yet change the posting format, singleton encoding, priority-queue merge,
-exclusion semantics, or checkpoint flush/recovery policy. Those require
-separate evidence and discussion.
+The posting format, singleton encoding, and exclusion semantics remained
+unchanged through the following Hazel checkpoint and recovery replacement.
+
+## Completed Step: Restartable Parallel Hazel Merge
+
+The old `mrg.*`/`pst.*`/`dct.*` checkpoint path has been replaced by one
+canonical two-pass Hazel merge used by both background pair merging and
+foreground consolidation.
+
+### Implemented Procedure
+
+- Merge inputs must have compatible DNA/compressors and increasing,
+  non-overlapping sequence ranges. Gaps are valid.
+- Exactly two Hazels use one posting worker. Three or more use
+  `allowed_threads(0)`, capped by feature work.
+- Restart files are `merge.<segment>.<start>.<end>`. Each is an append-only,
+  feature-ordered stream of complete `SimplePosting` records.
+- `null_feature` is merged serially and becomes immutable exclusion input.
+  The adjusted text-chunk posting is also prepared before worker execution and
+  emitted when its sorted feature position is claimed.
+- Ordinary features are dynamically claimed. Workers read source records by
+  directory position, use the existing `SimplePosting` merge semantics, and
+  write one record per completed feature.
+- Final assembly performs a k-way feature scan over the segment logs. Empty
+  completion records are omitted, eligible singletons use Hazel's inline
+  representation, and other compressed posting records are copied without
+  decompression or recompression.
+- Text chunks retain the existing compressed-copy merge. The finished Hazel is
+  assembled through an ordinary `.tmp` output and published before sources or
+  restart segments are removed. No `mrg.*` marker is created.
+
+### Recovery and Sanitization
+
+- A segment tail may be truncated. Recovery scans complete headers and
+  payloads, truncates only the partial tail, and resumes missing features.
+- The segment count is fixed by the existing contiguous segment group.
+  Recovery may run fewer workers, leaving excess segments frozen but valid.
+- Legacy `mrg.*`, `pst.*`, and `dct.*` remnants are deleted.
+- Startup first removes generic temporary files and kittens, sanitizes Fivers
+  and Hazels, deletes Fivers fully shadowed by one Hazel, and rejects
+  unexplained shard overlaps. Sequence gaps are retained.
+- A valid partial merge must map to an existing consecutive set of Hazel
+  sources. Invalid recoveries are removed. If partial merges conflict, every
+  conflicting group is removed.
+- Coherent recoveries are communicated through `HazelMergeRecovery`, including
+  target range, source Hazels, and durable segment count. Background merging
+  stores them in Fluffle and prefers them before new Hazel work.
+- Foreground consolidation reuses a recovery only when it matches the complete
+  final Hazel input; other recoveries are removed.
+
+### Consolidation Pipeline
+
+Foreground consolidation now sweeps each consecutive Fiver run greedily,
+closing a group when its estimated size reaches `medium_shard` and retaining a
+possibly small final group. Groups are merged and converted to Hazel in
+parallel. Each group removes its source Fivers after publication. All resulting
+and pre-existing Hazels are then merged by the same restartable Hazel procedure,
+after which the source Hazels are removed.
+
+The user's MS MARCO run processed 29 Fiver groups with 29 workers:
+
+- opening and sanitizing: 299 ms;
+- loading Fivers: 24,095 ms;
+- parallel Fiver merge and conversion: 32,002 ms;
+- merging 37 Hazels: 260,583 ms;
+- final sanitization: 30 ms;
+- total consolidation: 317,915 ms.
+
+This reduced the foreground stage from roughly 14 minutes in the preceding
+serial-conversion run to 5:18.68 while also reducing peak memory. The completed
+directory contained one final Hazel and no stale source shards.
+
+### Verification
+
+- The user reports that `make testing` passes.
+- Focused recovery coverage includes valid resume, incomplete segment groups,
+  aborted transactions and sequence gaps, Fivers appearing in a recovery gap,
+  conflicting partial merges, legacy cleanup, and idempotent segment removal.
+- The user exercised background merging by repeatedly running `fluffy`,
+  interrupting it, and ranking the evolving MS MARCO index; recovery and
+  continued merging behaved correctly.
+- The final MS MARCO Hazel ranked all 6,980 queries and emitted only the two
+  established fake-result topics. Repeated runs of one index are stable.
+  Differences between independently built indexes are dominated by equal-score
+  ordering and top-10 boundary churn, not evidence of a merge failure.
+
+The work is ready to commit. No next coding step is authorized by this plan.

@@ -25,6 +25,16 @@ std::string hazel_default_name(addr sequence_start, addr sequence_end) {
   return "hazel." + seq2str(sequence_start) + "." + seq2str(sequence_end);
 }
 
+std::string hazel_merge_segment_name(size_t segment, size_t count,
+                                     addr sequence_start, addr sequence_end) {
+  size_t width = count <= 10 ? 1 : std::to_string(count - 1).size();
+  std::string number = std::to_string(segment);
+  if (number.size() < width)
+    number.insert(number.begin(), width - number.size(), '0');
+  return "merge." + number + "." + seq2str(sequence_start) + "." +
+         seq2str(sequence_end);
+}
+
 std::string owsla_shard_name(const std::string &prefix, addr sequence_start,
                              addr sequence_end) {
   return prefix + "." + seq2str(sequence_start) + "." + seq2str(sequence_end);
@@ -43,8 +53,8 @@ bool all_digits(const std::string &s) {
 
 } // namespace
 
-bool owsla_parse_shard_name(const std::string &name,
-                            const std::string &prefix, OwslaShard *shard) {
+bool owsla_parse_shard_name(const std::string &name, const std::string &prefix,
+                            OwslaShard *shard) {
   std::string full_prefix = prefix + ".";
   if (name.compare(0, full_prefix.size(), full_prefix) != 0)
     return false;
@@ -77,20 +87,15 @@ bool owsla_range_contains(const OwslaShard &outer, const OwslaShard &inner) {
   return outer.start <= inner.start && inner.end <= outer.end;
 }
 
-bool HazelMergeRecovery::discard(std::shared_ptr<Working> working,
-                                 std::string *error) const {
-  if (working == nullptr) {
-    safe_error(error) = "Hazel merge recovery needs a working directory";
-    return false;
-  }
-  OwslaShard parsed;
-  if (!owsla_parse_shard_name(target.name, "hazel", &parsed) ||
-      parsed.start != target.start || parsed.end != target.end) {
-    safe_error(error) = "Hazel merge recovery has a bad target";
-    return false;
-  }
-  for (const char *prefix : {"mrg.", "pst.", "dct."})
-    if (!working->remove(std::string(prefix) + target.name, error))
+bool remove_hazel_merge_segments(std::shared_ptr<Working> working,
+                                 const HazelMergeRecovery &recovery,
+                                 std::string *error) {
+  assert(working != nullptr);
+  for (size_t segment = 0; segment < recovery.segment_count; segment++)
+    if (!working->remove(hazel_merge_segment_name(
+                             segment, recovery.segment_count,
+                             recovery.target.start, recovery.target.end),
+                         error))
       return false;
   return true;
 }

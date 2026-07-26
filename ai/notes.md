@@ -118,7 +118,9 @@
 
 - `apps/meadowlark.cc`: create/open a meadow, parse `--tsv`, `--jsonl`/`--json`,
   `--text`, and `--code` inputs, and delegate the typed plan to the public
-  `meadowlark::append_all(...)` library operation.
+  `meadowlark::append_all(...)` library operation. Immediately after
+  `--create`, checked `parameter:value` assignments may precede the first input
+  flag; they are applied through `set_parameter(...)` before ingestion.
 - `apps/forage.cc`: run a Meadowlark forager over a query; supports
   `--key value` and `--key=value` parameters.
 - `apps/fluffy.cc`: interactive GCL query shell over a burrow or Hazel.
@@ -149,9 +151,10 @@
   Hazel files, require that they form a complete sequence, infer the sibling
   output Hazel name from the input sequence range, and delegate merge validation
   to `Hazel::merge(...)`.
-- `apps/finish-merging.cc`: open directory burrows to keep Bigwig background
-  merging active, skip regular-file arguments, and poll every 10 seconds until
-  each burrow contains exactly one `fiver.*` or `hazel.*` shard.
+- `apps/finish-merging.cc`: invoke offline `Bigwig::consolidate(...)` for each
+  directory argument, skip regular-file arguments, and stop at the first
+  failure. `--verbose` enables timestamped phase descriptions and timings from
+  the consolidation operation.
 - `apps/scratch.cc`: scratch utility for creating no-merge Bigwig/Fiver shards
   from small text files with `line:` and `file:` annotations.
 
@@ -186,14 +189,25 @@
 - Hazel txt activation loads the text map, uses a 16-reader `ReadGate`, keeps a
   mutex-protected `text_chunk_tag` hopper, and caches decompressed chunks
   without eviction.
-- `Hazel::merge(...)` merges compatible activated Hazel shards into a
-  caller-supplied destination and returns an activated but unstarted output
-  Hazel. Working/name adapters preserve the existing bool-returning command
-  surfaces.
-- Hazel merge sidecars now live beside the final shard as
-  `mrg.hazel.<start>.<end>`, `pst.hazel.<start>.<end>`, and
-  `dct.hazel.<start>.<end>`. The merge path still cleans old-style
-  `hazel.<start>.<end>.*` sidecars as a transition aid.
+- `Hazel::merge(...)` requires compatible compressors/DNA and increasing,
+  non-overlapping input sequence ranges; gaps are allowed. It writes and
+  publishes an activated but unstarted output Hazel. Working/name adapters
+  preserve the existing bool-returning command surfaces.
+- The canonical merge uses restartable
+  `merge.<segment>.<sequence-start>.<sequence-end>` posting logs. Exactly two
+  Hazels use one posting worker; three or more use `allowed_threads(0)`, capped
+  by feature work. The durable segment count does not change on recovery.
+- `null_feature` and adjusted text-chunk postings are prepared before ordinary
+  workers. Workers dynamically claim features, merge source postings in
+  chronological shard order, and append complete `SimplePosting` records.
+- Recovery validates complete record prefixes, truncates a partial tail, and
+  resumes missing features. Final assembly k-way merges the logs, omits empty
+  completion markers, inlines eligible singletons, and copies other compressed
+  records without recompression. Text chunks retain their compressed-copy
+  merge.
+- The final Hazel is assembled in its ordinary `.tmp` file and published
+  before source or segment cleanup. No `mrg.*` marker is created. Legacy
+  `mrg.*`, `pst.*`, and `dct.*` files are removed rather than resumed.
 - Hazel merge async read-ahead was tried and measured on HDD, but the gain was
   only about 1%; the recommendation is not to carry that complexity forward
   without stronger evidence of an I/O bottleneck.
@@ -202,12 +216,14 @@
   Fiver-vs-Hazel shard behavior, merges Hazels, and compares the merged Hazel
   against the source Bigwig with null, real, and bad compressor profiles. It
   also checks that started Hazel clones stay started and remain readable after
-  the source Hazel is ended.
-- User ran `bazel test //test:hazel_test` successfully on 2026-05-26.
+  the source Hazel is ended. Recovery coverage includes truncated/incomplete
+  segment sets, aborted-transaction gaps, conflicting recoveries, legacy
+  cleanup, and valid resume.
+- The user reports that the full `make testing` regression run passes.
 - Consolidated Hazel format, activation, merge, Bigwig integration, and
   performance-shape notes live in `ai/hazel.md`.
 
-## Current Bigwig Cache Status
+## Current Bigwig Status
 
 - Fluffle owns the Bigwig merged-posting cache generation as an `OwslaCache`.
   `OwslaCache::get(feature, posting_factory, &fill)` atomically returns an
@@ -229,21 +245,38 @@
   `src/owsla.h`. `Fiver::sanitize(...)` owns strict Fiver parsing,
   same-type contained-shard cleanup, and `kitten*` removal.
   `Hazel::sanitize(...)` owns strict Hazel parsing, same-type contained-shard
-  cleanup, old sidecar cleanup, private merge sidecar cleanup, and returning
+  cleanup, legacy sidecar cleanup, merge-segment grouping, and production of
   logical restartable Hazel merge records.
-- Bigwig's sanitizer coordinator allows mixed Hazel/Fiver order. Fivers covered
-  by Hazels are deleted so the Hazel wins; Fivers containing Hazels and partial
-  mixed overlaps are rejected.
+- Bigwig's sanitizer coordinator allows sequence gaps and mixed Hazel/Fiver
+  order. A Fiver fully covered by one Hazel is deleted so the Hazel wins;
+  Fivers containing Hazels, partial mixed overlaps, and same-type overlaps that
+  cannot be explained by publication are rejected.
+- A partial Hazel merge remains coherent only when its recorded sources match
+  a consecutive set of sanitized Hazel shards. Invalid groups are removed. If
+  recoveries overlap, every conflicting group is removed rather than choosing
+  one.
 - Bigwig startup activates sanitized shards in sequence order, adds them to the
   Fluffle visible list, and captures started read snapshots as
   `std::vector<std::shared_ptr<Owsla>>`.
 - Fluffle owns the sanitized pending Hazel merge recovery list as
-  `hazel_merges`; startup copies it from `SanitizedInventory`. Hazel merge
-  selection reads this list without mutating it, and merge-worker validation
-  clears matching or conflicting recovery records when a Hazel action is
-  accepted.
-- Bigwig merge selection no longer uses a split/barrier. `find_merge_action(...)`
-  asks `find_fiver_action(...)` first, then falls back to `find_hazel_action(...)`.
+  `hazel_merges`; startup copies it from `SanitizedInventory`. Each recovery
+  carries its target, source Hazel sequence, and durable segment count.
+  Background selection prefers recovered Hazel work; worker preparation
+  removes the accepted record and any conflicting segment groups before
+  performing the action.
+- `merge` and `convert` are live Fluffle parameters. Lock-held merge policy
+  reads them directly and treats either as enabled when absent.
+- `find_merge_action(...)` first checks `merge`, asks
+  `find_fiver_action(...)`, and then falls back to
+  `find_hazel_action(...)`. `merge:no` prevents selection of new work but does
+  not interrupt an action already running.
+- `convert:no` gates the three Fiver-to-Hazel selectors. Fiver/Fiver merging
+  continues and ignores the normal 256 MiB per-input cap, allowing a burrow to
+  converge to one large in-memory Fiver.
+- `Bigwig::merge()` enables merging and conversion;
+  `Bigwig::merge(false)` disables merging without changing `convert`; and
+  `Bigwig::merge(true, false)` enables Fiver-only consolidation. Enabling
+  merging calls `try_merge()` so the parameter change actively triggers work.
 - Fiver policy order is: lone-Fiver cleanup; merge a run of at least three tiny
   eligible Fivers anywhere in the visible vector; convert the oldest eligible
   Fiver stranded between Hazels; convert the oldest eligible Fiver whose own
@@ -290,6 +323,44 @@
   write transaction; a clone that wants to write must call `transaction()`
   itself. Focused regression coverage checks that a started Bigwig clone stays
   readable after the parent ends and after the parent commits new content.
+- `Bigwig::consolidate(...)` is the offline foreground path used by
+  `finish-merging`. It shares DNA/component/sanitization setup with
+  `Bigwig::make(...)` and allows aborted-commit gaps. It greedily splits each
+  consecutive Fiver run when the estimated group size reaches `medium_shard`,
+  merges and converts the groups in parallel, and performs at most one final
+  Hazel merge.
+- Each converted group removes its source Fivers only after publication. The
+  final merge similarly removes source Hazels after its replacement is
+  published. Consolidation reuses only a partial merge that exactly matches
+  the final Hazel input and removes other recoveries.
+- Final sanitization requires one Hazel spanning the first through last living
+  sequence bounds. Timestamped progress is internal to
+  `Bigwig::consolidate(...)` and is silent unless `verbose` is true.
+
+## Current Posting And Compression Status
+
+- `ZlibCompressor` keeps one lazily initialized deflater and inflater per
+  thread and resets them between independent blobs. The compressor object
+  remains stateless and safe for concurrent use, output remains compatible
+  with fresh best-compression zlib streams, and capacity uses
+  `compressBound(...)`.
+- `SimplePosting` decodes compressed fields directly into sized vectors,
+  reuses thread-local output buffers, and bulk-appends in the ordered merge
+  case while preserving compact point/no-value representations.
+- `SimplePostingFactory::posting_from_merge(...)` implements minimal-interval
+  semantics: innermost intervals survive, and when `(p, q)` is identical the
+  newest source value survives. Callers must supply posting sources from oldest
+  to newest; Fiver and Hazel shard merges do so in sequence order.
+- Hazel's posting-log merge advances through sequential source directories,
+  reads source postings without populating the query cache, and writes merged
+  compressed records once before final assembly.
+- On the user's large `build.sh` run, these posting/Hazel-loop changes reduced
+  foreground consolidation from 1,259,340 ms to 1,231,490 ms. Hazel merge fell
+  from 661,538 ms to 639,682 ms, while Fiver-to-Hazel conversion remained about
+  501 seconds.
+- The completed parallel pipeline then reduced consolidation to 317,915 ms:
+  29 Fiver groups merged and converted in 32,002 ms and 37 Hazels merged in
+  260,583 ms. The full history is in `ai/plan.md`.
 
 ## Current Ranking Notes
 
@@ -372,6 +443,24 @@
   `0.18971858370855488`, and `QueriesRanked: 6980`. It emitted the same two
   known fake-result topics; the MRR remains within historical build-order
   variation.
+- On 2026-07-26, the user reports that `make testing` passes after the
+  posting-log recovery and consolidation changes. The user also repeatedly
+  interrupted and resumed background merging with `fluffy`, ranking between
+  activations, without observing a semantic failure.
+- The final parallel-consolidation build `a.meadow/` reported
+  `MRR @10: 0.18948731068358557`; an independently built `d.meadow/` reported
+  `0.1895927707281574`. Each result was stable across repeated ranking runs.
+  Both ranked 6,980 topics and emitted only the two established fake-result
+  topics.
+- Comparing the saved top tens found 883 changed topics: 724 retained the same
+  top-10 set in a different order, 159 changed at the cutoff, 39 changed the
+  first-ranked document, and 40 changed reciprocal rank. Those 40 changes
+  exactly account for the MRR delta.
+- Ranking sorts by score without a document-id tie-break, while `apps/rank`
+  writes synthetic descending output scores rather than the underlying BM25
+  values. The stable-per-index, different-between-index pattern and dominance
+  of reorderings are consistent with equal-score traversal-order churn caused
+  by different physical merge layouts, not a partially incorrect merge.
 
 ## Current Local Worktree Notes
 

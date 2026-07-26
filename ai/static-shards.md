@@ -16,9 +16,9 @@ must meet the same contract before `static-shards` accepts it.
 
 The new app must reuse shared Meadowlark argument/append code or invoke the
 existing `meadowlark` executable. It must not copy Meadowlark parsing and
-ingestion logic into another app. The same principle applies to final Fiver to
-Hazel conversion: share the relevant implementation or invoke the existing
-tooling demonstrated by `apps/fiver2hazel.cc`.
+ingestion logic into another app. The same principle applies to final
+consolidation: call `Bigwig::consolidate(...)` directly or invoke
+`apps/finish-merging` rather than copying its Fiver/Hazel lifecycle.
 
 ## Command Shape
 
@@ -102,7 +102,7 @@ If the process dies before the link, no plan was published and the temporary
 file can be discarded. Once `README.md` exists, it is authoritative and must
 not be silently replaced or recomputed.
 
-## Serial Ingestion And Concurrent Consolidation
+## Serial Ingestion And Foreground Consolidation
 
 Build one working meadow at a time because a single Meadowlark ingestion can
 already consume the machine with worker threads. Each working meadow lives
@@ -114,10 +114,10 @@ working burrow, omit `--create` and invoke Meadowlark with the same complete
 input list. Meadowlark's preflight handles verification and recovery: committed
 inputs are skipped and missing or interrupted inputs are appended.
 
-After each Meadowlark invocation succeeds, open that working meadow as a Warren
-and retain it. Its Bigwig background workers continue consolidation while the
-next group is ingested. Although ingestion is serial, consolidation of completed
-groups may therefore overlap later ingestion.
+Background Bigwig work may make progress while an ingestion process remains
+open, but the builder must not depend on background workers reaching a
+particular shard count. After all groups have been ingested, close their live
+Warren views before invoking offline foreground consolidation.
 
 Every committed intermediate Bigwig is a valid queryable collection. A
 half-constructed shard is incomplete only with respect to its manifest; it is
@@ -139,44 +139,44 @@ For each group in plan order:
 3. Invoke Meadowlark with the group's complete assigned input list. Meadowlark
    skips committed files and appends only missing or interrupted files, so a
    completed group returns quickly and an incomplete group resumes normally.
-4. Open and retain the completed working burrow as a Warren. Bigwig activation
-   resumes consolidation from its durable shard state.
+4. Close the completed working burrow after ingestion. Its sanitized shard
+   inventory is the durable input to foreground consolidation.
 
-After replaying ingestion for every unpublished group, run the same wait,
-conversion, publication, and cleanup phases as a new build. Existing work makes
-those phases finish immediately or continue from their durable state. The
-manifest records intent; Meadowlark transactions, Bigwig restartability, and
-final Hazel links record progress.
+After replaying ingestion for every unpublished group, run the same foreground
+consolidation, publication, and cleanup phases as a new build. Existing work
+makes those phases finish immediately or continue from durable shard state.
+The manifest records intent; Meadowlark transactions, Bigwig sanitization and
+merge recovery, and final Hazel links record progress.
 
 ## Consolidation
 
-After the last Meadowlark invocation, retain all unfinished working Warrens and
-poll their directories, approximately every 10 seconds. Count entries matching
-`fiver.*` or `hazel.*`. A working burrow is ready for finalization when exactly
-one such shard remains. Continue until every unpublished group reaches that
-state.
+After the last Meadowlark invocation, consolidate unpublished working burrows
+one at a time with `Bigwig::consolidate(...)`. This is an offline operation, so
+no live Warren for that burrow should remain in the builder.
 
-This is the same completion condition used by `apps/finish-merging`. Reuse that
-logic where practical rather than introducing another subtly different notion
-of consolidation.
+Foreground consolidation sanitizes the directory, verifies contiguous shard
+coverage, merges each maximal Fiver run once in memory, converts the merged
+Fiver directly to Hazel without pickling it, performs the final Hazel merge,
+and verifies that exactly one Hazel covers the complete sequence.
+
+`apps/finish-merging` is the command-line caller of this operation and may be
+invoked instead of duplicating it. Consolidations should remain serial because
+the many-Hazel path is intended to use the machine's permitted thread budget.
 
 ## Finalization And Publication
 
-Stop retaining the working Warrens before manipulating their final files. A
+Foreground consolidation leaves one standalone Hazel in the working burrow. A
 Fiver is not a standalone Warren and must never be moved out or published
 directly.
 
 For each unpublished group:
 
-1. If its one remaining internal shard is a Fiver, convert it to a Hazel inside
-   the original working burrow. Reconstruct the featurizer, tokenizer,
-   compressors, and parameters from that burrow's DNA as `fiver2hazel` does.
-2. If the remaining shard is already a Hazel, use it directly.
-3. Verify that the resulting file is a standalone Hazel covering the group's
+1. Run or confirm successful foreground consolidation.
+2. Verify that the resulting file is a standalone Hazel covering the group's
    complete sequence.
-4. Hard-link that Hazel from the working burrow to its final
+3. Hard-link that Hazel from the working burrow to its final
    `directory/shard.NN` name.
-5. Only after the final link succeeds, remove the working burrow and its
+4. Only after the final link succeeds, remove the working burrow and its
    intermediate files.
 
 The final hard link is the publication commit point. A crash before it leaves

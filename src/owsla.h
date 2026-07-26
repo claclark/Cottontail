@@ -59,20 +59,24 @@ struct OwslaShard {
 struct HazelMergeRecovery {
   OwslaShard target;
   std::vector<OwslaShard> sources;
+  size_t segment_count = 0;
   bool operator<(const HazelMergeRecovery &other) const {
     return target < other.target;
   }
-  bool discard(std::shared_ptr<Working> working,
-               std::string *error = nullptr) const;
 };
 
 std::string seq2str(addr sequence);
 std::string hazel_default_name(addr sequence_start, addr sequence_end);
+std::string hazel_merge_segment_name(size_t segment, size_t count,
+                                     addr sequence_start, addr sequence_end);
+bool remove_hazel_merge_segments(std::shared_ptr<Working> working,
+                                 const HazelMergeRecovery &recovery,
+                                 std::string *error = nullptr);
 std::string hazel_blob_dictionary(const std::vector<HazelBlob> &blobs);
 std::string owsla_shard_name(const std::string &prefix, addr sequence_start,
                              addr sequence_end);
-bool owsla_parse_shard_name(const std::string &name,
-                            const std::string &prefix, OwslaShard *shard);
+bool owsla_parse_shard_name(const std::string &name, const std::string &prefix,
+                            OwslaShard *shard);
 bool owsla_ranges_overlap(const OwslaShard &a, const OwslaShard &b);
 bool owsla_range_contains(const OwslaShard &outer, const OwslaShard &inner);
 
@@ -90,7 +94,8 @@ public:
   Owsla &operator=(Owsla &&) = delete;
 
 protected:
-  Owsla(std::shared_ptr<Working> working, std::shared_ptr<Featurizer> featurizer,
+  Owsla(std::shared_ptr<Working> working,
+        std::shared_ptr<Featurizer> featurizer,
         std::shared_ptr<Tokenizer> tokenizer, std::shared_ptr<Idx> idx,
         std::shared_ptr<Txt> txt)
       : Warren(working, featurizer, tokenizer, idx, txt){};
