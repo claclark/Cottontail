@@ -1574,14 +1574,14 @@ void merge_worker(std::shared_ptr<Fluffle> fluffle) {
       std::lock_guard<std::mutex> _(fluffle->lock);
       bool cleanup = false;
       for (auto &warren : fluffle->warrens)
-        if (warren != nullptr && warren->name() == "remove") {
+        if (warren == nullptr || warren->name() == "remove") {
           cleanup = true;
           break;
         }
       if (cleanup) {
         std::vector<std::shared_ptr<Owsla>> warrens;
         for (auto &warren : fluffle->warrens)
-          if (warren == nullptr || warren->name() != "remove")
+          if (warren != nullptr && warren->name() != "remove")
             warrens.push_back(warren);
         fluffle->warrens = warrens;
       }
@@ -1658,34 +1658,37 @@ void merge_worker(std::shared_ptr<Fluffle> fluffle) {
         retire();
         return;
       }
-      std::vector<std::shared_ptr<Owsla>> warrens;
-      size_t i;
-      for (i = 0;
-           i < fluffle->warrens.size() && fluffle->warrens[i] != start_warren;
-           i++)
-        warrens.push_back(fluffle->warrens[i]);
-      if (i >= fluffle->warrens.size()) {
+      size_t start = 0;
+      while (start < fluffle->warrens.size() &&
+             fluffle->warrens[start] != start_warren)
+        start++;
+      size_t end = start;
+      while (end < fluffle->warrens.size() &&
+             fluffle->warrens[end] != end_warren)
+        end++;
+      if (start >= fluffle->warrens.size() ||
+          end >= fluffle->warrens.size()) {
+        assert(false);
+        output->discard();
         for (auto &warren : selected)
           fluffle->merging.erase(warren);
         retire();
         return;
       }
+      std::vector<std::shared_ptr<Owsla>> warrens;
+      size_t i = 0;
+      for (; i < start; i++)
+        warrens.push_back(fluffle->warrens[i]);
       output->start();
       warrens.push_back(output);
-      for (; i < fluffle->warrens.size() && fluffle->warrens[i] != end_warren;
-           i++)
+      for (; i < end; i++)
         fluffle->merging.erase(fluffle->warrens[i]);
-      if (i >= fluffle->warrens.size()) {
-        output->end();
-        for (auto &warren : selected)
-          fluffle->merging.erase(warren);
-        retire();
-        return;
-      }
       fluffle->merging.erase(fluffle->warrens[i]);
       for (i++; i < fluffle->warrens.size(); i++)
         warrens.push_back(fluffle->warrens[i]);
       fluffle->warrens = warrens;
+      if (fluffle->warrens.size() == 1)
+        fluffle->cache = std::make_shared<OwslaCache>();
     }
     for (auto &warren : selected)
       warren->discard();
