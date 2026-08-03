@@ -12,6 +12,8 @@
 - `test/`: Bazel C++ tests. `//test:tests` is the aggregate target;
   `//test:hazel_test` is the dedicated Hazel regression target.
 - `ai/`: agent-facing architecture notes, plans, logs, and progress notes.
+  `ai/consolidation.md` is the completed Bigwig/Hazel consolidation checkpoint;
+  `ai/memory.md` is the deferred Warren memory-trimming design checkpoint.
 - Local `*.burrow` and `*.meadow` directories are working indexes/examples and
   are ignored by Git.
 
@@ -171,6 +173,28 @@
   cases, including `bazel test`, unless the user explicitly asks for that
   specific test run.
 
+## Memory Trimming Direction
+
+- The original query caches assume that an index generally fits in memory and
+  behave as lazy-load-and-retain structures. Long-lived servers over larger
+  ClimbMix indexes can therefore grow without bound.
+- The current deferred direction is a public, thread-safe
+  `Warren::trim_memory()` operation. It should release a substantial amount of
+  reconstructible memory without changing semantics or durable state; roughly
+  half is an aspiration rather than a total-memory guarantee.
+- Process measurement, high-water admission control, polling, and restart
+  policy belong to the surrounding service. It should pause new queries and
+  trim every active Warren and clone before deciding whether to escalate.
+- Bigwig trimming must cover both current Fluffle state and the historical
+  cache/Owsla snapshot held by the particular started view. Current Fluffle
+  population is not the same as all live query state.
+- An in-place, internally locked `OwslaCache` clear is compatible with shared
+  posting ownership and repeated calls. Hazel text chunks need a separate safe
+  lifetime design because translation currently borrows raw pointers while
+  copying decompressed bytes.
+- Detailed reasoning and unresolved questions are in `ai/memory.md`. No
+  implementation is authorized yet.
+
 ## Current Hazel Status
 
 - Hazel v1 writer, activation, merge, and regression coverage are in place.
@@ -189,6 +213,9 @@
 - Hazel txt activation loads the text map, uses a 16-reader `ReadGate`, keeps a
   mutex-protected `text_chunk_tag` hopper, and caches decompressed chunks
   without eviction.
+- Started Hazel clones share the source `HazelIdx` and `HazelTxt` objects and
+  therefore share both caches. Ending a clone does not release those components;
+  cache memory remains until every owning Hazel Warren is destroyed.
 - `Hazel::merge(...)` requires compatible compressors/DNA and increasing,
   non-overlapping input sequence ranges; gaps are allowed. It writes and
   publishes an activated but unstarted output Hazel. Working/name adapters
@@ -236,6 +263,11 @@
   Fiver, inside `Bigwig::commit_()` while `fluffle_->lock` is held. Do not
   invalidate the cache in `ready()`: the shard is still a kitten there and is
   not part of the visible read snapshot.
+- Background merge publication also replaces the Fluffle cache when the visible
+  population reaches one Owsla. The Bigwig merged-posting path is bypassed for
+  a one-Owsla view, so retaining that cache in the Fluffle would only prolong
+  its lifetime. Already-started views keep their prior cache by shared
+  ownership.
 - Static indexes reuse the same cache generation across `end()` -> `start()`
   cycles until a visible commit changes the logical snapshot.
 - Constructing a `Working` object now removes generic `temp.*` files, covering
@@ -360,7 +392,7 @@
   501 seconds.
 - The completed parallel pipeline then reduced consolidation to 317,915 ms:
   29 Fiver groups merged and converted in 32,002 ms and 37 Hazels merged in
-  260,583 ms. The full history is in `ai/plan.md`.
+  260,583 ms. The full history is in `ai/consolidation.md`.
 
 ## Current Ranking Notes
 

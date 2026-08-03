@@ -1,8 +1,9 @@
 # Hazel Consolidated Notes
 
-This is the durable Hazel reference after the Hazel/Bigwig integration and
-restartable parallel-merge work through 2026-07-26. It folds together the
-format, activation, recovery, consolidation, and performance checkpoints.
+This is the durable Hazel reference after the Hazel/Bigwig integration,
+restartable parallel-merge work, and 2026-08-02 cache-lifetime discussion. It
+folds together the format, activation, recovery, consolidation, and performance
+checkpoints.
 
 Hazel is an immutable single-file shard format. It can be opened as a
 standalone Warren and can also participate as a visible Bigwig shard through
@@ -21,6 +22,9 @@ the shared `Owsla` interface.
 - Bigwig read snapshots compose postings from visible `Owsla` children.
   Normal multi-shard posting merges are cached through `OwslaCache`;
   `text_chunk_tag` remains mergeable but uncached.
+- Hazel query caches currently retain decoded postings and decompressed text
+  chunks without eviction. The deferred Warren-level memory-trimming direction
+  and Hazel text-lifetime issue are recorded in `ai/memory.md`.
 - `Fiver::hazel(...)` in working-directory form writes and activates an
   unstarted Hazel. The explicit-filename overload remains a bool-returning
   writer.
@@ -232,18 +236,30 @@ Non-inline posting hoppers use an `OwslaCache` of waitable `SimplePosting`
 entries. The winning cache caller fills the posting from the compressed blob
 using a 16-reader `ReadGate`; other callers wait on the same storage. The
 concrete `Hazel::posting(feature)` method fills synchronously and returns a
-ready posting. Normal hopper construction can fill asynchronously.
+ready posting. Normal hopper construction can fill asynchronously. Entries are
+not evicted today. Because cache values and their consumers use shared posting
+ownership, a future internally locked in-place clear can leave active hoppers
+and fill workers valid; a query after the clear may perform a duplicate fill.
 
 Hazel txt activation loads the text directory into memory, builds its text
 compressor from the txt recipe keys `compressor` and `compressor_recipe`, uses
 a 16-reader `ReadGate` for positioned compressed-chunk reads, keeps a
 no-eviction decompressed chunk cache, and protects the shared
-`text_chunk_tag` hopper with a mutex.
+`text_chunk_tag` hopper with a mutex. The cache is a fixed array of lazily
+populated raw chunk buffers. Translation copies required bytes into an owned
+`std::string`, so no cached pointer escapes the operation. Concurrent eviction
+is not safe as currently written: `obtain(...)` returns a raw pointer owned by
+an entry's `unique_ptr<char[]>`, and `raw_bytes(...)` uses it after the cache
+publication lock has been released. A clean lifetime or shared/exclusive
+locking design remains deliberately unresolved.
 
 `HazelTxt::clone_()` is unsupported. Hazel Warren cloning is a shallow
 Warren-level operation over shared immutable components. A clone of a started
 Hazel Warren starts the clone as well, and regression coverage checks that the
-clone remains readable after the source Hazel is ended.
+clone remains readable after the source Hazel is ended. The clone shares the
+same `HazelIdx` and `HazelTxt` objects and therefore the same posting and text
+caches; ending either Warren does not release those components while another
+owner remains.
 
 Hazel sequence metadata is optional for standalone files. Activation validates
 it when present and caches `-1, -1` for `get_sequence(...)` when it is absent.
@@ -609,6 +625,9 @@ Maintenance timing observations:
 
 Likely next discussions, not standing authorization:
 
+- Reconsider the Warren-level `trim_memory()` direction in `ai/memory.md` and
+  choose a non-brutal concurrency/ownership design for evicting decompressed
+  Hazel text chunks before implementing memory trimming.
 - Add or refine focused tests around `find_merge_action(...)` and merge-worker
   classification/publication paths.
 - Revisit the Hazel work gate if the current shard-count approximation does

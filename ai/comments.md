@@ -1,14 +1,16 @@
 # Design Record: Restartable Parallel Hazel Merge
 
 Status: implemented and verified at the 2026-07-26 commit checkpoint. Current
-behavior is documented in `ai/plan.md`, `ai/notes.md`, and `ai/hazel.md`; this
-file preserves the design review and decisions that led to it.
+behavior is documented in `ai/consolidation.md`, `ai/notes.md`, and
+`ai/hazel.md`; this file preserves the design review and decisions that led to
+it.
 
 ## Overall Assessment
 
-The two-pass design in `ai/plan.md` is a good fit for the measured problem.
-It separates the expensive decode, semantic merge, exclusion filtering, and
-compression work from the relatively cheap construction of the final Hazel.
+The two-pass design in `ai/consolidation.md` is a good fit for the measured
+problem. It separates the expensive decode, semantic merge, exclusion
+filtering, and compression work from the relatively cheap construction of the
+final Hazel.
 It also preserves one canonical merge procedure and the existing
 `SimplePosting` representation rather than adding a foreground-only format.
 
@@ -162,8 +164,8 @@ replacement Hazel is published.
 
 ## Verification Additions
 
-The verification list in `ai/plan.md` is appropriate. The following cases are
-especially useful for the clarified design:
+The verification list in `ai/consolidation.md` is appropriate. The following
+cases are especially useful for the clarified design:
 
 - a `text_chunk_tag` feature with ordinary features sorting on both sides of
   it, proving that serial precomputation does not break segment ordering;

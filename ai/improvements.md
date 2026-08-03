@@ -6,6 +6,27 @@ explicit coding task.
 
 Especially don't do these things without discussion and approval from the user.
 
+## Warren Memory Trimming
+
+- Long-running services over large ClimbMix indexes need a way to release
+  reconstructible Warren memory before unbounded cache growth destabilizes the
+  host.
+- Keep process measurement, high-water admission control, polling, restart,
+  and escalation policy outside Cottontail. The service should call a future
+  thread-safe `Warren::trim_memory()` on every active Warren and clone.
+- Trimming should preserve semantics and durable state while attempting a
+  substantial reduction, nominally around half of reconstructible retained
+  memory. This is an aspiration rather than a total-memory guarantee.
+- Bigwig must trim both current Fluffle state and the historical snapshot held
+  by the particular started view. In-place `OwslaCache` clearing can safely
+  affect all shared owners; duplicate calls through clones are harmless.
+- Hazel decoded postings fit that shared-cache model. Hazel decompressed text
+  chunks do not yet: translations temporarily borrow raw pointers from
+  `unique_ptr` cache entries, so concurrent eviction needs a clean lifetime or
+  locking design.
+- The complete discussion and unresolved questions are in `ai/memory.md`.
+  This is not an active implementation step.
+
 ## Cached Phrase Postings
 
 - Formalize the existing rule that token text does not contain ASCII whitespace
@@ -123,6 +144,8 @@ Potential follow-ups are:
 
 ## SimpleIdx Cache Policy
 
+- Keep this separate from the initial Warren/Owsla memory-trimming direction in
+  `ai/memory.md`; Simple is explicitly outside that first scope.
 - Revisit the SimpleIdx posting-cache strategy before making the current
   disabled eviction path permanent.
 - The old threshold-based large-posting eviction policy can discard expensive

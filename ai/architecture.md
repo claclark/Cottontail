@@ -4,6 +4,14 @@ Source:
 Charles L. A. Clarke, *Annotative Indexing*, arXiv:2411.06256.
 Reference implementation: https://github.com/claclark/Cottontail
 
+## Repository Design Records
+
+The `ai/` directory contains design and checkpoint documents for completed
+changes as well as the current plan. These files are a grep-friendly archive:
+search them as needed for the history, rationale, invariants, measurements, and
+verification behind an implemented subsystem rather than expecting every
+completed design to remain in `ai/plan.md`.
+
 ## Purpose
 
 Annotative indexing is a general indexing framework designed to unify several
@@ -153,4 +161,3 @@ and heterogeneous document collections.
 
 [1]: https://www.researchgate.net/publication/385722142_Annotative_Indexing?utm_source=chatgpt.com "(PDF) Annotative Indexing"
 [2]: https://arxiv.org/html/2411.06256v3?utm_source=chatgpt.com "Annotative Indexing"
-
