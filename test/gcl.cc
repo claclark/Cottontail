@@ -5,6 +5,7 @@
 
 #include "gtest/gtest.h"
 
+#include "gcl/optimizer.h"
 #include "gcl/parse.h"
 #include "src/cottontail.h"
 
@@ -40,6 +41,16 @@ TEST(GCLTest, E2E) {
   tokenizer = warren->tokenizer();
   std::shared_ptr<cottontail::Txt> txt = warren->txt();
   std::shared_ptr<cottontail::Idx> idx = warren->idx();
+
+  cottontail::addr posting_bytes = 3 * sizeof(cottontail::addr);
+  EXPECT_EQ(cottontail::gcl::Optimizer::estimate_memory("hello", warren.get()),
+            4 * posting_bytes);
+  EXPECT_EQ(cottontail::gcl::Optimizer::estimate_memory(
+                "(+ hello hello world NOTATTOKEN (# 3))", warren.get()),
+            8 * posting_bytes);
+  EXPECT_EQ(cottontail::gcl::Optimizer::estimate_memory(
+                "\"hello world\"", warren.get()),
+            8 * posting_bytes);
 
   auto compile = [&](std::string g) -> std::unique_ptr<cottontail::Hopper> {
     std::shared_ptr<cottontail::gcl::SExpression> expr =

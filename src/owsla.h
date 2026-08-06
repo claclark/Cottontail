@@ -124,6 +124,11 @@ public:
     return posting;
   }
 
+  void clear() {
+    std::lock_guard<std::mutex> lock(lock_);
+    postings_.clear();
+  }
+
   OwslaCache(const OwslaCache &) = delete;
   OwslaCache &operator=(const OwslaCache &) = delete;
   OwslaCache(OwslaCache &&) = delete;

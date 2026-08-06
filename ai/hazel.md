@@ -22,9 +22,10 @@ the shared `Owsla` interface.
 - Bigwig read snapshots compose postings from visible `Owsla` children.
   Normal multi-shard posting merges are cached through `OwslaCache`;
   `text_chunk_tag` remains mergeable but uncached.
-- Hazel query caches currently retain decoded postings and decompressed text
-  chunks without eviction. The deferred Warren-level memory-trimming direction
-  and Hazel text-lifetime issue are recorded in `ai/memory.md`.
+- `Warren::trim_memory()` on a Hazel clears its decoded-posting cache. The
+  decompressed text chunks still have no eviction mechanism; the broader
+  memory-trimming direction and text-lifetime issue are recorded in
+  `ai/memory.md`.
 - `Fiver::hazel(...)` in working-directory form writes and activates an
   unstarted Hazel. The explicit-filename overload remains a bool-returning
   writer.
@@ -236,10 +237,11 @@ Non-inline posting hoppers use an `OwslaCache` of waitable `SimplePosting`
 entries. The winning cache caller fills the posting from the compressed blob
 using a 16-reader `ReadGate`; other callers wait on the same storage. The
 concrete `Hazel::posting(feature)` method fills synchronously and returns a
-ready posting. Normal hopper construction can fill asynchronously. Entries are
-not evicted today. Because cache values and their consumers use shared posting
-ownership, a future internally locked in-place clear can leave active hoppers
-and fill workers valid; a query after the clear may perform a duplicate fill.
+ready posting. Normal hopper construction can fill asynchronously.
+`Warren::trim_memory()` clears these entries in place under the cache lock.
+Because cache values and their consumers use shared posting ownership, active
+hoppers and fill workers remain valid; a query after the clear may perform a
+duplicate fill.
 
 Hazel txt activation loads the text directory into memory, builds its text
 compressor from the txt recipe keys `compressor` and `compressor_recipe`, uses
@@ -259,7 +261,8 @@ Hazel Warren starts the clone as well, and regression coverage checks that the
 clone remains readable after the source Hazel is ended. The clone shares the
 same `HazelIdx` and `HazelTxt` objects and therefore the same posting and text
 caches; ending either Warren does not release those components while another
-owner remains.
+owner remains. Trimming any sharing clone clears the common decoded-posting
+cache, and repeated trims are harmless.
 
 Hazel sequence metadata is optional for standalone files. Activation validates
 it when present and caches `-1, -1` for `get_sequence(...)` when it is absent.
@@ -498,6 +501,8 @@ The comparisons cover:
   matching phrases, and absent phrases;
 - started Hazel clones that remain started and readable after the source Hazel
   is ended;
+- shared Hazel posting-cache clearing, active-hopper survival, refill, and
+  repeated trimming through clones;
 - Bigwig activation of mixed Fiver/Hazel sequences;
 - non-empty Hazel `estimated_size()` behavior.
 
@@ -625,9 +630,10 @@ Maintenance timing observations:
 
 Likely next discussions, not standing authorization:
 
-- Reconsider the Warren-level `trim_memory()` direction in `ai/memory.md` and
-  choose a non-brutal concurrency/ownership design for evicting decompressed
-  Hazel text chunks before implementing memory trimming.
+- Extend the narrow Hazel posting-cache `trim_memory()` implementation only
+  after designing Bigwig trimming across current and historical snapshots and
+  a safe concurrency/ownership mechanism for evicting decompressed Hazel text
+  chunks.
 - Add or refine focused tests around `find_merge_action(...)` and merge-worker
   classification/publication paths.
 - Revisit the Hazel work gate if the current shard-count approximation does

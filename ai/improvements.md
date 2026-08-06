@@ -12,20 +12,21 @@ Especially don't do these things without discussion and approval from the user.
   reconstructible Warren memory before unbounded cache growth destabilizes the
   host.
 - Keep process measurement, high-water admission control, polling, restart,
-  and escalation policy outside Cottontail. The service should call a future
-  thread-safe `Warren::trim_memory()` on every active Warren and clone.
+  and escalation policy outside Cottontail. The service can call the public
+  `Warren::trim_memory()` on every active Warren and clone.
 - Trimming should preserve semantics and durable state while attempting a
   substantial reduction, nominally around half of reconstructible retained
   memory. This is an aspiration rather than a total-memory guarantee.
-- Bigwig must trim both current Fluffle state and the historical snapshot held
-  by the particular started view. In-place `OwslaCache` clearing can safely
-  affect all shared owners; duplicate calls through clones are harmless.
-- Hazel decoded postings fit that shared-cache model. Hazel decompressed text
-  chunks do not yet: translations temporarily borrow raw pointers from
-  `unique_ptr` cache entries, so concurrent eviction needs a clean lifetime or
-  locking design.
-- The complete discussion and unresolved questions are in `ai/memory.md`.
-  This is not an active implementation step.
+- The narrow first implementation clears Hazel decoded postings through an
+  internally locked, in-place `OwslaCache::clear()`. Active hoppers retain
+  shared posting ownership, later queries refill, and duplicate calls through
+  clones are harmless. Other Warren implementations currently do nothing.
+- A future Bigwig implementation must trim both current Fluffle state and the
+  historical snapshot held by the particular started view.
+- Hazel decompressed text chunks are not trimmed: translations temporarily
+  borrow raw pointers from `unique_ptr` cache entries, so concurrent eviction
+  needs a clean lifetime or locking design.
+- The complete discussion and deferred questions are in `ai/memory.md`.
 
 ## Cached Phrase Postings
 

@@ -7,6 +7,7 @@
 #include <sstream>
 #include <string>
 #include <unistd.h>
+#include <utility>
 #include <vector>
 
 #include "gtest/gtest.h"
@@ -469,6 +470,49 @@ void expect_started_clone_eq(std::shared_ptr<cottontail::Warren> source,
   clone->end();
 }
 
+void expect_hazel_trim_memory_eq(std::shared_ptr<cottontail::Warren> source,
+                                 std::shared_ptr<cottontail::Warren> warren) {
+  ASSERT_TRUE(warren->started());
+  std::shared_ptr<cottontail::Hazel> hazel =
+      std::dynamic_pointer_cast<cottontail::Hazel>(warren);
+  ASSERT_NE(hazel, nullptr);
+  cottontail::addr feature = warren->featurizer()->featurize("love");
+  ASSERT_GT(warren->idx()->count(feature), 1);
+
+  std::shared_ptr<cottontail::SimplePosting> before = hazel->posting(feature);
+  ASSERT_NE(before, nullptr);
+  EXPECT_EQ(before, hazel->posting(feature));
+  std::vector<Posting> expected = collect(warren->idx()->hopper(feature));
+  std::unique_ptr<cottontail::Hopper> active =
+      warren->idx()->hopper(feature);
+  ASSERT_NE(active, nullptr);
+
+  std::string error;
+  std::shared_ptr<cottontail::Warren> clone = warren->clone(&error);
+  ASSERT_NE(clone, nullptr) << error;
+  ASSERT_TRUE(clone->started());
+  std::shared_ptr<cottontail::Hazel> cloned_hazel =
+      std::dynamic_pointer_cast<cottontail::Hazel>(clone);
+  ASSERT_NE(cloned_hazel, nullptr);
+  EXPECT_EQ(before, cloned_hazel->posting(feature));
+
+  warren->trim_memory();
+  std::shared_ptr<cottontail::SimplePosting> after =
+      cloned_hazel->posting(feature);
+  ASSERT_NE(after, nullptr);
+  EXPECT_NE(before, after);
+  expect_postings_eq(expected, collect(std::move(active)));
+
+  warren->trim_memory();
+  clone->trim_memory();
+  std::shared_ptr<cottontail::SimplePosting> reloaded =
+      hazel->posting(feature);
+  ASSERT_NE(reloaded, nullptr);
+  EXPECT_NE(after, reloaded);
+  expect_feature_eq(source, clone, "love");
+  clone->end();
+}
+
 std::shared_ptr<cottontail::Warren> open_started(const std::string &burrow) {
   std::string error;
   std::shared_ptr<cottontail::Warren> warren =
@@ -591,6 +635,7 @@ void run_hazel_merge_regression(cottontail::addr chunk_size,
         << final_name << " <= " << hazels[i];
   expect_warrens_eq(source, merged);
   expect_gcl_eq(source, merged, "\"Let me count the ways\"", true);
+  expect_hazel_trim_memory_eq(source, merged);
   expect_started_clone_eq(source, merged);
   source->end();
 }

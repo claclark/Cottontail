@@ -12,6 +12,11 @@ performance work.
 - Optimization is enabled by default. `Optimizer::disable()` remains available
   for explicit comparisons, and `apps/ssr-server` exposes the switch through
   its `set_optimizer` protocol command.
+- `Optimizer::estimate_memory(...)` accepts a GCL string or parsed expression,
+  expands phrases, deduplicates term features, and estimates decoded posting
+  payload from generic Warren index counts at three `addr` fields per posting.
+  It returns zero for invalid strings or null inputs and deliberately excludes
+  materialized results, allocator overhead, and Warren-specific caches.
 - The previous estimated-count rewrite for top-level
   `(<< (^ a b c ...) Q)` expressions was removed. The active rule is structural
   and does not consult collection statistics.

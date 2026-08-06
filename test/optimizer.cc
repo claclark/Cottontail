@@ -115,6 +115,37 @@ public:
 
 } // namespace
 
+TEST(OptimizerTest, EstimatesMemoryFromString) {
+  OptimizerWarren warren;
+  warren.start();
+  cottontail::addr posting_bytes = 3 * sizeof(cottontail::addr);
+  EXPECT_EQ(cottontail::gcl::Optimizer::estimate_memory(
+                "(+ 10 20 10 (# 3))", &warren),
+            30 * posting_bytes);
+  EXPECT_EQ(cottontail::gcl::Optimizer::estimate_memory(
+                "(+ \"10 20\" 10)", &warren),
+            30 * posting_bytes);
+  EXPECT_EQ(cottontail::gcl::Optimizer::estimate_memory("(+)", &warren), 0);
+  EXPECT_EQ(cottontail::gcl::Optimizer::estimate_memory("10", nullptr), 0);
+  warren.end();
+}
+
+TEST(OptimizerTest, EstimatesMemoryFromExpression) {
+  OptimizerWarren warren;
+  warren.start();
+  std::string error;
+  std::shared_ptr<cottontail::gcl::SExpression> expr =
+      cottontail::gcl::SExpression::from_string("(+ \"10 20\" 30)", &error);
+  ASSERT_NE(expr, nullptr) << error;
+  cottontail::addr posting_bytes = 3 * sizeof(cottontail::addr);
+  EXPECT_EQ(cottontail::gcl::Optimizer::estimate_memory(expr, &warren),
+            60 * posting_bytes);
+  EXPECT_EQ(cottontail::gcl::Optimizer::estimate_memory(
+                std::shared_ptr<cottontail::gcl::SExpression>(), &warren),
+            0);
+  warren.end();
+}
+
 TEST(OptimizerTest, TopLevelContainmentRemainsUnchanged) {
   ScopedOptimization optimization;
   OptimizerWarren warren;

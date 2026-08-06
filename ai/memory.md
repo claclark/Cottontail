@@ -1,9 +1,10 @@
 # Memory Trimming Design Notes
 
 These notes capture the 2026-08-02/03 discussion prompted by long-running
-servers over indexes much larger than the original in-memory workloads. They
-are a design checkpoint, not an active implementation plan. Sleep on the
-design, especially the Hazel text-cache mechanics, before changing source.
+servers over indexes much larger than the original in-memory workloads. A
+narrow first step now gives standalone Hazel servers a way to clear decoded
+postings. The broader design remains a checkpoint rather than an active plan,
+especially for Bigwig snapshots and Hazel text-cache mechanics.
 
 ## Motivation
 
@@ -13,12 +14,13 @@ fit the complete index comfortably in memory. Bigwig merged postings, decoded
 Hazel postings, and decompressed Hazel text chunks therefore remain cached
 without a general eviction mechanism.
 
-Larger ClimbMix indexes are now being used by long-lived server processes.
-Their memory use can grow until the host swaps heavily or becomes unstable.
-Agent-driven queries tolerate occasional large latency variation, so an
-aggressive memory reduction is preferable to unbounded growth. A downstream
-fork currently carries a local workaround, so this design is important but not
-urgent.
+Larger ClimbMix indexes are now being used by long-lived server processes,
+including the server for the ClimbMix collection in TREC RAG 2026. Their memory
+use can grow until the host swaps heavily or becomes unstable. Agent-driven
+queries tolerate occasional large latency variation, so an aggressive memory
+reduction is preferable to unbounded growth. A downstream fork carries a local
+workaround, but crashes in additional Hazel servers made the narrow
+posting-cache step urgent.
 
 ## Policy Boundary
 
@@ -42,9 +44,25 @@ is a better pressure signal than RSS alone, because swapping must not create
 the illusion of new cache capacity. This measurement detail belongs to the
 service policy rather than the Warren operation.
 
-## Proposed Warren Operation
+`Optimizer::estimate_memory(...)` gives a service a rough query preflight for
+either a GCL string or parsed expression. It expands phrases, deduplicates term
+features, and sums their index counts at three `addr` fields per posting. A
+parse failure estimates zero because no hopper will be built. This estimates
+decoded input-posting payload, not exact peak query memory: it excludes object
+and allocator overhead, materialized results, and Warren-specific secondary
+caches.
 
-The prospective public operation is:
+The current `ssr-server` applies a deliberately crude Linux-only policy at new
+query admission. It reads `MemTotal` and `MemAvailable` from `/proc/meminfo`,
+trims every persistent collection Warren when available RAM falls below one
+third of total RAM, and rejects a query when the sum of its Warren estimates
+exceeds one eighth of total RAM. Rejection uses the ordinary query error
+response and creates no qid. Non-Linux builds and memory-information failures
+skip both checks.
+
+## Warren Operation
+
+The public operation is:
 
 ```cpp
 void Warren::trim_memory();
@@ -69,10 +87,11 @@ application allocations all limit what one call can return to the operating
 system. A `void` return avoids pretending that the library can report actual
 process bytes reclaimed.
 
-The first implementation may clear optional caches completely. The same API
-can later use LRU or another selective policy without exposing that policy to
-callers. This initial direction concerns the Owsla/Bigwig/Hazel path; the
-disabled SimpleIdx eviction experiment remains a separate question.
+The initial implementation clears Hazel's decoded posting cache completely.
+Other Warren implementations currently inherit the no-op default, and Hazel's
+decompressed text cache is unchanged. The same API can later use LRU or
+another selective policy without exposing that policy to callers. The disabled
+SimpleIdx eviction experiment remains a separate question.
 
 ## Snapshot And Clone Ownership
 
@@ -84,8 +103,9 @@ Fluffle population while older started views continue to own and query their
 historical Owslas and cache generation.
 
 This is why process policy should call `trim_memory()` on every active Warren
-it owns. A Bigwig trim should operate on both the current Fluffle state and the
-particular started snapshot retained by that Bigwig. The likely mechanics are:
+it owns. Bigwig currently inherits the no-op default. A future Bigwig trim
+should operate on both the current Fluffle state and the particular started
+snapshot retained by that Bigwig. The likely mechanics are:
 
 1. Briefly copy the current Fluffle cache and Owsla vector under
    `fluffle->lock`.
@@ -106,12 +126,12 @@ view that retained it.
 postings. It currently owns a mutex-protected map from feature to a waitable
 `shared_ptr<SimplePosting>`.
 
-An internally locked in-place clear is the desired primitive. Clearing the map
-is safe because hoppers and fill workers retain their own shared posting
+`OwslaCache::clear()` is the internally locked in-place primitive. Clearing the
+map is safe because hoppers and fill workers retain their own shared posting
 ownership. An in-flight fill may complete after its entry was cleared, and a
 later query may start a duplicate fill; this costs time and may temporarily
 duplicate memory but does not change semantics. Clearing the same cache through
-several clones is harmless.
+several clones is harmless. Hazel's `trim_memory()` uses this primitive now.
 
 In-place clearing matters. Replacing only one cache pointer would not reach
 `BigwigIdx`, Hazel components, clones, or older snapshots that already hold a
@@ -152,13 +172,12 @@ SimpleWarren and SimpleIdx are outside the initial direction. The old disabled
 SimpleIdx eviction policy and possible future LRU work remain documented in
 `ai/improvements.md` and should not be silently folded into this design.
 
-## Unresolved Before Coding
+## Deferred Work
 
-- Reconsider the Warren-level API after sleeping on the design.
 - Choose a clean concurrency and ownership mechanism for Hazel text chunks.
-- Decide whether the first trim clears all optional state or implements an
+- Design and implement Bigwig trimming across current and historical snapshots.
+- Decide whether future trims clear all optional state or implement an
   explicitly substantial partial reduction.
-- Specify behavior for inactive Warrens and concurrent `start()` / `end()`.
-- Add focused concurrency coverage for cache clearing, in-flight posting fills,
-  shallow Hazel clones, historical Bigwig snapshots, and repeated trims.
-
+- Add focused concurrency coverage for in-flight posting fills and historical
+  Bigwig snapshots. Current Hazel coverage checks shared clones, active hoppers,
+  cache refill, and repeated trims.

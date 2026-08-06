@@ -100,6 +100,7 @@ public:
   inline std::shared_ptr<Warren> clone(std::string *error = nullptr) {
     return clone_(error);
   }
+  inline void trim_memory() { trim_memory_(); }
   virtual ~Warren(){};
   Warren(const Warren &) = delete;
   Warren &operator=(const Warren &) = delete;
@@ -123,6 +124,7 @@ private:
   virtual std::shared_ptr<Warren> clone_(std::string *error);
   virtual void start_(){};
   virtual void end_(){};
+  virtual void trim_memory_(){};
   virtual bool set_parameter_(const std::string &key, const std::string &value,
                               std::string *error) = 0;
   virtual bool get_parameter_(const std::string &key, std::string *value,

@@ -2,10 +2,12 @@
 #include <cerrno>
 #include <cctype>
 #include <cstring>
+#include <fstream>
 #include <iostream>
 #include <map>
 #include <memory>
 #include <mutex>
+#include <sstream>
 #include <string>
 #include <thread>
 #include <vector>
@@ -21,7 +23,7 @@
 
 namespace {
 
-constexpr cottontail::addr WINDOW_TOKENS = 200;
+constexpr cottontail::addr WINDOW_TOKENS = 512;
 constexpr size_t DEPTH = 1000;
 
 struct Collection {
@@ -45,6 +47,69 @@ struct QueryState {
   std::vector<Result> results;
   size_t next = 0;
 };
+
+#ifdef __linux__
+bool system_memory(cottontail::addr *total, cottontail::addr *available) {
+  std::ifstream input("/proc/meminfo");
+  if (!input)
+    return false;
+  cottontail::addr total_kib = 0;
+  cottontail::addr available_kib = -1;
+  std::string line;
+  while (std::getline(input, line)) {
+    std::istringstream fields(line);
+    std::string name;
+    cottontail::addr value;
+    std::string unit;
+    if (!(fields >> name >> value >> unit) || unit != "kB")
+      continue;
+    if (name == "MemTotal:")
+      total_kib = value;
+    else if (name == "MemAvailable:")
+      available_kib = value;
+  }
+  if (total_kib <= 0 || available_kib < 0)
+    return false;
+  *total = total_kib * 1024;
+  *available = available_kib * 1024;
+  return true;
+}
+#endif
+
+bool should_trim() {
+#ifdef __linux__
+  cottontail::addr total, available;
+  if (!system_memory(&total, &available))
+    return false;
+  return available < total / 3;
+#else
+  return false;
+#endif
+}
+
+bool reject_query(const std::string &query,
+                  const std::vector<Collection> &collections) {
+#ifdef __linux__
+  cottontail::addr total, available;
+  if (!system_memory(&total, &available))
+    return false;
+  (void)available;
+  cottontail::addr limit = total / 8;
+  cottontail::addr estimate = 0;
+  for (const Collection &collection : collections) {
+    cottontail::addr more = cottontail::gcl::Optimizer::estimate_memory(
+        query, collection.warren.get());
+    if (more > limit - estimate)
+      return true;
+    estimate += more;
+  }
+  return false;
+#else
+  (void)query;
+  (void)collections;
+  return false;
+#endif
+}
 
 void usage(const std::string &program_name) {
   std::cerr << "usage: " << program_name << " [--fields fields] "
@@ -377,6 +442,12 @@ private:
     std::string query = request.value("query", "");
     if (query.empty())
       return error_response("query", "Missing query");
+    if (should_trim())
+      for (Collection &collection : collections_)
+        collection.warren->trim_memory();
+    if (reject_query(query, collections_))
+      return error_response("query", "Query rejected: estimated memory "
+                                     "requirement exceeds limit");
     std::vector<size_t> threads = thread_budget(collections_.size());
     std::vector<std::vector<Result>> per_collection(collections_.size());
     std::vector<std::thread> workers;

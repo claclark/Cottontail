@@ -290,6 +290,8 @@ public:
     return posting_bytes + (addr)directory_.size() * 3 * sizeof(addr);
   }
 
+  void trim_memory() { cache_.clear(); }
+
 private:
   HazelIdx(){};
   std::string recipe_() final { return therecipe_; };
@@ -2779,6 +2781,12 @@ std::shared_ptr<SimplePosting> Hazel::posting(addr feature) {
   std::shared_ptr<HazelIdx> idx =
       std::static_pointer_cast<HazelIdx>(this->idx());
   return idx->posting(feature);
+}
+
+void Hazel::trim_memory_() {
+  std::shared_ptr<HazelIdx> idx = std::static_pointer_cast<HazelIdx>(idx_);
+  assert(idx != nullptr);
+  idx->trim_memory();
 }
 
 void Hazel::get_sequence(addr *start, addr *end) const {

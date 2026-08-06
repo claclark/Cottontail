@@ -15,6 +15,9 @@ namespace gcl {
 
 class Optimizer {
 public:
+  static addr estimate_memory(const std::string &query, Warren *warren);
+  static addr estimate_memory(std::shared_ptr<SExpression> expr,
+                              Warren *warren);
   static std::shared_ptr<SExpression>
   optimize(std::shared_ptr<SExpression> expr, Warren *warren);
   static void enable();

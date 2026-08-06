@@ -50,6 +50,7 @@ private:
       : Owsla(nullptr, featurizer, tokenizer, idx, txt){};
   std::shared_ptr<Warren> clone_(std::string *error) final;
   std::string recipe_() final { return dna_; };
+  void trim_memory_() final;
   bool set_parameter_(const std::string &key, const std::string &value,
                       std::string *error) final;
   bool get_parameter_(const std::string &key, std::string *value,

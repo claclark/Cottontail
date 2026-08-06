@@ -61,6 +61,13 @@
 - `gcl/optimizer.*` is on by default. `Optimizer::disable()` remains available
   for explicit comparisons, and `apps/ssr-server` exposes this through the
   `set_optimizer` protocol command.
+- `Optimizer::estimate_memory(...)` accepts either a GCL string or an
+  `SExpression`. It expands phrases, deduplicates term features, sums their
+  index counts, and estimates decoded posting payload as three `addr` values
+  per posting. Invalid strings, null expressions, and null Warrens estimate
+  zero. It uses only the generic Warren tokenizer, featurizer, and index
+  interfaces. The estimate does not include operator objects, materialized
+  results, allocator overhead, or Warren-specific secondary caches.
 - The old estimated-count rewrite for top-level
   `(<< (^ a b c ...) Q)` was removed. The current optimizer rule is narrower:
   entering `+` turns on a materialization context for its children; the first
@@ -87,6 +94,11 @@
   more burrows, and `apps/ssr-client` is the readline client for interactive
   query/next/full-document use. `apps/ssr-client.py` is the standard-library
   Python example client for the same protocol.
+- On Linux, each new SSR query checks `/proc/meminfo`. If `MemAvailable` is
+  below one third of `MemTotal`, the server trims every persistent collection
+  Warren. It rejects the query through the normal JSON error response when the
+  summed Warren estimates exceed one eighth of `MemTotal`. Both checks fail
+  open on non-Linux systems or unreadable memory information.
 - `apps/ssr-timing` is a batch timing client for an existing `ssr-server`.
   Usage is `ssr-timing port timing.queries [seconds]`. Each query file row has
   a qid and a query. The client runs each query as `c/opt`, `w/not`, then
@@ -133,7 +145,7 @@
   clients. Query results rank within `content`; `container` is used to find
   docno/document identity.
   Snippets stay within the ranked content interval, highlight with
-  `<cover>...</cover>`, clip oversized covers to the first 200 tokens, and keep
+  `<cover>...</cover>`, clip oversized covers to the first 512 tokens, and keep
   up to 1000 covers available through `next`. The optional `--fields` value is
   a comma-separated list of field GCL queries used only to assemble full
   `document` responses in caller-specified order, with outer quotes stripped
@@ -178,22 +190,25 @@
 - The original query caches assume that an index generally fits in memory and
   behave as lazy-load-and-retain structures. Long-lived servers over larger
   ClimbMix indexes can therefore grow without bound.
-- The current deferred direction is a public, thread-safe
-  `Warren::trim_memory()` operation. It should release a substantial amount of
-  reconstructible memory without changing semantics or durable state; roughly
-  half is an aspiration rather than a total-memory guarantee.
+- `Warren::trim_memory()` is a public operation with a default no-op. Hazel's
+  implementation clears its shared decoded-posting `OwslaCache`; other Warren
+  implementations currently do nothing. Broader trimming should release a
+  substantial amount of reconstructible memory without changing semantics or
+  durable state; roughly half remains an aspiration rather than a total-memory
+  guarantee.
 - Process measurement, high-water admission control, polling, and restart
   policy belong to the surrounding service. It should pause new queries and
   trim every active Warren and clone before deciding whether to escalate.
 - Bigwig trimming must cover both current Fluffle state and the historical
   cache/Owsla snapshot held by the particular started view. Current Fluffle
   population is not the same as all live query state.
-- An in-place, internally locked `OwslaCache` clear is compatible with shared
-  posting ownership and repeated calls. Hazel text chunks need a separate safe
-  lifetime design because translation currently borrows raw pointers while
-  copying decompressed bytes.
-- Detailed reasoning and unresolved questions are in `ai/memory.md`. No
-  implementation is authorized yet.
+- `OwslaCache::clear()` clears in place under its own lock. Active hoppers and
+  fill workers retain shared posting ownership, later lookups refill the
+  cache, and repeated calls through shallow Hazel clones are harmless.
+- Hazel text chunks are not trimmed. They need a separate safe lifetime design
+  because translation currently borrows raw pointers while copying
+  decompressed bytes. Detailed reasoning and deferred work are in
+  `ai/memory.md`.
 
 ## Current Hazel Status
 
@@ -216,6 +231,9 @@
 - Started Hazel clones share the source `HazelIdx` and `HazelTxt` objects and
   therefore share both caches. Ending a clone does not release those components;
   cache memory remains until every owning Hazel Warren is destroyed.
+- Calling `trim_memory()` on any sharing Hazel Warren clears the common decoded
+  posting cache. It does not disturb active hoppers and does not clear the
+  decompressed text chunks.
 - `Hazel::merge(...)` requires compatible compressors/DNA and increasing,
   non-overlapping input sequence ranges; gaps are allowed. It writes and
   publishes an activated but unstarted output Hazel. Working/name adapters

@@ -1,10 +1,12 @@
 #include "gcl/optimizer.h"
 
 #include <memory>
+#include <set>
 #include <string>
 #include <vector>
 
 #include "gcl/parse.h"
+#include "src/warren.h"
 
 namespace cottontail {
 namespace gcl {
@@ -17,6 +19,37 @@ bool is_materializable(Operator kind) {
          kind == NOT_CONTAINED_IN || kind == NOT_CONTAINING;
 }
 } // namespace
+
+addr Optimizer::estimate_memory(const std::string &query, Warren *warren) {
+  std::string error;
+  std::shared_ptr<SExpression> expr = SExpression::from_string(query, &error);
+  return estimate_memory(expr, warren);
+}
+
+addr Optimizer::estimate_memory(std::shared_ptr<SExpression> expr,
+                                Warren *warren) {
+  if (expr == nullptr || warren == nullptr)
+    return 0;
+  expr = expr->expand_phrases(warren->tokenizer());
+  std::set<addr> features;
+  std::vector<std::shared_ptr<SExpression>> pending = {expr};
+  while (!pending.empty()) {
+    std::shared_ptr<SExpression> current = pending.back();
+    pending.pop_back();
+    if (current == nullptr)
+      continue;
+    if (current->kind_ == TERM) {
+      features.insert(warren->featurizer()->featurize(current->term_));
+    } else {
+      pending.insert(pending.end(), current->subx_.begin(),
+                     current->subx_.end());
+    }
+  }
+  addr postings = 0;
+  for (addr feature : features)
+    postings += warren->idx()->count(feature);
+  return postings * 3 * sizeof(addr);
+}
 
 std::shared_ptr<SExpression>
 Optimizer::optimize(std::shared_ptr<SExpression> expr, Warren *warren) {
