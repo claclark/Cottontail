@@ -5,6 +5,7 @@
 *.meadow
 
 # Top-level scratch files.
+/codex-sessions.txt
 /*temp*
 /*test*
 !/*test*/
