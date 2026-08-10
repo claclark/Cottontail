@@ -144,10 +144,11 @@ Potential follow-ups are:
   add focused coverage for nested and punctuation-bearing paths, `temp.*`
   cleanup that preserves unrelated files, prefix listing, and relevant error
   paths.
-- The separate application `walk_filesystem(...)` helper currently has no
-  runtime regression coverage. Add a small focused test only when its behavior
-  is next being changed; cover a single file, recursive directories, README
-  inclusion, an empty directory, and a nonexistent path.
+- The separate application `walk_filesystem(...)` helper skips symlinked files
+  and directories, including a symlink supplied as its top-level path. It has
+  no focused runtime regression coverage; such coverage should include a
+  single file, recursive directories, README inclusion, symlink skipping, an
+  empty directory, and a nonexistent path.
 
 ## Concurrent Shard Activation
 
