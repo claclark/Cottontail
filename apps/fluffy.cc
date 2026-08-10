@@ -3,8 +3,7 @@
 #include <sstream>
 #include <vector>
 
-#include <readline/history.h>
-#include <readline/readline.h>
+#include "linenoise.h"
 
 #include "src/cottontail.h"
 
@@ -48,13 +47,14 @@ int main(int argc, char **argv) {
     std::cerr << argv[0] << ": " << error << "\n";
     return 1;
   }
-  char *line;
-  while ((line = readline(">> ")) != nullptr) {
-    if (strlen(line) > 0) {
-      add_history(line);
-    } else {
+  linenoiseHistorySetMaxLen(1000);
+  char *input;
+  while ((input = linenoise(">> ")) != nullptr) {
+    std::string line = input;
+    linenoiseFree(input);
+    if (line.empty())
       continue;
-    }
+    linenoiseHistoryAdd(line.c_str());
     auto clean = [](std::string s) {
       for (size_t i = 0; i < s.length(); i++)
         if (s[i] == '\n')
@@ -65,14 +65,11 @@ int main(int argc, char **argv) {
     warren->start();
     std::shared_ptr<cottontail::Txt> txt = warren->txt();
     std::unique_ptr<cottontail::Hopper> fluffy =
-        warren->hopper_from_gcl(line, &error);
+      warren->hopper_from_gcl(line, &error);
     if (fluffy == nullptr) {
       std::cerr << error << "\n";
-      free(line);
       warren->end();
       continue;
-    } else {
-      free(line);
     }
     cottontail::addr k = cottontail::minfinity + 1, p, q;
     cottontail::fval v;

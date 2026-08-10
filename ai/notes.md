@@ -91,7 +91,7 @@
   `rho` when `q >= k >= cached-k`, `uat` when `q <= k <= cached-k`, and `ohr`
   when `p <= k <= cached-k`.
 - `apps/ssr-server` serves JSON-line SSR requests over localhost for one or
-  more burrows, and `apps/ssr-client` is the readline client for interactive
+  more burrows, and `apps/ssr-client` is the interactive client for
   query/next/full-document use. `apps/ssr-client.py` is the standard-library
   Python example client for the same protocol.
 - On Linux, each new SSR query checks `/proc/meminfo`. If `MemAvailable` is
@@ -141,7 +141,8 @@
   `--key value` and `--key=value` parameters.
 - `apps/fluffy.cc`: interactive GCL query shell over a burrow or Hazel. The
   Bazel build also emits the professional command name `inspect` as a symlink
-  to `fluffy`.
+  to `fluffy`. It uses Linenoise for editing and session-only history; no
+  history is loaded from or saved to disk.
 - `apps/rank.cc`: ranking CLI.
 - `apps/ssr-server.cc`: localhost JSON-line SSR server over one or more
   burrows. It takes `[--fields fields] container content docno burrow...`,
@@ -154,9 +155,9 @@
   a comma-separated list of field GCL queries used only to assemble full
   `document` responses in caller-specified order, with outer quotes stripped
   from each translated field piece and pieces joined by ` ... `.
-- `apps/ssr-client.cc`: readline client for `ssr-server`; non-empty input sends
-  a query, empty input or `@next` requests the next result, and `@full` requests
-  the full document for the last returned result.
+- `apps/ssr-client.cc`: interactive Linenoise client for `ssr-server`;
+  non-empty input sends a query, empty input or `@next` requests the next
+  result, and `@full` requests the full document for the last returned result.
 - `apps/ssr-client.py`: no-dependency Python example client for the same
   JSON-line protocol and interactive `@next`/`@full` commands.
 - `apps/simple.cc`: build a simple burrow from TREC/MARCO-style corpora.
@@ -180,7 +181,9 @@
 ## Build And Verification
 
 - `MODULE.bazel` defines the Bazel module with `nlohmann_json`, `googletest`,
-  and `rules_cc`.
+  and `rules_cc`. Linenoise is vendored under `third_party/linenoise` with its
+  BSD license, avoiding a system Readline dependency and external Bazel
+  packaging compatibility patches.
 - `src/BUILD` exports `//src:cottontail`, including `src/*`, `gcl/*`, and the
   Meadowlark library.
 - `apps/BUILD` contains standalone `cc_binary` targets.

@@ -8,8 +8,7 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-#include <readline/history.h>
-#include <readline/readline.h>
+#include "linenoise.h"
 
 #include "src/nlohmann.h"
 
@@ -132,12 +131,13 @@ int main(int argc, char **argv) {
 
   std::string qid;
   std::string docno;
+  linenoiseHistorySetMaxLen(1000);
   char *line;
-  while ((line = readline(">> ")) != nullptr) {
+  while ((line = linenoise(">> ")) != nullptr) {
     std::string input = line;
-    std::free(line);
+    linenoiseFree(line);
     if (!input.empty())
-      add_history(input.c_str());
+      linenoiseHistoryAdd(input.c_str());
     json query;
     if (input.empty() || input == "@next") {
       if (qid.empty())

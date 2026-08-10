@@ -4,32 +4,15 @@
 #include <regex>
 #include <sstream>
 #include <string>
-#include <unistd.h>
 #include <vector>
 
-#include <readline/history.h>
-#include <readline/readline.h>
+#include "linenoise.h"
 
 #include "gcl/mt.h"
 #include "src/cottontail.h"
 
 void usage(std::string program_name) {
   std::cerr << "usage: " << program_name << " [--burrow burrow]\n";
-}
-
-const char *myreadline(const char *prompt) {
-  if (isatty(STDIN_FILENO)) {
-    const char *line = readline(prompt);
-    if (strlen(line) > 0)
-      add_history(line);
-    return line;
-  } else {
-    static std::string line;
-    if (std::getline(std::cin, line))
-      return line.c_str();
-    else
-      return nullptr;
-  }
 }
 
 int main(int argc, char **argv) {
@@ -61,14 +44,17 @@ int main(int argc, char **argv) {
   }
 
   cottontail::Mt mt;
-  const char *line;
-  while ((line = myreadline(">> ")) != nullptr) {
-    if (line != nullptr && line[0] != '\0') {
+  linenoiseHistorySetMaxLen(1000);
+  char *input;
+  while ((input = linenoise(">> ")) != nullptr) {
+    std::string line = input;
+    linenoiseFree(input);
+    if (!line.empty()) {
+      linenoiseHistoryAdd(line.c_str());
       if (line[0] == '@') {
-        std::string sline = line;
         std::regex ws("\\s+");
         std::vector<std::string> cmd{
-            std::sregex_token_iterator(sline.begin(), sline.end(), ws, -1), {}};
+            std::sregex_token_iterator(line.begin(), line.end(), ws, -1), {}};
         if (cmd.size() > 2 && cmd[0] == "@rank") {
           bool okay = true;
           std::string topic = cmd[1];

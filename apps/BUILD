@@ -151,9 +151,10 @@ cc_binary(
     ],
     deps = [
       "//src:cottontail",
+      "//third_party/linenoise",
     ],
     linkopts = [
-      "-lreadline -pthread"
+      "-pthread"
     ],
 )
 
@@ -255,9 +256,10 @@ cc_binary(
     ],
     deps = [
       "//src:cottontail",
+      "//third_party/linenoise",
     ],
     linkopts = [
-      "-lreadline -pthread",
+      "-pthread",
     ],
 )
 
@@ -283,7 +285,7 @@ cc_binary(
       "//src:cottontail",
     ],
     linkopts = [
-      "-lreadline -pthread"
+      "-pthread"
     ],
 )
 
@@ -388,9 +390,10 @@ cc_binary(
     ],
     deps = [
       "//src:cottontail",
+      "//third_party/linenoise",
     ],
     linkopts = [
-      "-lreadline -pthread",
+      "-pthread",
     ],
 )
 
