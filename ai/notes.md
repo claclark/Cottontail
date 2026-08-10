@@ -132,12 +132,16 @@
 
 - `apps/meadowlark.cc`: create/open a meadow, parse `--tsv`, `--jsonl`/`--json`,
   `--text`, and `--code` inputs, and delegate the typed plan to the public
-  `meadowlark::append_all(...)` library operation. Immediately after
+  `meadowlark::append_all(...)` library operation. Each input path may be a
+  regular file or a recursively walked directory; every discovered file keeps
+  the type of its introducing option. Immediately after
   `--create`, checked `parameter:value` assignments may precede the first input
   flag; they are applied through `set_parameter(...)` before ingestion.
 - `apps/forage.cc`: run a Meadowlark forager over a query; supports
   `--key value` and `--key=value` parameters.
-- `apps/fluffy.cc`: interactive GCL query shell over a burrow or Hazel.
+- `apps/fluffy.cc`: interactive GCL query shell over a burrow or Hazel. The
+  Bazel build also emits the professional command name `inspect` as a symlink
+  to `fluffy`.
 - `apps/rank.cc`: ranking CLI.
 - `apps/ssr-server.cc`: localhost JSON-line SSR server over one or more
   burrows. It takes `[--fields fields] container content docno burrow...`,
@@ -165,10 +169,11 @@
   Hazel files, require that they form a complete sequence, infer the sibling
   output Hazel name from the input sequence range, and delegate merge validation
   to `Hazel::merge(...)`.
-- `apps/finish-merging.cc`: invoke offline `Bigwig::consolidate(...)` for each
+- `apps/consolidate.cc`: invoke offline `Bigwig::consolidate(...)` for each
   directory argument, skip regular-file arguments, and stop at the first
   failure. `--verbose` enables timestamped phase descriptions and timings from
-  the consolidation operation.
+  the consolidation operation. The Bazel build emits `finish-merging` as a
+  compatibility symlink to `consolidate`.
 - `apps/scratch.cc`: scratch utility for creating no-merge Bigwig/Fiver shards
   from small text files with `line:` and `file:` annotations.
 
@@ -374,7 +379,7 @@
   itself. Focused regression coverage checks that a started Bigwig clone stays
   readable after the parent ends and after the parent commits new content.
 - `Bigwig::consolidate(...)` is the offline foreground path used by
-  `finish-merging`. It shares DNA/component/sanitization setup with
+  `consolidate`. It shares DNA/component/sanitization setup with
   `Bigwig::make(...)` and allows aborted-commit gaps. It greedily splits each
   consecutive Fiver run when the estimated group size reaches `medium_shard`,
   merges and converts the groups in parallel, and performs at most one final
@@ -502,6 +507,13 @@
   `0.1895927707281574`. Each result was stable across repeated ranking runs.
   Both ranked 6,980 topics and emitted only the two established fake-result
   topics.
+- On 2026-08-10, the same 2026-07-26 parallel-consolidation database, now named
+  `e.meadow/`, again reported exactly `0.18948731068358557`. The current
+  independently built `a.meadow/` reported `0.1898843634875152`; both ranked
+  6,980 topics and emitted the same two fake-result topics. The old database's
+  digit-for-digit stability alongside the new build's upward swing confirms
+  that the observed MRR movement is normal between-build tie/order churn, not
+  a permanent quality drop.
 - Comparing the saved top tens found 883 changed topics: 724 retained the same
   top-10 set in a different order, 159 changed at the cutoff, 39 changed the
   first-ranked document, and 40 changed reciprocal rank. Those 40 changes

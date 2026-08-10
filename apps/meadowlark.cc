@@ -5,13 +5,14 @@
 #include <utility>
 #include <vector>
 
+#include "apps/walk.h"
 #include "meadowlark/meadowlark.h"
 
 void usage(std::string program_name) {
   std::cerr << "usage: " << program_name
             << " [--meadow meadow] [--create [parameter:value ...]]"
-            << " [--tsv file...] [--jsonl|--json file...]"
-            << " [--text file...] [--code file...]...\n";
+            << " [--tsv path...] [--jsonl|--json path...]"
+            << " [--text path...] [--code path...]...\n";
 }
 
 bool parameter_assignment(const std::string &argument, std::string *key,
@@ -142,7 +143,13 @@ int main(int argc, char **argv) {
       usage(program_name);
       return 1;
     } else {
-      inputs.push_back({input_type, argument});
+      std::vector<std::string> filenames;
+      if (!cottontail::walk_filesystem(argv[1], &filenames)) {
+        std::cerr << program_name << ": Can't walk " << argument << "\n";
+        return 1;
+      }
+      for (const auto &filename : filenames)
+        inputs.push_back({input_type, filename});
       expecting_file = false;
     }
     argc--;

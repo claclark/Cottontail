@@ -120,9 +120,9 @@ cc_binary(
 )
 
 cc_binary(
-    name = "finish-merging",
+    name = "consolidate",
     srcs = [
-      "finish-merging.cc",
+      "consolidate.cc",
     ],
     deps = [
       "//src:cottontail",
@@ -130,6 +130,18 @@ cc_binary(
     linkopts = [
       "-pthread",
     ],
+)
+
+genrule(
+    name = "finish-merging-compat",
+    srcs = [
+        ":consolidate",
+    ],
+    outs = [
+        "finish-merging",
+    ],
+    cmd = "ln -s consolidate $@",
+    executable = True,
 )
 
 cc_binary(
@@ -143,6 +155,18 @@ cc_binary(
     linkopts = [
       "-lreadline -pthread"
     ],
+)
+
+genrule(
+    name = "inspect-alias",
+    srcs = [
+        ":fluffy",
+    ],
+    outs = [
+        "inspect",
+    ],
+    cmd = "ln -s fluffy $@",
+    executable = True,
 )
 
 cc_binary(
@@ -217,9 +241,10 @@ cc_binary(
     ],
     deps = [
       "//src:cottontail",
+      "walk",
     ],
     linkopts = [
-      "-pthread",
+      "-L/usr/local/lib -lboost_system -lboost_filesystem -pthread",
     ],
 )
 

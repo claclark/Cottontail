@@ -18,7 +18,7 @@ The new app must reuse shared Meadowlark argument/append code or invoke the
 existing `meadowlark` executable. It must not copy Meadowlark parsing and
 ingestion logic into another app. The same principle applies to final
 consolidation: call `Bigwig::consolidate(...)` directly or invoke
-`apps/finish-merging` rather than copying its Fiver/Hazel lifecycle.
+`apps/consolidate` rather than copying its Fiver/Hazel lifecycle.
 
 ## Command Shape
 
@@ -159,9 +159,10 @@ coverage, merges each maximal Fiver run once in memory, converts the merged
 Fiver directly to Hazel without pickling it, performs the final Hazel merge,
 and verifies that exactly one Hazel covers the complete sequence.
 
-`apps/finish-merging` is the command-line caller of this operation and may be
-invoked instead of duplicating it. Consolidations should remain serial because
-the many-Hazel path is intended to use the machine's permitted thread budget.
+`apps/consolidate` is the command-line caller of this operation and may be
+invoked instead of duplicating it. The older `finish-merging` name is a
+compatibility symlink. Consolidations should remain serial because the
+many-Hazel path is intended to use the machine's permitted thread budget.
 
 ## Finalization And Publication
 

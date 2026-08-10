@@ -571,6 +571,13 @@ the MRR delta. Ranking sorts by score without a document-id tie-break, so this
 pattern is consistent with equal-score traversal-order churn between physical
 merge layouts rather than a partial semantic failure.
 
+On 2026-08-10, the 2026-07-26 parallel-build `a.meadow/`, preserved under the
+name `e.meadow/`, again produced exactly `0.18948731068358557`. A current
+independent `a.meadow/` produced `0.1898843634875152`. Both ranked 6,980 topics
+and emitted the same two known fake-result topics. The preserved index's exact
+repeat and the independent build's higher score confirm that this MRR range is
+normal between-build tie/order churn rather than a permanent drop.
+
 Historical first-pass Hazel activation before decoded idx posting caching was
 correct but unusably slow: around 43 minutes wall time and roughly 30 GB RSS
 on the merged `a.meadow` Hazel. Adding the Hazel idx decoded posting cache

@@ -28,10 +28,13 @@ benchmarks and subsequent performance work are recorded below.
   resumed. Unused, invalid, legacy, or conflicting recoveries are discarded.
   Cleanup uses the explicit `remove_hazel_merge_segments(...)` operation.
 - Verbose progress and phase timings are emitted only by
-  `Bigwig::consolidate(...)`. `finish-merging --verbose` opts into them; the
+  `Bigwig::consolidate(...)`. `consolidate --verbose` opts into them; the
   library operation is silent by default.
-- `finish-merging` now invokes foreground consolidation directly instead of
+- `consolidate` invokes foreground consolidation directly instead of
   activating background workers and polling.
+
+The command was named `finish-merging` when the benchmarks below were run; the
+build now retains that name as a compatibility symlink to `consolidate`.
 
 ### Benchmark History
 

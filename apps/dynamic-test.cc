@@ -3,6 +3,7 @@
 #include <map>
 #include <mutex>
 #include <queue>
+#include <regex>
 #include <set>
 #include <string>
 #include <thread>

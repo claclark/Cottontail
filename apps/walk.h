@@ -2,7 +2,6 @@
 #define COTTONTAIL_APPS_WALK_H_
 
 #include <exception>
-#include <regex>
 #include <string>
 #include <vector>
 

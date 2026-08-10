@@ -1,7 +1,6 @@
 #include "apps/walk.h"
 
 #include <exception>
-#include <regex>
 #include <string>
 #include <vector>
 
@@ -12,9 +11,7 @@ namespace {
 
 void try_adding_file(const boost::filesystem::path &p,
                      std::vector<std::string> *text) {
-  std::regex readme("readme", std::regex_constants::icase);
-  if (!std::regex_search(p.string(), readme))
-    text->push_back(p.string());
+  text->push_back(p.string());
 }
 
 void try_adding_directory(const boost::filesystem::path &p,

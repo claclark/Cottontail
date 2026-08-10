@@ -20,7 +20,8 @@ model-facing database bootstrap guide is `ai/exploring-meadowlark.md`.
 
 Restartable parallel Hazel merging and foreground Bigwig consolidation are
 complete. `Bigwig::consolidate(...)` implements the offline operation,
-`finish-merging` delegates to it, and the user has verified the work through
+`consolidate` delegates to it (`finish-merging` remains a compatibility
+symlink), and the user has verified the work through
 the full regression suite, large MS MARCO consolidation, repeated ranking, and
 interrupted background-merge recovery. The implementation, benchmarks,
 recovery behavior, and focused coverage are recorded in
