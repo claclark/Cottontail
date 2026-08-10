@@ -132,6 +132,22 @@ Potential follow-ups are:
   temporary-name conventions, working-directory cleanup, and checked removal.
 - Keep arbitrary full-path or non-working-directory operations separate, so the
   boundary stays clear.
+- `Working` still shells out to `/bin/mkdir -p` when creating a working
+  directory, `/bin/rm -f` when removing stale `temp.*` files, and `/bin/ls` or
+  `/usr/bin/ls` when listing contents. If a concrete portability, correctness,
+  or error-reporting problem justifies changing this, replace those operations
+  with C++17 `std::filesystem`; do not undertake the cleanup merely because the
+  standard-library operation now exists.
+- Existing regression coverage would catch gross failures: ordinary
+  `Working::mkdir(...)` is used throughout the suite, and Bigwig/Hazel tests
+  depend heavily on `Working::ls(...)`. Before changing the implementation,
+  add focused coverage for nested and punctuation-bearing paths, `temp.*`
+  cleanup that preserves unrelated files, prefix listing, and relevant error
+  paths.
+- The separate application `walk_filesystem(...)` helper currently has no
+  runtime regression coverage. Add a small focused test only when its behavior
+  is next being changed; cover a single file, recursive directories, README
+  inclusion, an empty directory, and a nonexistent path.
 
 ## Concurrent Shard Activation
 

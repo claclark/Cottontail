@@ -184,6 +184,8 @@
 - `src/BUILD` exports `//src:cottontail`, including `src/*`, `gcl/*`, and the
   Meadowlark library.
 - `apps/BUILD` contains standalone `cc_binary` targets.
+- The shared application filesystem walker uses C++17 `std::filesystem`; its
+  consumers require no Boost installation or `/usr/local` include/link flags.
 - `test/BUILD` contains aggregate `//test:tests` and dedicated
   `//test:hazel_test` and `//test:optimizer_test`.
 - Repository rule: agents should run compile/build checks only. Do not run test

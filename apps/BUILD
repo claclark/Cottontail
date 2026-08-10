@@ -89,7 +89,7 @@ cc_binary(
       "walk",
     ],
     linkopts = [
-      "-L/usr/local/lib -lboost_system -lboost_filesystem -pthread",
+      "-pthread",
     ],
 )
 
@@ -244,7 +244,7 @@ cc_binary(
       "walk",
     ],
     linkopts = [
-      "-L/usr/local/lib -lboost_system -lboost_filesystem -pthread",
+      "-pthread",
     ],
 )
 
@@ -350,11 +350,8 @@ cc_binary(
       "collection",
       "walk",
     ],
-    copts = [
-      "-I/usr/local/include",
-    ],
     linkopts = [
-      "-L/usr/local/lib -lboost_system -lboost_filesystem -pthread",
+      "-pthread",
     ],
 )
 
@@ -459,7 +456,7 @@ cc_binary(
       "walk",
     ],
     linkopts = [
-      "-L/usr/local/lib -lboost_system -lboost_filesystem -pthread",
+      "-pthread",
     ],
 )
 
