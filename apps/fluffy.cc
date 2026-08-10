@@ -57,7 +57,7 @@ int main(int argc, char **argv) {
     linenoiseHistoryAdd(line.c_str());
     auto clean = [](std::string s) {
       for (size_t i = 0; i < s.length(); i++)
-        if (s[i] == '\n')
+        if (s[i] == '\n' || s[i] == '\r')
           s[i] = ' ';
       return cottontail::json_translate(s);
     };
