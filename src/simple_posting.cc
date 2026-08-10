@@ -592,7 +592,7 @@ bool SimplePosting::invariants(std::string *error) {
   return true;
 }
 
-bool SimplePosting::operator==(const SimplePosting &other) {
+bool SimplePosting::operator==(const SimplePosting &other) const {
   return feature_ == other.feature_ && postings_ == other.postings_ &&
          qostings_ == other.qostings_ && fostings_ == other.fostings_ &&
          posting_compressor_ == other.posting_compressor_ &&

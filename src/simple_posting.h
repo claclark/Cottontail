@@ -23,7 +23,7 @@ public:
   void push(addr p, addr q, fval v);
   addr feature() { return feature_; };
   bool invariants(std::string *error = nullptr);
-  bool operator==(const SimplePosting &other);
+  bool operator==(const SimplePosting &other) const;
   inline size_t size() { return postings_.size(); }
 
   SimplePosting(const SimplePosting &) = delete;
