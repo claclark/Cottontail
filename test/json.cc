@@ -68,12 +68,32 @@ TEST(JSON, Encode) {
                 cottontail::close_string_token);
 }
 
-TEST(JSON, TranslateEscapesControlsInsideStrings) {
+TEST(JSON, TranslateMakesControlsDisplayable) {
+  std::string encoded = cottontail::open_string_token +
+                        std::string("\b\f\n\r\t\x01", 6) +
+                        cottontail::close_string_token + "\n\r";
+  EXPECT_EQ(cottontail::json_translate(encoded),
+            "\"\\b\\f \\t\\u0001\"");
+}
+
+TEST(JSON, ConvertProducesValidExternalJson) {
   std::string encoded = cottontail::open_string_token +
                         std::string("\b\f\n\r\t\x01", 6) +
                         cottontail::close_string_token;
-  EXPECT_EQ(cottontail::json_translate(encoded),
-            "\"\\b\\f\\n\\r\\t\\u0001\"");
+  std::string converted, error;
+  ASSERT_TRUE(cottontail::json_convert(encoded, &converted, &error)) << error;
+  EXPECT_EQ(converted, "\"\\b\\f\\n\\r\\t\\u0001\"");
+}
+
+TEST(JSON, ConvertRequiresOneCompleteJsonValue) {
+  std::string converted;
+  EXPECT_FALSE(cottontail::json_convert(cottontail::open_object_token,
+                                        &converted));
+  EXPECT_FALSE(cottontail::json_convert(
+      cottontail::open_string_token + "one" + cottontail::close_string_token +
+          cottontail::open_string_token + "two" +
+          cottontail::close_string_token,
+      &converted));
 }
 
 namespace {

@@ -49,6 +49,11 @@ identity in its `file` field. To select metadata for a particular source:
 Do not infer the format from `.cc`, `.tsv`, or another suffix; use the metadata
 record's `type`.
 
+Current filename text is internally framed as a JSON string, so display tools
+show names with quotes and preserve leading `./` or `/`. The corresponding
+filename feature is still the unquoted normalized path. Historical databases
+may display their raw filename text without quotes.
+
 ## Learn The Data Shape
 
 Ordinary data objects use `:`. JSON member and TSV column annotations use
@@ -56,15 +61,22 @@ colon-path features. A TSV metadata record's `columns` array is the authoritativ
 mapping from source columns to those features. If `header` is true, the header
 record itself uses `::`.
 
-Text and code files are each one `:` object. Token-bearing physical code lines
-use `#`; the annotation value is the one-based physical line number. Blank or
-otherwise tokenless lines still count but have no `#` interval.
+Token-bearing text and code files are each one `:` object. Token-bearing
+physical code lines use `#`; the annotation value is the one-based physical
+line number. Blank or otherwise tokenless lines still count but have no `#`
+interval. A completely tokenless file has no `:` object.
 
 To restrict ordinary objects to a source, use its filename as a feature:
 
 ```text
 (<< : src/foo.cc)
 ```
+
+A bare filename query returns the addressable data chunk or chunks for that
+source. JSONL and TSV may have more than one because ingestion workers publish
+separate chunks. The containment query above returns the individual `:` objects
+inside those chunks. A tokenless source has no filename-feature result even
+though it remains present in `/` and `@`.
 
 ## Recover Provenance
 
@@ -104,6 +116,12 @@ legacy `@tf-idf:` lookup annotation.
 
 Foraging is not a file append. A forager record generally has no associated
 filename and sits outside `/.` file segments.
+
+File `@` records also sit outside `/.`. A `/.` interval is specifically a
+nonempty data segment containing its local `//` filename and data. A tokenless
+source still appears under `/` and `@` and has one `//`, but has no `/.` or `:`
+interval. Older databases may instead place file metadata inside `/.` and may
+put `//` on the canonical `/` filename; consumers should tolerate both layouts.
 
 ## Minimal Exploration Sequence
 

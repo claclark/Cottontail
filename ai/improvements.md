@@ -106,9 +106,10 @@ Potential follow-ups are:
   a preliminary full-file scan or weakening coordinated publication.
 - Retain missing-`type` and `@tf-idf:` handling as explicit legacy forager
   compatibility until there is a deliberate database migration policy.
-- Require each future file-source adapter to define its `type` record, emit
-  transaction-local `//` and `/.` provenance, and publish that metadata
-  atomically with its canonical `/` marker and data.
+- Require each future file-source adapter to define its `type` record, emit a
+  transaction-local `//`, and publish that metadata atomically with its
+  canonical `/` marker and data. Nonempty data belongs with `//` inside `/.`;
+  tokenless input deliberately has no `/.`, `:`, or filename-feature interval.
 - Add a library-level discovery convenience only if repeated consumers need
   one. The `@` record and `:type:` field convention already permits unknown
   types to be inspected or ignored without global component registration.
@@ -212,14 +213,10 @@ Potential follow-ups are:
 
 ## Txt Wrapping
 
-- Preserve `Txt::translate(...)` as an index-facing representation that the
-  configured tokenizer can split back into the same token stream. Internal JSON
-  structural tokens belong in that representation; presentation conversion
-  belongs at application display boundaries through `json_translate(...)`.
 - Audit and eventually remove or simplify `JsonTxt` presentation wrapping. It
-  currently makes storage-level translation depend on display concerns and
-  obscures the distinction between faithful translation and human-readable
-  rendering.
+  still applies the lossy `json_translate(...)` display operation at the text
+  abstraction boundary. Full stored JSON conversion now has the separate,
+  validating `json_convert(...)` operation.
 - Revisit `Txt::wrap(...)` and the general wrapper model.
 - Clarify whether one recipe should carry both a concrete `Txt` component's
   physical parameters and wrapper-layer parameters.

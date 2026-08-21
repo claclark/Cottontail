@@ -23,6 +23,7 @@ cc_test(
         "sonnet2.txt",
         "test.tsv",
         "test0.txt",
+        "tokenless.txt",
         "test.qrels",
     ],
 )

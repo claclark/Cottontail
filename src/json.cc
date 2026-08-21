@@ -224,85 +224,106 @@ bool json_append(const std::string &s, std::shared_ptr<Warren> warren, addr *p,
 namespace {
 inline void sanity_check() { assert(noncharacter_token_length == 3); }
 
-inline bool is_next(const char *c, const std::string token) {
-  const char *t = token.c_str();
-  return c[0] && c[0] == t[0] && c[1] && c[1] == t[1] && c[2] && c[2] == t[2];
+inline bool is_next(const std::string &s, size_t i, const std::string &token) {
+  return i + token.size() <= s.size() &&
+         s.compare(i, token.size(), token) == 0;
 }
 
-inline const char *skip(const char *c) {
-  return c + (noncharacter_token_length - 1);
+void append_escaped(unsigned char c, std::string *output) {
+  if (c == '"')
+    *output += "\\\"";
+  else if (c == '\\')
+    *output += "\\\\";
+  else if (c == '\b')
+    *output += "\\b";
+  else if (c == '\f')
+    *output += "\\f";
+  else if (c == '\n')
+    *output += "\\n";
+  else if (c == '\r')
+    *output += "\\r";
+  else if (c == '\t')
+    *output += "\\t";
+  else if (c < 0x20) {
+    static const char hex[] = "0123456789abcdef";
+    *output += "\\u00";
+    *output += hex[(c >> 4) & 0x0f];
+    *output += hex[c & 0x0f];
+  } else {
+    *output += static_cast<char>(c);
+  }
 }
-} // namespace
 
-std::string json_translate(const std::string &s) {
+std::string render_json(const std::string &s, bool external) {
   sanity_check();
   bool inside = false;
   bool pending_space = false;
   std::string t;
-  for (const char *c = s.c_str(); *c; c++) {
-    if (*c != ' ' && *c != '\n' && pending_space) {
+  for (size_t i = 0; i < s.size(); i++) {
+    if (!external && (s[i] == '\n' || s[i] == '\r')) {
+      pending_space = true;
+      continue;
+    }
+    if (!external && s[i] != ' ' && pending_space) {
       pending_space = false;
       t += ' ';
     }
-    if (is_next(c, open_object_token)) {
+    if (is_next(s, i, open_object_token)) {
       t += "{";
-      c = skip(c);
-    } else if (is_next(c, close_object_token)) {
+      i += noncharacter_token_length - 1;
+    } else if (is_next(s, i, close_object_token)) {
       t += "}";
-      c = skip(c);
-    } else if (is_next(c, open_array_token)) {
+      i += noncharacter_token_length - 1;
+    } else if (is_next(s, i, open_array_token)) {
       t += "[";
-      c = skip(c);
-    } else if (is_next(c, close_array_token)) {
+      i += noncharacter_token_length - 1;
+    } else if (is_next(s, i, close_array_token)) {
       t += "]";
-      c = skip(c);
-    } else if (is_next(c, open_string_token)) {
+      i += noncharacter_token_length - 1;
+    } else if (is_next(s, i, open_string_token)) {
       t += "\"";
-      c = skip(c);
+      i += noncharacter_token_length - 1;
       inside = true;
-    } else if (is_next(c, close_string_token)) {
+    } else if (is_next(s, i, close_string_token)) {
       t += "\"";
-      c = skip(c);
+      i += noncharacter_token_length - 1;
       inside = false;
-    } else if (is_next(c, colon_token)) {
+    } else if (is_next(s, i, colon_token)) {
       t += ":";
-      c = skip(c);
-    } else if (is_next(c, comma_token)) {
+      i += noncharacter_token_length - 1;
+    } else if (is_next(s, i, comma_token)) {
       t += ",";
-      c = skip(c);
-    } else if (is_next(c, open_number_token) ||
-               is_next(c, close_number_token)) {
-      c = skip(c);
+      i += noncharacter_token_length - 1;
+    } else if (is_next(s, i, open_number_token) ||
+               is_next(s, i, close_number_token)) {
+      i += noncharacter_token_length - 1;
     } else if (inside) {
-      if (*c == '"')
-        t += "\\\"";
-      else if (*c == '\\')
-        t += "\\\\";
-      else if (*c == '\b')
-        t += "\\b";
-      else if (*c == '\f')
-        t += "\\f";
-      else if (*c == '\n')
-        t += "\\n";
-      else if (*c == '\r')
-        t += "\\r";
-      else if (*c == '\t')
-        t += "\\t";
-      else if (static_cast<unsigned char>(*c) < 0x20) {
-        static const char hex[] = "0123456789abcdef";
-        unsigned char u = static_cast<unsigned char>(*c);
-        t += "\\u00";
-        t += hex[(u >> 4) & 0x0f];
-        t += hex[u & 0x0f];
-      } else
-        t += *c;
-    } else if (*c == '\n') {
-      pending_space = true;
+      append_escaped(static_cast<unsigned char>(s[i]), &t);
     } else {
-      t += *c;
+      t += s[i];
     }
   }
   return t;
+}
+} // namespace
+
+std::string json_translate(const std::string &s) {
+  return render_json(s, false);
+}
+
+bool json_convert(const std::string &internal, std::string *external,
+                  std::string *error) {
+  assert(external != nullptr);
+  std::string converted = render_json(internal, true);
+  try {
+    json parsed = json::parse(converted);
+    (void)parsed;
+  } catch (const json::parse_error &e) {
+    safe_error(error) = "Cannot convert json: " + std::string(e.what());
+    return false;
+  }
+  *external = converted;
+  return true;
 }
 
 std::string json_encode(const std::string &input) {

@@ -127,6 +127,24 @@
 - The durable format, metadata, provenance, and restart conventions are in
   `ai/meadowlark.md`. The concise model bootstrap is
   `ai/exploring-meadowlark.md`.
+- File `@` metadata is outside `/.`. Canonical filenames receive `/` only;
+  every nonempty worker data chunk has a leading `//`, one encompassing `/.`,
+  and one normalized-filename feature interval over the chunk's data.
+- New `/` and `//` filename text uses internal JSON string delimiters so display
+  preserves leading punctuation. Tokenless files publish `/`, `@`, and `//`,
+  but no `/.`, `:`, or filename-feature interval. Restart accepts historical
+  raw filename text as well as framed text.
+- `json_translate(...)` is a lossy arbitrary-interval display operation;
+  `json_convert(...)` validates and produces external JSON from one complete
+  internal value. `meadowlark::json2forager(...)` uses the latter.
+- Display translation handles CR and LF lazily: they become one pending space
+  when later content follows and disappear at interval end. This prevents token
+  splices without exposing trailing text-store fluff.
+- The unused public `Txt::raw(...)` operation has been removed.
+- The user verified this format adjustment against indices dating from 2022,
+  newer Hazel/Fiver indices, a build from scratch, and the 1.3 TB ClimbMix
+  index. Historical indices remain in their historical layout; compatibility
+  is read-side rather than an implicit migration.
 
 ## CLI Surfaces
 

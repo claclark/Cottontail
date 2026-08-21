@@ -33,6 +33,8 @@ bool json_append(const std::string &s, std::shared_ptr<Warren> warren, addr *p,
                  addr *q, const std::string &feature = ":",
                  std::string *error = nullptr);
 std::string json_translate(const std::string &s);
+bool json_convert(const std::string &internal, std::string *external,
+                  std::string *error = nullptr);
 std::string json_encode(const std::string &input);
 } // namespace cottontail
 #endif // COTTONTAIL_SRC_JSON_H_

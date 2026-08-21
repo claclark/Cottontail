@@ -1645,7 +1645,6 @@ private:
       return "";
     return std::string(start, end - start);
   };
-  std::string raw_(addr p, addr q) final { return translate(p, q); };
   addr tokens_() final {
     if (token_start_ == maxfinity)
       return 0;

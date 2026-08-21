@@ -12,6 +12,10 @@ If an agreed change appears to require a broader abstraction or materially
 different design, stop and discuss it. Proposals for cleanup and refactoring
 are welcome, but they also require discussion before implementation.
 
+For the current Meadowlark push, the user makes all commits and runs the
+regression tests. Agent verification is compile/build-only unless the user
+explicitly requests a runtime experiment or test run.
+
 ## Current Checkpoint
 
 The Meadowlark JSONL, TSV, text, and code ingestion work is complete. Durable
@@ -54,15 +58,46 @@ the ClimbMix collection in TREC RAG 2026. Agent verification remained
 compile-only; the user reports that the combined changes have been tested in
 various ways and are ready to commit.
 
-## Next Step
+## Active Direction
 
-Unknown. There is no selected next design area or coding step. The goal is to
-make Cottontail a useful general library, and the next work should be chosen
-only after a fresh discussion of what best advances that goal. Do not infer a
-roadmap from completed-work records or from entries in `ai/improvements.md`.
+The current push is to finish Meadowlark as Cottontail's file-oriented metadata
+layer. Work on the separate Python wrapper follows Meadowlark. The preliminary
+indexed-regular-expression work remains deferred in `ai/regex.md`; preserve its
+session and design state, but do not mix it into the Meadowlark work.
+
+## Completed Meadowlark Filename And Labeling Step
+
+1. JSONL filename membership is now chunk-based. JSONL writes one `/.`
+   envelope and one normalized-filename feature interval per nonempty worker
+   transaction rather than one filename interval per `:` record. This preserves
+   the important `(<< : filename)` query, which returns the ordinary objects
+   from the named file.
+2. Activity metadata is now outside file data containers. An `@` metadata
+   record is not contained by `/.`; the canonical `/` filename is separate;
+   and each nonempty data `/.` chunk contains one leading `//` filename and its
+   data payload. Metadata, the canonical filename, and all data chunks remain
+   atomically published.
+3. New `/` and `//` filename text is framed with the internal JSON string
+   tokens. This preserves leading `./` and `/` in display without changing the
+   normalized filename feature. Restart recognition tolerates historical raw
+   names. Tokenless files deliberately publish `/`, `@`, and `//`, but no
+   address-dependent `/.`, `:`, or filename feature.
+4. JSON handling now separates lossy arbitrary-interval display through
+   `json_translate(...)` from validating full-value conversion through
+   `json_convert(...)`; machine parsing uses the latter. The unused
+   `Txt::raw(...)` interface has been removed.
+
+The user authorized this package after the semantics discussion spanning
+2026-08-20 and 2026-08-21. The first user regression run exposed eager trailing
+spaces in display translation and a legacy-restart test that queried an old
+read epoch. Both narrow corrections compile successfully. The user subsequently
+tested the change in several ways, including against indices dating from 2022,
+newer Hazel/Fiver indices, and a build from scratch, and reports that it looks
+good. The existing 1.3 TB ClimbMix index also booted and passed extensive use
+without observed problems. The commit remains with the user.
 
 The broader long-running-server memory discussion remains deferred. Bigwig
 trimming, Hazel text-cache eviction, and service pressure policy are preserved
 in `ai/memory.md` for possible later return; they are not the current project.
 
-No coding step is authorized by this plan.
+No further coding step is authorized by this plan.

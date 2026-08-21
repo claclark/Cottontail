@@ -1,6 +1,6 @@
 # Meadowlark Database Conventions
 
-Status date: 2026-07-25.
+Status date: 2026-08-21.
 
 This is the durable reference for Meadowlark's machine-facing structure,
 metadata, source provenance, and append invariants. Completed implementation
@@ -40,9 +40,9 @@ Ordinary words and names remain available to source data and applications.
 | Feature | Meaning |
 | --- | --- |
 | `@` | A complete metadata record. |
-| `/` | The canonical source filename, written once for a file. |
+| `/` | The canonical source filename and committed-source marker, written once for a file. |
 | `//` | A segment-local copy of a source filename. |
-| `/.` | A file segment containing a `//` filename and local metadata or data. |
+| `/.` | A nonempty file-data segment containing a `//` filename and local data. |
 | `:` | An ordinary input object or record. |
 | `::` | A TSV header record, when a header is requested. |
 | `#` | A token-bearing physical code line; its value is the one-based line number. |
@@ -94,12 +94,41 @@ Current types are:
 | `forager` | One derived annotation pass | `name`, `tag`, `parameters` |
 
 The type vocabulary is open. Consumers must discover it from the records they
-find rather than assume this table is permanently exhaustive.
+find rather than assume this table is permanently exhaustive. `type` names the
+kind of metadata record; it is not a separate generic action or verb field.
 
-When C++ code obtains the stored text of an `@` interval directly through
-`Txt::translate(...)`, it must apply `json_translate(...)` before parsing or
-presenting it as ordinary JSON. GCL structural queries operate on the indexed
-annotations directly.
+## Internal JSON Text And Conversion
+
+Cottontail's indexed JSON representation is not external textual JSON. Objects,
+arrays, strings, colons, commas, and number boundaries use reserved Unicode
+noncharacters that the UTF-8 tokenizer treats as structural tokens. String
+payloads contain decoded literal bytes, so a stored string may contain a
+literal control character that external JSON would have to escape.
+
+The two conversion operations have deliberately different contracts:
+
+- `json_translate(...)` is a permissive, lossy display operation for arbitrary
+  intervals. It replaces structural noncharacters with visible JSON
+  punctuation, removes number-boundary markers, and handles literal CR and LF
+  lazily as a pending space. The space is emitted only if later content follows,
+  preventing token splices without exposing trailing text-store fluff. Other
+  control bytes, quotes, and backslashes inside structural strings remain
+  escaped for safe one-line display. The result is not validated and is not a
+  transmission contract.
+- `json_convert(...)` is the machine boundary. It requires one complete JSON
+  value, converts the structural representation, performs the escaping required
+  by external JSON—including literal CR and LF inside strings—and validates the
+  result. Use it before parsing or transmitting a complete internally encoded
+  JSON value, such as a JSON input record's `:` interval or any `@` metadata
+  record. Ordinary text, code, and TSV `:` intervals are not JSON values.
+
+`meadowlark::json2forager(...)`, and therefore `TfIdfStats`, uses
+`json_convert(...)` for internally represented metadata while retaining direct
+parsing of historical ordinary-JSON records. GCL structural queries operate on
+the indexed annotations and need neither conversion. The unused `Txt::raw(...)`
+escape hatch has been removed; unwrapped `Txt::translate(...)` remains the way
+to obtain the index-facing representation, while a configured `JsonTxt` wrapper
+continues to apply display translation at its boundary.
 
 ## File Metadata
 
@@ -168,11 +197,12 @@ Ingestion does not scan the complete file in advance.
 
 ### Text And Code Data
 
-A text or code file is one ordinary `:` object. Code is appended a physical
-line at a time. Each physical line advances a one-based counter, including
-blank or otherwise tokenless lines. A line that produced a valid token interval
-receives `#` with that physical line number as its annotation value; a
-tokenless line receives no `#` annotation.
+A text or code file with addressable tokens is one ordinary `:` object. Code is
+appended a physical line at a time. Each physical line advances a one-based
+counter, including blank or otherwise tokenless lines. A line that produced a
+valid token interval receives `#` with that physical line number as its
+annotation value; a tokenless line receives no `#` annotation. A completely
+tokenless file follows the source-only rule described below and has no `:`.
 
 Thus a code query can return the matching line interval and its physical line
 number, while the normal provenance query recovers the file containing it.
@@ -254,17 +284,34 @@ databases, which predate the current field names.
 
 File ingestion connects metadata, data, and filenames in three ways:
 
-1. The canonical normalized filename text receives `/` and `//` once. It is
-   followed by the file's `@` metadata, and `/.` wraps that local filename and
-   metadata.
+1. One canonical normalized filename receives `/`. The file's separate typed
+   metadata object receives `@`; neither is inside `/.`.
 2. Every nonempty data segment begins with another filename copy receiving
    `//`. A `/.` annotation wraps that filename and the local data.
-3. The normalized filename is also featurized and annotates the data objects
-   from the file. It does not annotate metadata or the filename copies.
+3. The normalized filename is also featurized and annotates each nonempty
+   worker's data interval. It does not annotate metadata or filename copies.
+   A bare filename feature query therefore returns the file's addressable data
+   chunks, while `(<< : filename)` returns the ordinary objects inside them.
+
+The text underlying new `/` and `//` intervals uses Cottontail's internal JSON
+string delimiters. `json_translate(...)` therefore displays a complete name as
+`"src/foo.cc"`, including leading punctuation such as `./` or `/`. This
+framing changes only the stored filename text; the filename feature remains the
+unquoted normalized path used in queries such as `(<< : src/foo.cc)`.
 
 JSONL and TSV may have several data segments because workers append coordinated
-transactions. Text and code have one data segment. These are physical details;
-the query conventions are the same.
+transactions. Each nonempty worker has one filename-feature interval spanning
+its data, while individual JSON records and ordinary TSV data rows continue to
+receive `:`; a requested TSV header receives `::`. Text and code have one data
+segment. These are physical details; the query conventions are the same.
+
+A zero-byte or otherwise tokenless source still publishes `/`, `@`, and one
+local `//`. It publishes no `/.`, `:`, or normalized-filename interval because
+there is no addressable data interval. Non-token text remains retrievable with
+the preceding filename token according to the normal text-store translation
+rules. The canonical `/` marker is still written so restart cannot repeatedly
+retry a successfully processed empty or dust-only source. Zero-record JSONL and
+TSV sources write one local `//`, not one copy per idle worker.
 
 Useful provenance queries are:
 
@@ -286,6 +333,15 @@ filename. It works for ordinary objects, TSV records, and `#` code lines.
 Current path normalization is deliberately small: a filename containing no
 `/` is prefixed with `./`; other paths are unchanged.
 
+Readers may encounter older databases in which filename text is unframed,
+canonical `/` also receives `//`, `@` is inside `/.`, or JSON filename features
+are record-sized. These historical layouts remain readable. Restart discovery
+applies display translation and accepts both raw and newly framed `/` filename
+text by trimming surrounding whitespace and, when present, one pair of outer
+double quotes. This covers ordinary paths. Filenames containing bytes that
+display translation itself escapes, notably literal double quotes or
+backslashes, remain the known unusual ambiguity in this simple restart rule.
+
 ## Publication And Restart Invariants
 
 The canonical `/` marker must become visible atomically with the source
@@ -303,10 +359,24 @@ thin command-line caller of this library operation. The durable invariant is:
 JSONL and TSV coordinate their source transaction and worker transactions.
 Text and code use one transaction per complete file. A failure aborts the
 affected coordinated append rather than publishing its canonical marker alone.
+Committed data is visible to a newly started read epoch; an already-started
+Warren retains its existing view. Restart checks therefore run in a fresh
+started read epoch.
 
 Any future file adapter must preserve the same contract: an explicit typed
-metadata record, a canonical `/` identity, transaction-local `//` provenance
-inside `/.`, a filename feature on data only, and coordinated publication.
+metadata record, a canonical `/` identity, a local `//`, a filename feature on
+addressable data only, and coordinated publication. For nonempty data, `//`
+and the data are enclosed by `/.`; for an empty or tokenless source, `//`
+remains without `/.` or a filename-feature interval.
+
+## Compatibility Verification
+
+After the 2026-08-21 filename and metadata adjustment, the user verified the
+reader and writer in several ways: indices dating from 2022, newer Hazel/Fiver
+indices, a complete build from scratch, and the existing 1.3 TB ClimbMix index
+all worked without observed problems. These checks exercise both historical
+read compatibility and current-format construction; they do not rewrite old
+indices into the new metadata layout.
 
 ## Create-Time Warren Parameters
 

@@ -77,16 +77,18 @@ bool json2forager(const std::string &text, std::string *name, std::string *tag,
   *tag = "";
   parameters->clear();
 
-  std::string decoded = text;
-  if (text.find(open_object_token) != std::string::npos)
-    decoded = json_translate(text);
-  size_t end = decoded.size();
-  while (end > 0 && decoded[end - 1] == '\0')
+  size_t end = text.size();
+  while (end > 0 && text[end - 1] == '\0')
     --end;
+  std::string encoded(text.begin(), text.begin() + end);
+  std::string decoded = encoded;
+  if (encoded.find(open_object_token) != std::string::npos &&
+      !json_convert(encoded, &decoded, error))
+    return false;
 
   json metadata;
   try {
-    metadata = json::parse(decoded.begin(), decoded.begin() + end);
+    metadata = json::parse(decoded);
   } catch (const json::parse_error &) {
     safe_error(error) = "Error parsing forager from json";
     return false;

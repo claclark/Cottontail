@@ -14,6 +14,11 @@ able to rerun Meadowlark with a complete assigned file list and have Meadowlark
 skip committed files while appending only missing files. A future input type
 must meet the same contract before `static-shards` accepts it.
 
+The canonical `/` marker is the completion record even when an input has no
+addressable tokens. Such a source still publishes typed `@` metadata and one
+local `//`, but no `/.`, `:`, or filename-feature interval; restart must treat
+it as complete rather than retrying it forever.
+
 The new app must reuse shared Meadowlark argument/append code or invoke the
 existing `meadowlark` executable. It must not copy Meadowlark parsing and
 ingestion logic into another app. The same principle applies to final
