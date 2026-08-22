@@ -100,4 +100,13 @@ The broader long-running-server memory discussion remains deferred. Bigwig
 trimming, Hazel text-cache eviction, and service pressure policy are preserved
 in `ai/memory.md` for possible later return; they are not the current project.
 
+## Planned File-Oriented Foraging Step
+
+The next Meadowlark coding step has been designed but is not yet authorized.
+Its complete implementation plan is recorded in `ai/forager.md`. The plan makes
+the logical file the atomic unit for derived annotations, separates one global
+`(name, tag)` definition from file completion records, retains the top-level
+forager query, reshapes `Forager` into a transaction-neutral interval worker,
+and preserves read-only compatibility with older TF-IDF metadata.
+
 No further coding step is authorized by this plan.
