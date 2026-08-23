@@ -2,7 +2,9 @@
 
 ## Working Rule
 
-No coding without discussion and explicit confirmation from the user.
+No coding without a concrete reason, discussion, and explicit confirmation
+from the user. Documentation review or approval of one narrow change does not
+authorize adjacent source changes.
 
 Work on one agreed step at a time. Approval for one step does not authorize
 starting a later step. Entries in `ai/improvements.md` are possibilities, not
@@ -39,15 +41,15 @@ The first narrow memory-pressure response is implemented for standalone
 Hazels. `Warren::trim_memory()` is a public operation with a default no-op;
 Hazel overrides it to clear the shared decoded-posting `OwslaCache`. It leaves
 the Hazel text cache untouched. Repeated calls and calls through shallow Hazel
-clones are semantically harmless. The library and dedicated Hazel test target
-compile successfully; runtime coverage has not been run by the agent.
+clones are semantically harmless. Agent verification was compile-only; the
+user has since reported that the complete regression suite passes.
 
 `Optimizer::estimate_memory(...)` now provides a deliberately rough preflight
 estimate for a GCL string or parsed expression. It expands phrases,
 deduplicates term features, and prices their full posting counts at three
-address-sized fields per posting; a parse failure estimates zero. The library
-and both the dedicated optimizer and aggregate real-index test targets compile
-successfully without running the tests.
+address-sized fields per posting; a parse failure estimates zero. Agent
+verification was compile-only; the user has since reported that the complete
+regression suite, including the dedicated optimizer target, passes.
 
 `ssr-server` now applies the agreed first-cut Linux admission policy when a new
 query arrives. It trims all persistent collection Warrens above two-thirds RAM
@@ -75,8 +77,9 @@ session and design state, but do not mix it into the Meadowlark work.
 2. Activity metadata is now outside file data containers. An `@` metadata
    record is not contained by `/.`; the canonical `/` filename is separate;
    and each nonempty data `/.` chunk contains one leading `//` filename and its
-   data payload. Metadata, the canonical filename, and all data chunks remain
-   atomically published.
+   data payload. Metadata, the canonical filename, and all data chunks form a
+   coordinated recoverable commit set, subject to the short sequential
+   visibility window recorded in `ai/improvements.md`.
 3. New `/` and `//` filename text is framed with the internal JSON string
    tokens. This preserves leading `./` and `/` in display without changing the
    normalized filename feature. Restart recognition tolerates historical raw
@@ -100,13 +103,29 @@ The broader long-running-server memory discussion remains deferred. Bigwig
 trimming, Hazel text-cache eviction, and service pressure policy are preserved
 in `ai/memory.md` for possible later return; they are not the current project.
 
-## Planned File-Oriented Foraging Step
+## Completed File-Oriented Foraging Step
 
-The next Meadowlark coding step has been designed but is not yet authorized.
-Its complete implementation plan is recorded in `ai/forager.md`. The plan makes
-the logical file the atomic unit for derived annotations, separates one global
-`(name, tag)` definition from file completion records, retains the top-level
-forager query, reshapes `Forager` into a transaction-neutral interval worker,
-and preserves read-only compatibility with older TF-IDF metadata.
+Implementation was authorized on 2026-08-22 and is complete. Its implemented
+model and rationale are recorded in `ai/forager.md`. The logical file is the
+unit for derived annotations; one global `(name, tag)` definition is separate
+from per-file completion records; the query remains top-level; `Forager` is a
+transaction-neutral interval worker; and older TF-IDF metadata remains
+readable but cannot be extended by the current writer.
 
-No further coding step is authorized by this plan.
+Focused cases cover immutable definitions, validation before publication,
+default-tag and primary-record selection, multi-worker TSV file scoping and
+aggregate placement, literal legacy TF-IDF ranking/refusal, restart/skip
+behavior, and write-free NullForager transactions. The user reports that the
+complete regression suite and additional tests pass. The MS MARCO build and
+ranking path also work, with parallel worker readiness restoring forage time
+from the observed 11:23 regression to 3:12.
+
+## Completed Empty And Tokenless Fiver Readiness Step
+
+Write-free and tokenless Fiver transactions now serialize a commit artifact.
+Focused coverage exercises direct activation, empty/tokenless/tokenful flat and
+tree merges, and empty/tokenless/mixed Fiver-to-Hazel conversion. Hazel text
+serialization begins at raw byte zero when tokenless Fivers precede the first
+token chunk, while retaining the later token-chunk anchor and normal dust
+ownership semantics. The user reports that the full regression suite and
+additional tests pass after these changes.

@@ -2,19 +2,61 @@
 
 #include <map>
 #include <memory>
+#include <set>
 #include <string>
 
 #include "meadowlark/metadata.h"
 #include "meadowlark/null_forager.h"
 #include "meadowlark/tf-idf_forager.h"
-#include "src/annotator.h"
 #include "src/core.h"
-#include "src/json.h"
-#include "src/tokenizer.h"
 #include "src/warren.h"
 
 namespace cottontail {
 namespace meadowlark {
+
+namespace {
+std::string gcl_string(const std::string &s) {
+  std::string quoted = "\"";
+  for (char c : s) {
+    if (c == '\\' || c == '"')
+      quoted += '\\';
+    quoted += c;
+  }
+  quoted += '"';
+  return quoted;
+}
+
+std::string normalized_name(const std::string &name) {
+  return name == "" ? "tf-idf" : name;
+}
+
+std::string normalized_tag(const std::string &tag) {
+  return tag == "" ? "none" : tag;
+}
+
+std::string current_definition_query(const std::string &name,
+                                     const std::string &tag) {
+  std::string typed = "(>> @ (>> :type: \"forager\"))";
+  std::string named =
+      "(>> " + typed + " (>> :name: " + gcl_string(name) + "))";
+  std::string tagged =
+      "(>> " + named + " (>> :tag: " + gcl_string(tag) + "))";
+  return "(>> " + tagged + " :query:)";
+}
+
+bool check_parameters(const std::map<std::string, std::string> &parameters,
+                      std::string *error) {
+  static const std::set<std::string> reserved = {
+      "file", "filename", "name", "parameters",
+      "query", "tag",      "type"};
+  for (const auto &parameter : parameters)
+    if (reserved.find(parameter.first) != reserved.end()) {
+      safe_error(error) = "Reserved forager parameter: " + parameter.first;
+      return false;
+    }
+  return true;
+}
+} // namespace
 
 std::string forager_label(const std::string &name, const std::string &tag) {
   std::string combined_tag;
@@ -32,43 +74,59 @@ Forager::make(std::shared_ptr<Warren> warren, const std::string &name,
               const std::string &tag,
               const std::map<std::string, std::string> &parameters,
               std::string *error) {
+  if (!check_parameters(parameters, error))
+    return nullptr;
   std::shared_ptr<Forager> forager = nullptr;
-  std::string normalized_name = name == "" ? "tf-idf" : name;
-  std::string normalized_tag = tag == "" ? "none" : tag;
-  std::string combined_tag = forager_label(normalized_name, normalized_tag);
-  if (normalized_name == "null")
+  std::string n = normalized_name(name);
+  std::string t = normalized_tag(tag);
+  std::string combined_tag = forager_label(n, t);
+  if (n == "null")
     forager = NullForager::make(warren, combined_tag, parameters, error);
-  else if (normalized_name == "tf-idf")
+  else if (n == "tf-idf")
     forager = TfIdfForager::make(warren, combined_tag, parameters, error);
   else
-    safe_error(error) = "No Forager named: " + normalized_name;
-  if (forager != nullptr) {
-    forager->name_ = normalized_name;
-    forager->tag_ = normalized_tag;
-    forager->parameters_ = parameters;
+    safe_error(error) = "No Forager named: " + n;
+  if (forager != nullptr)
     forager->warren_ = warren;
-  }
   return forager;
 }
 
-bool Forager::check(const std::string &name, const std::string &tag,
-                    const std::map<std::string, std::string> &parameters,
-                    std::string *error) {
-  std::string normalized_name = name == "" ? "tf-idf" : name;
-  std::string normalized_tag = tag == "" ? "none" : tag;
-  std::string combined_tag = forager_label(normalized_name, normalized_tag);
-  if (normalized_name == "null")
-    return NullForager::check(combined_tag, parameters, error);
-  else if (normalized_name == "tf-idf")
-    return TfIdfForager::check(combined_tag, parameters, error);
-  safe_error(error) = "No Forager named: " + normalized_name;
-  return false;
+std::shared_ptr<Forager>
+Forager::make(std::shared_ptr<Warren> warren, const std::string &name,
+              const std::string &recipe, std::string *error) {
+  assert(warren != nullptr);
+  std::string n = normalized_name(name);
+  std::string t = normalized_tag(recipe);
+  std::unique_ptr<Hopper> hopper =
+      warren->hopper_from_gcl(current_definition_query(n, t), error);
+  if (hopper == nullptr)
+    return nullptr;
+  addr p, q;
+  hopper->tau(minfinity + 1, &p, &q);
+  if (p == maxfinity) {
+    safe_error(error) = "No current forager definition for: " + n + ":" + t;
+    return nullptr;
+  }
+  ForagerMetadata metadata;
+  if (!json2forager(warren->txt()->translate(p, q), &metadata, error))
+    return nullptr;
+  if (metadata.name != n || normalized_tag(metadata.tag) != t ||
+      !metadata.has_query || metadata.has_filename) {
+    safe_error(error) = "Forager metadata inconsistency";
+    return nullptr;
+  }
+  return make(warren, n, t, metadata.parameters, error);
 }
 
-bool Forager::label(std::string *error) {
-  addr p, q;
-  return json_append(forager2json(name_, tag_, parameters_), warren_, &p, &q,
-                     "@", error);
+bool Forager::check(std::shared_ptr<Warren> warren,
+                    const std::string &query, const std::string &name,
+                    const std::string &tag,
+                    const std::map<std::string, std::string> &parameters,
+                    std::string *error) {
+  assert(warren != nullptr);
+  if (warren->hopper_from_gcl(query, error) == nullptr)
+    return false;
+  return make(warren, name, tag, parameters, error) != nullptr;
 }
 
 } // namespace meadowlark

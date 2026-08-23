@@ -1,5 +1,7 @@
 #include "meadowlark/meadowlark.h"
 
+#include <fnmatch.h>
+
 #include <algorithm>
 #include <cassert>
 #include <cctype>
@@ -796,114 +798,619 @@ bool append_all(std::shared_ptr<Warren> warren,
   return true;
 }
 
-bool forage(std::shared_ptr<Warren> warren,
-            const std::vector<std::pair<addr, addr>> &intervals,
-            const std::string &name, const std::string &tag,
-            const std::map<std::string, std::string> &parameters,
-            std::string *error, size_t threads) {
+namespace {
+std::string normalized_forager_name(const std::string &name) {
+  return name == "" ? "tf-idf" : name;
+}
+
+std::string normalized_forager_tag(const std::string &tag) {
+  return tag == "" ? "none" : tag;
+}
+
+std::string forager_named_query(const std::string &name) {
+  std::string typed = "(>> @ (>> :type: \"forager\"))";
+  return "(>> " + typed + " (>> :name: " + gcl_string(name) + "))";
+}
+
+std::string forager_tagged_query(const std::string &name,
+                                 const std::string &tag) {
+  return "(>> " + forager_named_query(name) + " (>> :tag: " +
+         gcl_string(tag) + "))";
+}
+
+struct Definition {
+  bool current = false;
+  bool legacy = false;
+  bool completion = false;
+  std::string query;
+  std::map<std::string, std::string> parameters;
+};
+
+bool lookup_definition(std::shared_ptr<Warren> warren, const std::string &name,
+                       const std::string &tag, Definition *definition,
+                       std::string *error) {
   assert(warren != nullptr);
-  if (intervals.size() == 0)
-    return true;
-  if (!Forager::check(name, tag, parameters, error))
+  assert(definition != nullptr);
+  *definition = Definition();
+  std::unique_ptr<Hopper> hopper =
+      warren->hopper_from_gcl(forager_named_query(name), error);
+  if (hopper == nullptr)
     return false;
-  threads = thread_count(threads, intervals.size());
-  std::map<std::string, std::string> params = parameters;
-  params["start"] = std::to_string(intervals[0].first);
-  params["end"] = std::to_string(intervals[intervals.size() - 1].second);
-  bool failed = false;
-  std::mutex sync;
-  auto worker = [&](const std::vector<std::pair<addr, addr>> &intervals,
-                    size_t start, size_t n) {
-    std::string terror;
-    std::shared_ptr<cottontail::Warren> twarren;
-    {
-      std::lock_guard<std::mutex> _(sync);
-      if (failed)
-        return;
-      twarren = warren->clone(error);
-      if (twarren == nullptr) {
-        failed = true;
-        safe_error(error) = terror;
-        return;
-      }
+  addr p, q;
+  for (hopper->tau(minfinity + 1, &p, &q); p < maxfinity;
+       hopper->tau(p + 1, &p, &q)) {
+    ForagerMetadata metadata;
+    if (!json2forager(warren->txt()->translate(p, q), &metadata, error))
+      return false;
+    if (normalized_forager_tag(metadata.tag) != tag)
+      continue;
+    if (metadata.has_filename) {
+      definition->completion = true;
+      continue;
     }
-    twarren->start();
-    std::shared_ptr<Forager> forager =
-        Forager::make(twarren, name, tag, params, &terror);
-    if (!forager->transaction(&terror)) {
-      std::lock_guard<std::mutex> _(sync);
-      twarren->end();
-      if (!failed) {
-        failed = true;
-        safe_error(error) = terror;
-      }
-      return;
+    if (!metadata.has_query) {
+      definition->legacy = true;
+      continue;
     }
-    if ((start == 0 && !forager->label(&terror)) ||
-        !forager->forage(intervals, start, n, &terror) || !forager->ready()) {
-      std::lock_guard<std::mutex> _(sync);
-      forager->abort();
-      twarren->end();
-      if (!failed) {
-        failed = true;
-        safe_error(error) = terror;
-      }
-      return;
+    if (definition->current &&
+        (definition->query != metadata.query ||
+         definition->parameters != metadata.parameters)) {
+      safe_error(error) = "Conflicting forager definitions for: " + name +
+                          ":" + tag;
+      return false;
     }
-    forager->commit();
-    twarren->end();
+    definition->current = true;
+    definition->query = metadata.query;
+    definition->parameters = metadata.parameters;
+  }
+  if (name == "tf-idf" && tag == "none") {
+    hopper = warren->idx()->hopper(warren->featurizer()->featurize("@tf-idf:"));
+    if (hopper != nullptr) {
+      hopper->tau(minfinity + 1, &p, &q);
+      if (p < maxfinity)
+        definition->legacy = true;
+    }
+  }
+  return true;
+}
+
+bool legacy_error(const std::string &name, const std::string &tag,
+                  std::string *error) {
+  safe_error(error) = "The existing " + name + ":" + tag +
+                      " layer uses historical interval metadata; it remains "
+                      "readable but cannot be extended. Use a new tag.";
+  return false;
+}
+
+bool write_definition(std::shared_ptr<Warren> warren, const std::string &name,
+                      const std::string &tag, const std::string &query,
+                      const std::map<std::string, std::string> &parameters,
+                      std::string *error) {
+  if (!warren->transaction(error))
+    return false;
+  addr p, q;
+  if (!json_append(forager2json(name, tag, query, parameters), warren, &p, &q,
+                   "@", error) ||
+      !warren->ready(error)) {
+    warren->abort();
+    return false;
+  }
+  warren->commit();
+  return true;
+}
+
+bool resolve_definition(
+    std::shared_ptr<Warren> warren, const std::string &query,
+    const std::string &name, const std::string &tag,
+    const std::map<std::string, std::string> *supplied,
+    std::map<std::string, std::string> *resolved, std::string *error) {
+  assert(resolved != nullptr);
+  Definition definition;
+  if (!lookup_definition(warren, name, tag, &definition, error))
+    return false;
+  if (definition.legacy)
+    return legacy_error(name, tag, error);
+  if (supplied == nullptr) {
+    if (!definition.current) {
+      safe_error(error) = "No current forager definition for: " + name + ":" +
+                          tag;
+      return false;
+    }
+    if (definition.query != query) {
+      safe_error(error) = "Forager query does not match definition for: " +
+                          name + ":" + tag;
+      return false;
+    }
+    *resolved = definition.parameters;
+    return Forager::check(warren, query, name, tag, *resolved, error);
+  }
+  if (!Forager::check(warren, query, name, tag, *supplied, error))
+    return false;
+  if (definition.current) {
+    if (definition.query != query || definition.parameters != *supplied) {
+      safe_error(error) = "Forager specification does not match definition "
+                          "for: " +
+                          name + ":" + tag;
+      return false;
+    }
+  } else {
+    if (definition.completion) {
+      safe_error(error) = "Forager completion exists without definition for: " +
+                          name + ":" + tag;
+      return false;
+    }
+    if (!write_definition(warren, name, tag, query, *supplied, error))
+      return false;
+  }
+  *resolved = *supplied;
+  return true;
+}
+
+bool decode_path(const std::string &text, std::string *path) {
+  assert(path != nullptr);
+  size_t start = 0;
+  while (start < text.size() &&
+         std::isspace(static_cast<unsigned char>(text[start])))
+    start++;
+  size_t end = text.size();
+  while (end > start &&
+         std::isspace(static_cast<unsigned char>(text[end - 1])))
+    end--;
+  if (end - start >= 2 && text[start] == '"' && text[end - 1] == '"') {
+    start++;
+    end--;
+  }
+  if (start == end)
+    return false;
+  *path = normalized_path(text.substr(start, end - start));
+  return true;
+}
+
+bool meadow_inventory(std::shared_ptr<Warren> warren,
+                      std::vector<std::string> *paths, std::string *error) {
+  assert(paths != nullptr);
+  paths->clear();
+  std::set<std::string> unique;
+  std::unique_ptr<Hopper> hopper =
+      warren->idx()->hopper(warren->featurizer()->featurize("/"));
+  if (hopper == nullptr) {
+    safe_error(error) = "Cannot read meadow file inventory";
+    return false;
+  }
+  addr p, q;
+  for (hopper->tau(minfinity + 1, &p, &q); p < maxfinity;
+       hopper->tau(p + 1, &p, &q)) {
+    std::string path;
+    if (!decode_path(json_translate(warren->txt()->translate(p, q)), &path)) {
+      safe_error(error) = "Cannot decode meadow filename";
+      return false;
+    }
+    unique.insert(path);
+  }
+  paths->assign(unique.begin(), unique.end());
+  return true;
+}
+
+bool expand_selectors(std::shared_ptr<Warren> warren,
+                      const std::vector<std::string> &selectors,
+                      std::vector<std::string> *paths, std::string *error) {
+  std::vector<std::string> inventory;
+  if (!meadow_inventory(warren, &inventory, error))
+    return false;
+  if (selectors.empty()) {
+    *paths = inventory;
+    return true;
+  }
+  std::set<std::string> selected;
+  for (const auto &selector : selectors) {
+    std::string pattern = normalized_path(selector);
+    bool matched = false;
+    for (const auto &path : inventory)
+      if (fnmatch(pattern.c_str(), path.c_str(), FNM_PATHNAME) == 0) {
+        selected.insert(path);
+        matched = true;
+      }
+    if (!matched) {
+      safe_error(error) = "No meadow file matches: " + selector;
+      return false;
+    }
+  }
+  paths->assign(selected.begin(), selected.end());
+  return true;
+}
+
+bool scoped_intervals(std::shared_ptr<Warren> warren,
+                      const std::string &filename, const std::string &query,
+                      std::vector<std::pair<addr, addr>> *intervals,
+                      std::string *error) {
+  assert(intervals != nullptr);
+  intervals->clear();
+  std::string scoped = "(<< " + query + " " + filename + ")";
+  std::unique_ptr<Hopper> hopper = warren->hopper_from_gcl(scoped, error);
+  if (hopper == nullptr)
+    return false;
+  addr p, q;
+  for (hopper->tau(minfinity + 1, &p, &q); p < maxfinity;
+       hopper->tau(p + 1, &p, &q))
+    intervals->emplace_back(p, q);
+  return true;
+}
+
+bool source_type(std::shared_ptr<Warren> warren, const std::string &filename,
+                 InputType *input_type, std::string *error) {
+  assert(input_type != nullptr);
+  *input_type = InputType::NONE;
+  std::vector<std::string> fields = {"filename", "file"};
+  for (const auto &field : fields) {
+    std::string query = "(>> @ (>> :" + field + ": " +
+                        gcl_string(filename) + "))";
+    std::unique_ptr<Hopper> hopper = warren->hopper_from_gcl(query, error);
+    if (hopper == nullptr)
+      return false;
+    addr p, q;
+    for (hopper->tau(minfinity + 1, &p, &q); p < maxfinity;
+         hopper->tau(p + 1, &p, &q)) {
+      std::string type, path;
+      if (!json2file(warren->txt()->translate(p, q), &type, &path, error))
+        return false;
+      if (normalized_path(path) != filename || type == "forager")
+        continue;
+      InputType found = InputType::NONE;
+      if (type == "tsv")
+        found = InputType::TSV;
+      else if (type == "json")
+        found = InputType::JSONL;
+      else if (type == "text")
+        found = InputType::TEXT;
+      else if (type == "code")
+        found = InputType::CODE;
+      if (found == InputType::NONE) {
+        safe_error(error) = "Unknown source type for: " + filename;
+        return false;
+      }
+      if (*input_type != InputType::NONE && *input_type != found) {
+        safe_error(error) = "Conflicting source metadata for: " + filename;
+        return false;
+      }
+      *input_type = found;
+    }
+  }
+  if (*input_type == InputType::NONE) {
+    safe_error(error) = "No source metadata for: " + filename;
+    return false;
+  }
+  return true;
+}
+} // namespace
+
+bool already_foraged(std::shared_ptr<Warren> warren,
+                     const std::string &filename, const std::string &name,
+                     const std::string &tag, bool *foraged,
+                     std::string *error) {
+  assert(warren != nullptr);
+  assert(foraged != nullptr);
+  *foraged = false;
+  std::string path = normalized_path(filename);
+  std::string n = normalized_forager_name(name);
+  std::string t = normalized_forager_tag(tag);
+  std::string query = "(>> " + forager_tagged_query(n, t) +
+                      " (>> :filename: " + gcl_string(path) + "))";
+  std::unique_ptr<Hopper> hopper = warren->hopper_from_gcl(query, error);
+  if (hopper == nullptr)
+    return false;
+  addr p, q;
+  for (hopper->tau(minfinity + 1, &p, &q); p < maxfinity;
+       hopper->tau(p + 1, &p, &q)) {
+    ForagerMetadata metadata;
+    if (!json2forager(warren->txt()->translate(p, q), &metadata, error))
+      return false;
+    if (metadata.has_filename && normalized_path(metadata.filename) == path &&
+        metadata.name == n && normalized_forager_tag(metadata.tag) == t) {
+      *foraged = true;
+      return true;
+    }
+  }
+  return true;
+}
+
+namespace {
+struct ForageWorker {
+  std::shared_ptr<Warren> warren;
+  std::shared_ptr<Forager> forager;
+  size_t start;
+  size_t end;
+};
+
+bool forage_file_started(
+    std::shared_ptr<Warren> warren, const std::string &filename,
+    const std::vector<std::pair<addr, addr>> &intervals,
+    const std::string &name, const std::string &tag,
+    const std::map<std::string, std::string> &parameters, std::string *error,
+    size_t threads) {
+  size_t worker_count =
+      intervals.empty()
+          ? 0
+          : std::min(intervals.size(), thread_count(threads, intervals.size()));
+  std::vector<ForageWorker> workers;
+  std::vector<std::shared_ptr<Warren>> transactions;
+  auto abort_all = [&]() {
+    for (auto &transaction : transactions) {
+      transaction->abort();
+      transaction->end();
+    }
   };
   size_t start = 0;
-  size_t split = intervals.size() / threads;
-  std::vector<std::thread> workers;
-  for (size_t i = 0; i < threads; i++) {
-    size_t n = (i == threads - 1 ? intervals.size() - start : split);
-    workers.emplace_back(std::thread(worker, intervals, start, n));
-    start += split;
+  for (size_t i = 0; i < worker_count; i++) {
+    std::shared_ptr<Warren> clone = warren->clone(error);
+    if (clone == nullptr) {
+      abort_all();
+      return false;
+    }
+    if (!clone->transaction(error)) {
+      clone->end();
+      abort_all();
+      return false;
+    }
+    transactions.push_back(clone);
+    std::shared_ptr<Forager> forager =
+        Forager::make(clone, name, tag, parameters, error);
+    if (forager == nullptr) {
+      abort_all();
+      return false;
+    }
+    size_t count = intervals.size() / worker_count;
+    if (i < intervals.size() % worker_count)
+      count++;
+    workers.push_back({clone, forager, start, start + count});
+    start += count;
   }
-  for (auto &worker : workers)
+
+  std::shared_ptr<Warren> marker = warren->clone(error);
+  if (marker == nullptr) {
+    abort_all();
+    return false;
+  }
+  if (!marker->transaction(error)) {
+    marker->end();
+    abort_all();
+    return false;
+  }
+  transactions.push_back(marker);
+  addr marker_p, marker_q;
+  if (!json_append(forager_file2json(filename, name, tag), marker, &marker_p,
+                   &marker_q, "@", error)) {
+    abort_all();
+    return false;
+  }
+
+  std::vector<std::string> worker_errors(worker_count);
+  std::vector<char> worker_ok(worker_count, true);
+  std::vector<std::thread> pool;
+  for (size_t i = 0; i < worker_count; i++)
+    pool.emplace_back([&, i]() {
+      for (size_t j = workers[i].start; j < workers[i].end; j++)
+        if (!workers[i].forager->forage(intervals[j].first,
+                                        intervals[j].second,
+                                        &worker_errors[i])) {
+          worker_ok[i] = false;
+          return;
+        }
+      worker_ok[i] = workers[i].forager->finish(&worker_errors[i]) &&
+                     workers[i].warren->ready(&worker_errors[i]);
+    });
+  for (auto &worker : pool)
     worker.join();
-  return !failed;
+  for (size_t i = 0; i < worker_count; i++)
+    if (!worker_ok[i]) {
+      safe_set(error) = worker_errors[i];
+      abort_all();
+      return false;
+    }
+  if (!marker->ready(error)) {
+    abort_all();
+    return false;
+  }
+  Warren::commit_all(transactions);
+  for (auto &transaction : transactions)
+    transaction->end();
+  return true;
 }
 
-bool forage(std::shared_ptr<Warren> warren,
-            const std::vector<std::pair<addr, addr>> &intervals,
-            const std::string &name, const std::string &tag, std::string *error,
-            size_t threads) {
+struct ForageWork {
+  std::string filename;
+  InputType type;
+  std::vector<std::pair<addr, addr>> intervals;
+};
+
+bool prepare_work(std::shared_ptr<Warren> warren,
+                  const std::vector<std::string> &selectors,
+                  const std::string &query, const std::string &name,
+                  const std::string &tag, std::vector<ForageWork> *work,
+                  std::string *error) {
+  assert(work != nullptr);
+  work->clear();
+  std::vector<std::string> paths;
+  if (!expand_selectors(warren, selectors, &paths, error))
+    return false;
+  for (const auto &path : paths) {
+    std::vector<std::pair<addr, addr>> intervals;
+    if (selectors.empty()) {
+      if (!scoped_intervals(warren, path, query, &intervals, error))
+        return false;
+      if (intervals.empty())
+        continue;
+    }
+    bool done;
+    if (!already_foraged(warren, path, name, tag, &done, error))
+      return false;
+    if (done)
+      continue;
+    if (!selectors.empty() &&
+        !scoped_intervals(warren, path, query, &intervals, error))
+      return false;
+    InputType type;
+    if (!source_type(warren, path, &type, error))
+      return false;
+    work->push_back({path, type, std::move(intervals)});
+  }
+  return true;
+}
+
+bool execute_work(std::shared_ptr<Warren> warren,
+                  const std::vector<ForageWork> &work,
+                  const std::string &name, const std::string &tag,
+                  const std::map<std::string, std::string> &parameters,
+                  std::string *error, size_t threads) {
+  std::vector<bool> done(work.size(), false);
+  for (size_t i = 0; i < work.size(); i++) {
+    if (done[i])
+      continue;
+    if (!text_or_code(work[i].type)) {
+      if (!forage_file_started(warren, work[i].filename, work[i].intervals,
+                               name, tag, parameters, error, threads))
+        return false;
+      done[i] = true;
+      continue;
+    }
+    std::vector<size_t> group;
+    for (size_t j = i; j < work.size(); j++)
+      if (!done[j] && text_or_code(work[j].type)) {
+        done[j] = true;
+        group.push_back(j);
+      }
+    size_t worker_count =
+        std::min(group.size(), std::max<size_t>(1, allowed_threads(threads)));
+    bool failed = false;
+    size_t next = 0;
+    std::mutex sync;
+    auto worker = [&]() {
+      for (;;) {
+        size_t j;
+        {
+          std::lock_guard<std::mutex> _(sync);
+          if (failed || next == group.size())
+            return;
+          j = group[next++];
+        }
+        std::string terror;
+        if (!forage_file_started(warren, work[j].filename, work[j].intervals,
+                                 name, tag, parameters, &terror, 1)) {
+          std::lock_guard<std::mutex> _(sync);
+          if (!failed) {
+            failed = true;
+            safe_set(error) = terror;
+          }
+          return;
+        }
+      }
+    };
+    std::vector<std::thread> pool;
+    for (size_t j = 0; j < worker_count; j++)
+      pool.emplace_back(worker);
+    for (auto &thread : pool)
+      thread.join();
+    if (failed)
+      return false;
+  }
+  return true;
+}
+
+bool forage_one_impl(
+    std::shared_ptr<Warren> warren, const std::string &filename,
+    const std::string &query, const std::string &name, const std::string &tag,
+    const std::map<std::string, std::string> *supplied, std::string *error,
+    size_t threads) {
+  std::string path = normalized_path(filename);
+  std::string n = normalized_forager_name(name);
+  std::string t = normalized_forager_tag(tag);
   std::map<std::string, std::string> parameters;
-  return forage(warren, intervals, name, tag, parameters, error, threads);
+  if (!resolve_definition(warren, query, n, t, supplied, &parameters, error))
+    return false;
+  bool appended;
+  if (!already_appended(warren, path, &appended, error))
+    return false;
+  if (!appended) {
+    safe_error(error) = "No meadow file named: " + path;
+    return false;
+  }
+  bool done;
+  if (!already_foraged(warren, path, n, t, &done, error))
+    return false;
+  if (done)
+    return true;
+  std::vector<std::pair<addr, addr>> intervals;
+  if (!scoped_intervals(warren, path, query, &intervals, error))
+    return false;
+  return forage_file_started(warren, path, intervals, n, t, parameters, error,
+                             threads);
 }
 
-bool forage(std::shared_ptr<Warren> warren, const std::string &gcl, addr start,
-            addr end, const std::string &name, const std::string &tag,
+bool forage_all_impl(
+    std::shared_ptr<Warren> warren,
+    const std::vector<std::string> &selectors, const std::string &query,
+    const std::string &name, const std::string &tag,
+    const std::map<std::string, std::string> *supplied, std::string *error,
+    size_t threads) {
+  std::string n = normalized_forager_name(name);
+  std::string t = normalized_forager_tag(tag);
+  std::map<std::string, std::string> parameters;
+  if (!resolve_definition(warren, query, n, t, supplied, &parameters, error))
+    return false;
+  std::vector<ForageWork> work;
+  if (!prepare_work(warren, selectors, query, n, t, &work, error))
+    return false;
+  return execute_work(warren, work, n, t, parameters, error, threads);
+}
+} // namespace
+
+bool forage(std::shared_ptr<Warren> warren, const std::string &filename,
+            const std::string &query, const std::string &name,
+            const std::string &tag,
             const std::map<std::string, std::string> &parameters,
             std::string *error, size_t threads) {
   assert(warren != nullptr);
   warren->start();
-  std::shared_ptr<cottontail::Hopper> hopper =
-      warren->hopper_from_gcl(gcl, error);
-  if (hopper == nullptr) {
-    warren->end();
-    return false;
-  }
-  end = (end < maxfinity ? end + 1 : maxfinity);
-  addr q, p = (start == minfinity ? minfinity + 1 : start);
-  std::vector<std::pair<addr, addr>> intervals;
-  for (hopper->tau(p, &p, &q); q < end; hopper->tau(p + 1, &p, &q))
-    intervals.emplace_back(p, q);
+  bool result = forage_one_impl(warren, filename, query, name, tag,
+                                &parameters, error, threads);
   warren->end();
-  std::map<std::string, std::string> params = parameters;
-  params.erase("gcl");
-  params["contents"] = gcl;
-  return forage(warren, intervals, name, tag, params, error, threads);
+  return result;
 }
 
-bool forage(std::shared_ptr<Warren> warren, const std::string &gcl,
-            const std::string &name, const std::string &tag,
-            const std::map<std::string, std::string> &parameters,
-            std::string *error, size_t threads) {
-  return forage(warren, gcl, minfinity, maxfinity, name, tag, parameters, error,
-                threads);
+bool forage(std::shared_ptr<Warren> warren, const std::string &filename,
+            const std::string &query, const std::string &name,
+            const std::string &tag, std::string *error, size_t threads) {
+  assert(warren != nullptr);
+  warren->start();
+  bool result = forage_one_impl(warren, filename, query, name, tag, nullptr,
+                                error, threads);
+  warren->end();
+  return result;
+}
+
+bool forage_all(std::shared_ptr<Warren> warren,
+                const std::vector<std::string> &filenames,
+                const std::string &query, const std::string &name,
+                const std::string &tag,
+                const std::map<std::string, std::string> &parameters,
+                std::string *error, size_t threads) {
+  assert(warren != nullptr);
+  warren->start();
+  bool result = forage_all_impl(warren, filenames, query, name, tag,
+                                &parameters, error, threads);
+  warren->end();
+  return result;
+}
+
+bool forage_all(std::shared_ptr<Warren> warren,
+                const std::vector<std::string> &filenames,
+                const std::string &query, const std::string &name,
+                const std::string &tag, std::string *error, size_t threads) {
+  assert(warren != nullptr);
+  warren->start();
+  bool result = forage_all_impl(warren, filenames, query, name, tag, nullptr,
+                                error, threads);
+  warren->end();
+  return result;
 }
 } // namespace meadowlark
 } // namespace cottontail

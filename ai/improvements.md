@@ -78,6 +78,21 @@ Especially don't do these things without discussion and approval from the user.
   load. Its purpose is to reduce startup latency while making existing
   multi-Bigwig resource use explicit.
 
+## Coordinated Commit Visibility
+
+- `Warren::commit_all(...)` publishes already-readied Fivers sequentially, so a
+  new read epoch can currently capture a proper subset during the short commit
+  window even though recovery will normally finish the complete set.
+- Add a Fluffle-level publication gate for coordinated commits. Set it before
+  the first Fiver commit, make new `Bigwig::start()` operations wait, and clear
+  it only after the last commit. Existing read epochs retain their old snapshot;
+  newly admitted epochs then see the complete new set.
+- The gate need not hold the Fluffle mutex across commit calls that acquire that
+  mutex themselves. A flag plus waiting mechanism avoids recursive locking and
+  preserves parallel, expensive `ready()` work while serializing only the fast
+  publication phase. Cross-process exclusion remains the separate
+  directory-locking question below.
+
 ## Restartable Builder for Static Shards
 
 - JSONL, TSV, text, and code now have the coordinated, restartable Meadowlark
@@ -92,13 +107,15 @@ Especially don't do these things without discussion and approval from the user.
 
 The established discovery and record conventions live in `ai/meadowlark.md`:
 agents bootstrap with `/` and `@`, new metadata is explicitly typed JSON rooted
-at `@`, source-format records connect to their source through `file`, and `//`
-inside `/.` supports inverse lookup from an interval to its source filename.
-Potential follow-ups are:
+at `@`, current file-specific records connect to their source through
+`filename` (with historical `file` accepted by readers), and `//` inside `/.`
+supports inverse lookup from an interval to its source filename. Potential
+follow-ups are:
 
-- Define whether a repeated forager `(name, tag)` replaces an earlier manifest,
-  is rejected, or intentionally accumulates another run. Multiple matching
-  manifests and accumulated statistics are currently possible.
+- Define an explicit replacement/recomputation lifecycle before allowing a
+  current forager `(name, tag)` to change. The implemented rule is one immutable
+  query and parameter map per pair; exact reuse is accepted and a conflicting
+  definition is rejected.
 - Decide whether source identities need stronger canonicalization than the
   current rule of prefixing `./` only when a filename contains no slash.
 - Keep the TSV `columns` record defined by the first row. If callers eventually
@@ -107,9 +124,10 @@ Potential follow-ups are:
 - Retain missing-`type` and `@tf-idf:` handling as explicit legacy forager
   compatibility until there is a deliberate database migration policy.
 - Require each future file-source adapter to define its `type` record, emit a
-  transaction-local `//`, and publish that metadata atomically with its
-  canonical `/` marker and data. Nonempty data belongs with `//` inside `/.`;
-  tokenless input deliberately has no `/.`, `:`, or filename-feature interval.
+  transaction-local `//`, and coordinate that metadata with its canonical `/`
+  marker and data under the established commit/recovery protocol. Nonempty data
+  belongs with `//` inside `/.`; tokenless input deliberately has no `/.`, `:`,
+  or filename-feature interval.
 - Add a library-level discovery convenience only if repeated consumers need
   one. The `@` record and `:type:` field convention already permits unknown
   types to be inspected or ignored without global component registration.
@@ -225,6 +243,27 @@ Potential follow-ups are:
   but static single-file shards make the distinction between physical component
   recipe and wrapper recipe more visible.
 
+## Tokenless Fiver Appends
+
+- `FiverAppender` retains appended bytes even when tokenization produces no
+  tokens, but emits no transaction or text-chunk annotations. `Fiver::ready()`
+  now pickles that state, so the bytes survive a normal disk-backed
+  `transaction()` / `ready()` / `commit()` cycle and subsequent Fiver merges.
+- Genuinely write-free Fivers are serialized by the same rule. This provides a
+  commit artifact for coordinated transactions without giving the Fiver a
+  token range.
+- Decide what address and translation semantics tokenless appended text should
+  have. Non-token bytes normally live with a preceding token, but a wholly
+  tokenless new Fiver has no preceding address to own them.
+- Current focused coverage activates empty, tokenless, and tokenful Fivers;
+  combines them through flat and tree-shaped merges; and converts empty,
+  tokenless, and mixed results to Hazel. This establishes durability and merge
+  behavior without inventing an address for leading dust.
+- Fiver-to-Hazel conversion stores leading tokenless bytes from raw byte zero
+  while retaining the first token chunk's original later byte anchor. This
+  keeps the Hazel text directory honest without assigning the prefix a token
+  address.
+
 ## Deep Error Logging
 
 - Add a logging path for deep internal errors that currently only assert.
@@ -285,4 +324,8 @@ follow-ups, not standing authorization:
   regressions declare their own size/resources.
 - When splitting, keep shared fixtures explicit and avoid hiding runtime-heavy
   tests inside broad default targets.
-- Review regression test suite for deficiencies.
+- The 2026-08-23 audit added focused file-oriented forager and empty/tokenless
+  Fiver cases, and the user reports that the complete suite plus additional
+  tests pass. Continue reviewing for semantic gaps as code changes, but the
+  immediate issue here is target size and isolation rather than a known failing
+  subsystem.

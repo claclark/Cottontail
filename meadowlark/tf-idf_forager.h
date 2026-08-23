@@ -21,9 +21,9 @@ public:
   make(std::shared_ptr<Warren> warren, const std::string &tag,
        const std::map<std::string, std::string> &parameters,
        std::string *error = nullptr);
-  static bool check(const std::string &tag,
-                    const std::map<std::string, std::string> &parameters,
-                    std::string *error = nullptr);
+  static std::shared_ptr<Forager> make(std::shared_ptr<Warren> warren,
+                                       const std::string &recipe,
+                                       std::string *error = nullptr);
   virtual ~TfIdfForager(){};
   TfIdfForager(const TfIdfForager &) = delete;
   TfIdfForager &operator=(const TfIdfForager &) = delete;
@@ -33,7 +33,7 @@ public:
 private:
   TfIdfForager(){};
   bool forage_(addr p, addr q, std::string *error) final;
-  bool ready_(std::string *error) final;
+  bool finish_(std::string *error) final;
   std::string tag_;
   addr p_min_ = maxfinity;
   addr total_items_ = 0;

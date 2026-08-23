@@ -274,6 +274,13 @@ non-empty Fiver to Hazel, it appends a trailing newline if the Fiver text does
 not already end in a separator. Hazel merge itself does not invent separator
 bytes.
 
+Empty and wholly tokenless Fivers are valid conversion inputs. When tokenless
+Fivers precede the first token-bearing Fiver, the first stored raw-text chunk
+begins at byte zero while the first token-chunk anchor remains at its original
+later byte offset. The leading bytes therefore survive conversion without
+being assigned a token address. Focused coverage includes empty, tokenless,
+tokenful, and mixed Fiver activation, merge, and Hazel conversion.
+
 The working-directory overload:
 
 - chooses the default `hazel.<start>.<end>` name from the Fiver sequence range;

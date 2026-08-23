@@ -1,3 +1,4 @@
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -5,6 +6,9 @@
 #include "gtest/gtest.h"
 
 #include "meadowlark/meadowlark.h"
+#include "meadowlark/metadata.h"
+#include "meadowlark/tf-idf_forager.h"
+#include "meadowlark/tf-idf_stats.h"
 #include "src/cottontail.h"
 
 TEST(Meadowlark, JSONMetadata) {
@@ -27,7 +31,8 @@ TEST(Meadowlark, JSONMetadata) {
   const std::string text =
       cottontail::json_translate(warren->txt()->translate(p, q));
   EXPECT_NE(text.find("\"type\": \"json\""), std::string::npos);
-  EXPECT_NE(text.find("\"file\": \"test/books.json\""), std::string::npos);
+  EXPECT_NE(text.find("\"filename\": \"test/books.json\""),
+            std::string::npos);
 
   std::unique_ptr<cottontail::Hopper> typed =
       warren->hopper_from_gcl("(>> @ (>> :type: \"json\"))", &error);
@@ -39,7 +44,7 @@ TEST(Meadowlark, JSONMetadata) {
 
   std::unique_ptr<cottontail::Hopper> described = warren->hopper_from_gcl(
       "(>> (>> @ (>> :type: \"json\")) "
-      "(>> :file: \"test/books.json\"))",
+      "(>> :filename: \"test/books.json\"))",
       &error);
   ASSERT_NE(described, nullptr) << error;
   cottontail::addr described_p, described_q;
@@ -127,7 +132,7 @@ TEST(Meadowlark, TSV) {
   std::string description =
       cottontail::json_translate(warren->txt()->translate(metadata_p,
                                                           metadata_q));
-  EXPECT_NE(description.find("\"file\": \"test/test.tsv\""),
+  EXPECT_NE(description.find("\"filename\": \"test/test.tsv\""),
             std::string::npos);
   EXPECT_NE(description.find("\"separator\": \"\\t\""),
             std::string::npos);
@@ -139,7 +144,7 @@ TEST(Meadowlark, TSV) {
 
   std::unique_ptr<cottontail::Hopper> described = warren->hopper_from_gcl(
       "(>> (>> @ (>> :type: \"tsv\")) "
-      "(>> :file: \"test/test.tsv\"))",
+      "(>> :filename: \"test/test.tsv\"))",
       &error);
   ASSERT_NE(described, nullptr) << error;
   cottontail::addr described_p, described_q;
@@ -423,4 +428,392 @@ TEST(Meadowlark, AppendPlanMixesTextAndCode) {
     EXPECT_NE(p, cottontail::maxfinity) << type;
   }
   warren->end();
+}
+
+TEST(Meadowlark, FileOrientedTfIdfForage) {
+  const std::string path = "test/code.txt";
+  const std::string tag = "file-oriented";
+  std::string error;
+  std::shared_ptr<cottontail::Warren> warren =
+      cottontail::meadowlark::create_meadow("forage.meadow", &error);
+  ASSERT_NE(warren, nullptr) << error;
+  ASSERT_TRUE(cottontail::meadowlark::append_text(warren, path, &error))
+      << error;
+  std::map<std::string, std::string> reserved = {{"filename", path}};
+  EXPECT_FALSE(cottontail::meadowlark::forage(
+      warren, path, ":", "tf-idf", "reserved", reserved, &error, 1));
+  std::map<std::string, std::string> historical = {{"contents", ":"}};
+  EXPECT_FALSE(cottontail::meadowlark::forage(
+      warren, path, ":", "tf-idf", "historical", historical, &error, 1));
+  std::map<std::string, std::string> parameters = {
+      {"container", "/."}, {"stemmer", "porter"}};
+  ASSERT_TRUE(cottontail::meadowlark::forage(
+      warren, path, ":", "tf-idf", tag, parameters, &error, 1))
+      << error;
+  ASSERT_TRUE(cottontail::meadowlark::forage(
+      warren, path, ":", "tf-idf", tag, &error, 1))
+      << error;
+
+  warren->start();
+  bool foraged = false;
+  ASSERT_TRUE(cottontail::meadowlark::already_foraged(
+      warren, path, "tf-idf", tag, &foraged, &error))
+      << error;
+  EXPECT_TRUE(foraged);
+  EXPECT_NE(cottontail::meadowlark::TfIdfForager::make(warren, tag, &error),
+            nullptr)
+      << error;
+  EXPECT_NE(cottontail::meadowlark::TfIdfStats::make(tag, warren, &error),
+            nullptr)
+      << error;
+
+  std::unique_ptr<cottontail::Hopper> primary = warren->hopper_from_gcl(
+      "(>> (>> (>> (>> @ (>> :type: \"forager\")) "
+      "(>> :name: \"tf-idf\")) (>> :tag: \"file-oriented\")) :query:)",
+      &error);
+  ASSERT_NE(primary, nullptr) << error;
+  cottontail::addr p, q;
+  primary->tau(cottontail::minfinity + 1, &p, &q);
+  ASSERT_NE(p, cottontail::maxfinity);
+  cottontail::meadowlark::ForagerMetadata metadata;
+  ASSERT_TRUE(cottontail::meadowlark::json2forager(
+      warren->txt()->translate(p, q), &metadata, &error))
+      << error;
+  EXPECT_TRUE(metadata.has_query);
+  EXPECT_FALSE(metadata.has_filename);
+  EXPECT_EQ(metadata.query, ":");
+  warren->end();
+}
+
+TEST(Meadowlark, ForageAllUsesMeadowSelectors) {
+  std::string error;
+  std::shared_ptr<cottontail::Warren> warren =
+      cottontail::meadowlark::create_meadow("forage-all.meadow", &error);
+  ASSERT_NE(warren, nullptr) << error;
+  std::vector<cottontail::meadowlark::InputFile> files = {
+      {cottontail::meadowlark::InputType::TEXT, "test/sonnet0.txt"},
+      {cottontail::meadowlark::InputType::TEXT, "test/sonnet1.txt"},
+  };
+  ASSERT_TRUE(
+      cottontail::meadowlark::append_all(warren, files, &error, 2, false))
+      << error;
+  std::map<std::string, std::string> no_parameters;
+  ASSERT_TRUE(cottontail::meadowlark::forage_all(
+      warren, {"test/sonnet*.txt"}, ":", "null", "pattern", no_parameters,
+      &error, 2))
+      << error;
+
+  warren->start();
+  for (const auto &file : files) {
+    bool foraged = false;
+    ASSERT_TRUE(cottontail::meadowlark::already_foraged(
+        warren, file.filename, "null", "pattern", &foraged, &error))
+        << error;
+    EXPECT_TRUE(foraged) << file.filename;
+  }
+  warren->end();
+
+  EXPECT_FALSE(cottontail::meadowlark::forage_all(
+      warren, {"missing*.txt"}, ":", "null", "pattern", &error, 2));
+  ASSERT_TRUE(cottontail::meadowlark::forage_all(
+      warren, {}, ":", "null", "all", no_parameters, &error, 2))
+      << error;
+}
+
+TEST(Meadowlark, ExplicitZeroResultForageWritesCompletion) {
+  const std::string path = "test/code.txt";
+  std::string error;
+  std::shared_ptr<cottontail::Warren> warren =
+      cottontail::meadowlark::create_meadow("zero-forage.meadow", &error);
+  ASSERT_NE(warren, nullptr) << error;
+  ASSERT_TRUE(cottontail::meadowlark::append_text(warren, path, &error))
+      << error;
+  std::map<std::string, std::string> no_parameters;
+  ASSERT_TRUE(cottontail::meadowlark::forage(
+      warren, path, ":not-present:", "null", "zero", no_parameters, &error,
+      1))
+      << error;
+  warren->start();
+  bool foraged = false;
+  ASSERT_TRUE(cottontail::meadowlark::already_foraged(
+      warren, path, "null", "zero", &foraged, &error))
+      << error;
+  EXPECT_TRUE(foraged);
+  warren->end();
+}
+
+TEST(Meadowlark, RefusesLegacyForagerDefinition) {
+  const std::string path = "test/code.txt";
+  std::string error;
+  std::shared_ptr<cottontail::Warren> warren =
+      cottontail::meadowlark::create_meadow("legacy-forage.meadow", &error);
+  ASSERT_NE(warren, nullptr) << error;
+  ASSERT_TRUE(cottontail::meadowlark::append_text(warren, path, &error))
+      << error;
+  warren->start();
+  ASSERT_TRUE(warren->transaction(&error)) << error;
+  cottontail::addr p, q;
+  ASSERT_TRUE(cottontail::json_append(
+      "{\"type\":\"forager\",\"name\":\"tf-idf\","
+      "\"tag\":\"old\",\"parameters\":{\"contents\":\":\","
+      "\"start\":\"0\",\"end\":\"1\"}}",
+      warren, &p, &q, "@", &error))
+      << error;
+  ASSERT_TRUE(warren->ready(&error)) << error;
+  warren->commit();
+  warren->end();
+
+  std::map<std::string, std::string> parameters = {{"container", ":"}};
+  EXPECT_FALSE(cottontail::meadowlark::forage(
+      warren, path, ":", "tf-idf", "old", parameters, &error, 1));
+  EXPECT_NE(error.find("historical interval metadata"), std::string::npos);
+}
+
+TEST(Meadowlark, ForagerDefinitionIsImmutable) {
+  const std::string path = "test/code.txt";
+  const std::string tag = "immutable";
+  std::string error;
+  std::shared_ptr<cottontail::Warren> warren =
+      cottontail::meadowlark::create_meadow("immutable-forage.meadow", &error);
+  ASSERT_NE(warren, nullptr) << error;
+  ASSERT_TRUE(cottontail::meadowlark::append_text(warren, path, &error))
+      << error;
+
+  std::map<std::string, std::string> parameters = {
+      {"container", "/."}, {"stemmer", "porter"}};
+  ASSERT_TRUE(cottontail::meadowlark::forage(
+      warren, path, ":", "tf-idf", tag, parameters, &error, 1))
+      << error;
+
+  std::map<std::string, std::string> changed = {
+      {"container", ":"}, {"stemmer", "porter"}};
+  error.clear();
+  EXPECT_FALSE(cottontail::meadowlark::forage(
+      warren, path, ":", "tf-idf", tag, changed, &error, 1));
+  EXPECT_NE(error.find("specification does not match"), std::string::npos);
+
+  error.clear();
+  EXPECT_FALSE(cottontail::meadowlark::forage(
+      warren, path, "#", "tf-idf", tag, &error, 1));
+  EXPECT_NE(error.find("query does not match"), std::string::npos);
+
+  error.clear();
+  ASSERT_TRUE(cottontail::meadowlark::forage(
+      warren, path, ":", "tf-idf", tag, &error, 1))
+      << error;
+
+  warren->start();
+  EXPECT_NE(cottontail::meadowlark::TfIdfForager::make(warren, tag, &error),
+            nullptr)
+      << error;
+  error.clear();
+  EXPECT_EQ(cottontail::meadowlark::TfIdfForager::make(warren, "missing",
+                                                       &error),
+            nullptr);
+  EXPECT_NE(error.find("No current forager definition"), std::string::npos);
+  warren->end();
+}
+
+TEST(Meadowlark, InvalidForagerSpecificationDoesNotPublishDefinition) {
+  const std::string path = "test/code.txt";
+  std::string error;
+  std::shared_ptr<cottontail::Warren> warren =
+      cottontail::meadowlark::create_meadow("invalid-forage.meadow", &error);
+  ASSERT_NE(warren, nullptr) << error;
+  ASSERT_TRUE(cottontail::meadowlark::append_text(warren, path, &error))
+      << error;
+
+  std::map<std::string, std::string> parameters = {
+      {"container", "/."}, {"stemmer", "porter"}};
+  EXPECT_FALSE(cottontail::meadowlark::forage(
+      warren, path, "(", "tf-idf", "bad-query", parameters, &error, 1));
+
+  std::map<std::string, std::string> bad_stemmer = {
+      {"container", "/."}, {"stemmer", "not-a-stemmer"}};
+  error.clear();
+  EXPECT_FALSE(cottontail::meadowlark::forage(
+      warren, path, ":", "tf-idf", "bad-stemmer", bad_stemmer, &error, 1));
+
+  warren->start();
+  for (const std::string tag : {"bad-query", "bad-stemmer"}) {
+    std::unique_ptr<cottontail::Hopper> definition = warren->hopper_from_gcl(
+        "(>> (>> (>> (>> @ (>> :type: \"forager\")) "
+        "(>> :name: \"tf-idf\")) (>> :tag: \"" +
+            tag + "\")) :query:)",
+        &error);
+    ASSERT_NE(definition, nullptr) << error;
+    cottontail::addr p, q;
+    definition->tau(cottontail::minfinity + 1, &p, &q);
+    EXPECT_EQ(p, cottontail::maxfinity) << tag;
+  }
+  warren->end();
+}
+
+TEST(Meadowlark, DefaultForagerTagUsesPrimaryDefinition) {
+  const std::string path = "test/code.txt";
+  std::string error;
+  std::shared_ptr<cottontail::Warren> warren =
+      cottontail::meadowlark::create_meadow("default-forage.meadow", &error);
+  ASSERT_NE(warren, nullptr) << error;
+  ASSERT_TRUE(cottontail::meadowlark::append_text(warren, path, &error))
+      << error;
+  std::map<std::string, std::string> parameters = {
+      {"container", "/."}, {"stemmer", "porter"}};
+  ASSERT_TRUE(cottontail::meadowlark::forage(
+      warren, path, ":", "", "", parameters, &error, 1))
+      << error;
+
+  warren->start();
+  bool foraged = false;
+  ASSERT_TRUE(cottontail::meadowlark::already_foraged(
+      warren, path, "", "", &foraged, &error))
+      << error;
+  EXPECT_TRUE(foraged);
+  EXPECT_NE(cottontail::meadowlark::TfIdfForager::make(warren, "", &error),
+            nullptr)
+      << error;
+
+  std::shared_ptr<cottontail::Stats> stats =
+      cottontail::meadowlark::TfIdfStats::make("", warren, &error);
+  ASSERT_NE(stats, nullptr) << error;
+  EXPECT_EQ(stats->recipe(), "none");
+  std::unique_ptr<cottontail::Hopper> actual = stats->container_hopper();
+  std::unique_ptr<cottontail::Hopper> expected =
+      warren->hopper_from_gcl("/.", &error);
+  ASSERT_NE(actual, nullptr);
+  ASSERT_NE(expected, nullptr) << error;
+  cottontail::addr actual_p, actual_q, expected_p, expected_q;
+  actual->tau(cottontail::minfinity + 1, &actual_p, &actual_q);
+  expected->tau(cottontail::minfinity + 1, &expected_p, &expected_q);
+  EXPECT_EQ(actual_p, expected_p);
+  EXPECT_EQ(actual_q, expected_q);
+  warren->end();
+}
+
+TEST(Meadowlark, TfIdfForageIsScopedToSelectedTsvFile) {
+  const std::string tsv = "test/test.tsv";
+  const std::string other = "test/sonnet0.txt";
+  const std::string tag = "table-scope";
+  std::string error;
+  std::shared_ptr<cottontail::Warren> warren =
+      cottontail::meadowlark::create_meadow("scoped-forage.meadow", &error);
+  ASSERT_NE(warren, nullptr) << error;
+  ASSERT_TRUE(cottontail::meadowlark::append_tsv(warren, tsv, &error, false,
+                                                 "\t", 3))
+      << error;
+  ASSERT_TRUE(cottontail::meadowlark::append_text(warren, other, &error))
+      << error;
+
+  std::map<std::string, std::string> parameters = {
+      {"container", ":"}, {"id", ":0:"}, {"stemmer", "porter"}};
+  ASSERT_TRUE(cottontail::meadowlark::forage(
+      warren, tsv, ":1:", "tf-idf", tag, parameters, &error, 3))
+      << error;
+
+  warren->start();
+  bool foraged = false;
+  ASSERT_TRUE(cottontail::meadowlark::already_foraged(
+      warren, tsv, "tf-idf", tag, &foraged, &error))
+      << error;
+  EXPECT_TRUE(foraged);
+  ASSERT_TRUE(cottontail::meadowlark::already_foraged(
+      warren, other, "tf-idf", tag, &foraged, &error))
+      << error;
+  EXPECT_FALSE(foraged);
+
+  std::unique_ptr<cottontail::Hopper> contents =
+      warren->hopper_from_gcl("(<< :1: test/test.tsv)", &error);
+  ASSERT_NE(contents, nullptr) << error;
+  cottontail::addr p, q;
+  cottontail::addr expected_items = 0;
+  for (contents->tau(cottontail::minfinity + 1, &p, &q);
+       p < cottontail::maxfinity; contents->tau(p + 1, &p, &q))
+    expected_items++;
+  ASSERT_GT(expected_items, 0);
+
+  std::shared_ptr<cottontail::Featurizer> total =
+      cottontail::TaggingFeaturizer::make(
+          warren->featurizer(), "tf-idf:table-scope:total", &error);
+  ASSERT_NE(total, nullptr) << error;
+  std::unique_ptr<cottontail::Hopper> totals =
+      warren->idx()->hopper(total->featurize("items"));
+  ASSERT_NE(totals, nullptr);
+  std::unique_ptr<cottontail::Hopper> file =
+      warren->idx()->hopper(warren->featurizer()->featurize(tsv));
+  ASSERT_NE(file, nullptr);
+  cottontail::addr actual_items = 0;
+  cottontail::addr n;
+  for (totals->tau(cottontail::minfinity + 1, &p, &q, &n);
+       p < cottontail::maxfinity; totals->tau(p + 1, &p, &q, &n)) {
+    actual_items += n;
+    cottontail::addr file_p, file_q;
+    file->rho(p, &file_p, &file_q);
+    EXPECT_LE(file_p, p);
+    EXPECT_GE(file_q, q);
+  }
+  EXPECT_EQ(actual_items, expected_items);
+
+  std::shared_ptr<cottontail::Featurizer> tf =
+      cottontail::TaggingFeaturizer::make(
+          warren->featurizer(), "tf-idf:table-scope:tf", &error);
+  ASSERT_NE(tf, nullptr) << error;
+  std::shared_ptr<cottontail::Stemmer> stemmer =
+      cottontail::Stemmer::make("porter", "", &error);
+  ASSERT_NE(stemmer, nullptr) << error;
+  EXPECT_GT(warren->idx()->count(tf->featurize(stemmer->stem("brown"))), 0);
+  EXPECT_EQ(warren->idx()->count(tf->featurize(stemmer->stem("love"))), 0);
+  warren->end();
+}
+
+TEST(Meadowlark, LegacyTfIdfRemainsReadableButCannotBeExtended) {
+  const std::string path = "test/code.txt";
+  std::string error;
+  std::shared_ptr<cottontail::Warren> warren =
+      cottontail::meadowlark::create_meadow("legacy-stats.meadow", &error);
+  ASSERT_NE(warren, nullptr) << error;
+  ASSERT_TRUE(cottontail::meadowlark::append_text(warren, path, &error))
+      << error;
+
+  warren->start();
+  ASSERT_TRUE(warren->transaction(&error)) << error;
+  const std::string metadata =
+      "{\"name\":\"tf-idf\",\"tag\":\"\",\"parameters\":{"
+      "\"container\":\":\",\"gcl\":\":\",\"stemmer\":\"porter\"}}";
+  cottontail::addr p, q;
+  ASSERT_TRUE(warren->appender()->append(metadata, &p, &q, &error)) << error;
+  ASSERT_TRUE(warren->annotator()->annotate(
+      warren->featurizer()->featurize("@"), p, q, &error))
+      << error;
+  ASSERT_TRUE(warren->annotator()->annotate(
+      warren->featurizer()->featurize("@tf-idf:"), p, q, &error))
+      << error;
+  std::shared_ptr<cottontail::Featurizer> total =
+      cottontail::TaggingFeaturizer::make(warren->featurizer(),
+                                          "tf-idf:total", &error);
+  ASSERT_NE(total, nullptr) << error;
+  ASSERT_TRUE(warren->annotator()->annotate(total->featurize("items"), p, p,
+                                            cottontail::addr{1}, &error))
+      << error;
+  ASSERT_TRUE(warren->annotator()->annotate(total->featurize("length"), p, p,
+                                            cottontail::addr{4}, &error))
+      << error;
+  ASSERT_TRUE(warren->ready(&error)) << error;
+  warren->commit();
+  warren->end();
+
+  warren->start();
+  std::shared_ptr<cottontail::Stats> stats =
+      cottontail::meadowlark::TfIdfStats::make("", warren, &error);
+  ASSERT_NE(stats, nullptr) << error;
+  EXPECT_EQ(stats->recipe(), "");
+  EXPECT_DOUBLE_EQ(stats->avgl(), 4.0);
+  warren->end();
+
+  std::map<std::string, std::string> parameters = {
+      {"container", ":"}, {"stemmer", "porter"}};
+  error.clear();
+  EXPECT_FALSE(cottontail::meadowlark::forage(
+      warren, path, ":", "tf-idf", "", parameters, &error, 1));
+  EXPECT_NE(error.find("remains readable but cannot be extended"),
+            std::string::npos);
 }

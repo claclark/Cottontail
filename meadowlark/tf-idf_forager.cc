@@ -2,6 +2,7 @@
 
 #include <map>
 #include <memory>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -16,6 +17,20 @@ std::shared_ptr<Forager>
 TfIdfForager::make(std::shared_ptr<Warren> warren, const std::string &tag,
                    const std::map<std::string, std::string> &parameters,
                    std::string *error) {
+  static const std::set<std::string> legacy = {"contents", "end", "gcl",
+                                                "start"};
+  for (const auto &parameter : parameters)
+    if (legacy.find(parameter.first) != legacy.end()) {
+      safe_error(error) = "Historical tf-idf parameter is not accepted: " +
+                          parameter.first;
+      return nullptr;
+    }
+  if (parameters.find("container") != parameters.end() &&
+      warren->hopper_from_gcl(parameters.at("container"), error) == nullptr)
+    return nullptr;
+  if (parameters.find("id") != parameters.end() &&
+      warren->hopper_from_gcl(parameters.at("id"), error) == nullptr)
+    return nullptr;
   std::shared_ptr<TfIdfForager> forager =
       std::shared_ptr<TfIdfForager>(new TfIdfForager());
   forager->tag_ = tag;
@@ -47,10 +62,10 @@ TfIdfForager::make(std::shared_ptr<Warren> warren, const std::string &tag,
   return forager;
 }
 
-bool TfIdfForager::check(const std::string &tag,
-                         const std::map<std::string, std::string> &parameters,
-                         std::string *error) {
-  return true;
+std::shared_ptr<Forager>
+TfIdfForager::make(std::shared_ptr<Warren> warren, const std::string &recipe,
+                   std::string *error) {
+  return Forager::make(warren, "tf-idf", recipe, error);
 }
 
 bool TfIdfForager::forage_(addr p, addr q, std::string *error) {
@@ -97,7 +112,7 @@ bool TfIdfForager::forage_(addr p, addr q, std::string *error) {
   return true;
 }
 
-bool TfIdfForager::ready_(std::string *error) {
+bool TfIdfForager::finish_(std::string *error) {
   if (p_min_ == maxfinity)
     return true;
   for (auto &feature : df_)
@@ -110,7 +125,7 @@ bool TfIdfForager::ready_(std::string *error) {
   if (!warren_->annotator()->annotate(total_featurizer_->featurize("length"),
                                       p_min_, p_min_, total_length_, error))
     return false;
-  return warren_->ready(error);
+  return true;
 }
 
 } // namespace meadowlark

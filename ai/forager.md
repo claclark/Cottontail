@@ -1,12 +1,13 @@
-# File-Oriented Foraging Plan
+# File-Oriented Foraging
 
-Status date: 2026-08-22.
+Status date: 2026-08-23.
 
-This document records the agreed direction for replacing Meadowlark's
-interval-run foraging interface with file-oriented execution. It is an
-implementation plan, not coding authorization. The user runs regression tests
-and makes commits; agent verification is compile-only unless explicitly
-changed.
+This document records the implemented file-oriented foraging model and its
+rationale. It replaced Meadowlark's interval-run foraging interface on
+2026-08-22. The user subsequently verified it with the complete regression
+suite, additional compatibility and ranking checks, and large MS MARCO builds.
+The user runs regression tests and makes commits; agent verification remains
+compile-only unless explicitly changed.
 
 ## Purpose
 
@@ -29,9 +30,11 @@ The central invariants are:
   filename feature.
 - A separate file-specific record says only that the layer has been applied to
   that file.
-- All annotations and the completion record for one file publish atomically.
-- Deleting a file can remove its content, derived annotations, aggregate
-  contributions, and file-specific metadata together.
+- All annotations and the completion record for one file form one coordinated
+  commit set. Publication is recoverable, but new read epochs are not yet gated
+  across the short sequential `commit_all(...)` window.
+- Worker aggregates are anchored inside the file so a future file-deletion
+  operation can remove them with the source and its metadata.
 - Old databases remain readable and rankable. New writers do not attempt to
   extend an old interval-oriented layer.
 
@@ -55,20 +58,21 @@ empty-tag TF-IDF annotations under `tf-idf:...` remain a reader compatibility
 case.
 
 All public file-oriented operations apply Meadowlark's filename normalization.
-In particular, a name containing no slash receives the existing `./` prefix.
-Durable metadata records the normalized name.
+In particular, a filename containing no slash receives the existing `./`
+prefix. Durable metadata records the normalized filename.
 
 A filename selector is either a literal logical filename or a filesystem-style
 pattern matched against the meadow's normalized `/` inventory. Selectors are
-interpreted by the library so command-line and Python callers use the same
-path. They are not expanded against the host filesystem.
+interpreted by the library so the command-line application and forthcoming
+Python wrapper can use the same path. They are not expanded against the host
+filesystem.
 
 ## Metadata Model
 
 ### Common File Association
 
-New file-specific metadata uses `filename` as a common top-level field beside
-`type`:
+Current file-specific metadata uses `filename` as a common top-level field
+beside `type`:
 
 ```json
 {
@@ -78,9 +82,9 @@ New file-specific metadata uses `filename` as a common top-level field beside
 ```
 
 JSON, TSV, text, code, forager-completion, and future file-specific metadata
-share this convention. Existing source metadata uses the older field `file`;
-readers that need source type information must accept both `filename` and
-`file`. Old records are not migrated.
+share this convention. Historical source metadata uses the older field `file`;
+readers that need source type information accept both `filename` and `file`.
+Old records are not migrated.
 
 The `@` record remains separate from `/.` file data and is not annotated with
 the normalized-filename feature. Its indexed `:filename:` member provides the
@@ -136,8 +140,8 @@ deletion.
 
 ## Public Library Surface
 
-Replace the existing public GCL/range/vector overload family with a small
-file-oriented surface along these lines:
+The old public GCL/range/vector overload family has been replaced by this small
+file-oriented surface:
 
 ```cpp
 bool already_foraged(
@@ -169,6 +173,11 @@ bool forage_all(
     size_t threads = 0);
 ```
 
+Both `forage(...)` and `forage_all(...)` also have parameter-omitting
+overloads. Supplying a map, including an explicitly empty map, defines or
+exactly validates a specification. Omitting the map requires an existing
+primary definition and reuses its stored parameters.
+
 The `forage_all(...)` vector contains filename selectors, not necessarily
 already-expanded concrete names. The library expands them against the meadow's
 `/` inventory, normalizes and deduplicates the results, and then performs the
@@ -185,20 +194,13 @@ The singular public operation owns the top-level lifecycle for one file.
 `forage_all(...)` owns one top-level started Warren and uses a private
 already-started per-file helper rather than nesting the public lifecycle.
 
-The parameter-bearing operations define a new specification or verify an
-existing one. A corresponding parameter-omitting path requires the primary
-definition to exist and uses its stored parameters. The exact overload spelling
-can be chosen during implementation, but omission must not be represented by a
-default empty map: an explicitly supplied empty map is a legitimate parameter
-set.
-
 ## Forager Class Boundary
 
 The basic class idea remains valid: one stateful worker receives query-result
 intervals, writes derived annotations, accumulates worker-local summaries, and
 flushes those summaries when its assigned work is complete.
 
-The runtime worker should not know about:
+The runtime worker does not know about:
 
 - creating or publishing metadata definitions or completion records;
 - filename discovery or scoping;
@@ -206,12 +208,12 @@ The runtime worker should not know about:
 - transaction creation, commit, abort, or coordinated publication;
 - retry and skip policy.
 
-These responsibilities move to the file-oriented coordinator.
+These responsibilities belong to the file-oriented coordinator.
 
-The current `Committable` inheritance, `label()`, transaction delegation,
-mutex, and vector/hopper/range iteration overloads embody the old assumption
-that a Forager instance represents a complete independently committed run.
-They should be removed or reduced. The useful worker interface is conceptually:
+The old `Committable` inheritance, `label()`, transaction delegation, mutex,
+and vector/hopper/range iteration overloads embodied the assumption that a
+Forager instance represented a complete independently committed run. They were
+removed. The worker interface is:
 
 ```cpp
 static bool check(started_warren, query, name, tag, parameters, error);
@@ -222,9 +224,8 @@ bool forage(addr p, addr q, error);
 bool finish(error);
 ```
 
-The exact finalization name may be chosen during implementation. Its meaning is
-only "write this worker's accumulated annotations"; it must not ready or commit
-the Warren.
+`finish(...)` means only "write this worker's accumulated annotations"; it
+does not ready or commit the Warren.
 
 There is also a useful existing-definition factory on each concrete forager:
 
@@ -236,9 +237,8 @@ Here `recipe` is the tag. The factory finds the unique current primary record
 for its known forager name, obtains the stored parameters, and delegates to the
 same parameter-validating construction path. It fails if the definition is
 missing or legacy. This factory may read metadata but never writes it; the
-worker it returns has no metadata-management responsibility. A generic
-`Forager` dispatcher still needs the name in addition to the recipe, or the
-coordinator must dispatch to the concrete subclass first.
+worker it returns has no metadata-management responsibility. The generic
+`Forager` dispatcher takes the name in addition to the recipe.
 
 ### Validation
 
@@ -255,17 +255,25 @@ static bool check(
     std::string *error = nullptr);
 ```
 
-It performs no writes and has no metadata knowledge. It should:
+It performs no writes and has no metadata knowledge. It:
 
-1. Parse/compile the GCL query against the started Warren.
-2. Dispatch the named forager.
-3. Confirm that the implementation can be constructed with the requested tag
+1. parses/compiles the GCL query against the started Warren;
+2. dispatches the named forager; and
+3. confirms that the implementation can be constructed with the requested tag
    and parameters in this Warren.
 
 Subclass factories validate the parameters they consume while constructing
 their worker state, such as TF-IDF's tokenizer, stemmer, and tagged
-featurizers. They do not write metadata. The validation path should reuse that
-construction logic rather than duplicate it.
+featurizers. They do not write metadata. The validation path reuses that
+construction logic rather than duplicating it.
+
+The base dispatcher rejects parameter keys reserved by the metadata envelope:
+`type`, `name`, `tag`, `query`, `parameters`, `filename`, and the historical
+spelling `file`. A subclass rejects keys that conflict with its own format.
+In particular, the current TF-IDF writer rejects the historical writer-only
+keys `start`, `end`, `gcl`, and `contents`; its readers continue to accept
+them. This does not imply that arbitrary unfamiliar TF-IDF parameters are
+rejected.
 
 The broader family of rarely useful `check(...)` methods elsewhere in
 Cottontail is a possible future cleanup, not part of this change.
@@ -278,8 +286,10 @@ are written during finalization at the worker's minimum processed address.
 
 Every worker instance must process intervals from only one file. This keeps all
 of its aggregate contributions anchored inside that file so deletion removes
-them naturally. Finalization no longer calls `Warren::ready()`; the coordinator
-does so after all forager annotations have been written.
+them naturally. Finalization itself no longer calls `Warren::ready()`. The
+worker thread calls `ready()` immediately after successful finalization so the
+expensive preparation remains parallel; the coordinator joins the workers
+before coordinated publication.
 
 The current question of whether stored TF-IDF DF annotations remain useful is
 separate from this structural change.
@@ -292,17 +302,17 @@ implementation setup must fail before durable metadata is written.
 
 When parameters are supplied, it then looks up the canonical `(name, tag)`:
 
-1. No primary record exists: write and commit the new definition.
-2. A current primary record exists: require exact query and parameter equality.
-3. An older interval-oriented record exists for the same logical pair: refuse
-   to extend it.
+1. If no primary record exists, it writes and commits the new definition.
+2. If a current primary record exists, it requires exact query and parameter
+   equality.
+3. If an older interval-oriented record exists for the same logical pair, it
+   refuses to extend it.
 
 When parameters are omitted, the current primary record must already exist.
 The supplied query must exactly match its query, and the concrete
 `make(warren, recipe, error)` path uses its stored parameters. Missing and
 legacy definitions are errors. This distinction is represented by an overload
-or another explicit optional form, not by treating an empty parameter map as
-omission.
+instead of treating an empty parameter map as omission.
 
 The uniqueness check is semantic preflight, not a new cross-process locking
 mechanism. As with the standard Meadowlark commands, users must not
@@ -326,8 +336,8 @@ For TF-IDF, detection follows the paths already established in
   matching run manifest are evidence of the old writer. The intermediate
   `parameters.contents` form is also reader-only.
 
-The error should explain that the database remains readable but the historical
-layer cannot safely be extended. A different new tag may define an independent
+The error explains that the database remains readable but the historical layer
+cannot safely be extended. A different new tag may define an independent
 file-oriented layer.
 
 ## File And Query Selection
@@ -354,17 +364,18 @@ text:  query=:            container=/.  id=//
 They describe ranking interpretation; they do not replace the query.
 
 For an explicitly selected filename, zero scoped query results is still a
-successful application and should publish its completion record so retry does
-not loop forever. With an empty selector list, files with no scoped query
-result are not selected in the first place.
+successful application and publishes its completion record so retry does not
+loop forever. With an empty selector list, files with no scoped query result
+are not selected in the first place.
 
 `forage_all(...)` accepts filesystem-style selectors directly. It enumerates
 `/`, decodes both current framed names and historical raw names, normalizes
 selectors consistently, matches against the meadow inventory, and
 deduplicates concrete names. Each selector in a nonempty input must match at
-least one file. Both the command-line application and the Python wrapper pass
-their selector strings to this same library path. Indexed-regular-expression
-work remains unrelated and deferred.
+least one file. The command-line application passes selector strings to this
+library path unchanged. The forthcoming Python wrapper should call the same
+path rather than implement separate expansion. Indexed-regular-expression work
+remains unrelated and deferred.
 
 ## Per-File Transaction And Retry Lifecycle
 
@@ -380,15 +391,18 @@ For one selected file:
 5. Write the file-specific completion record in a transaction coordinated with
    those workers.
 6. Run each worker's finalization hook.
-7. Ready every worker Warren and the completion-record Warren.
+7. Each worker readies its own Warren in its worker thread; after joining them,
+   ready the completion-record Warren.
 8. Abort all of them if setup, interval processing, finalization, or ready
    fails.
-9. Publish them together through `Warren::commit_all(...)`.
+9. Publish the coordinated set through `Warren::commit_all(...)`, with the
+   completion-marker transaction ordered after the worker transactions.
 
 A marker-only transaction is valid when an explicitly requested file contains
-no matching query interval. A completion record is never visible without all
-derived annotations for that file, and derived annotations are never visible
-without the completion record.
+no matching query interval. The coordinated commits are recoverable as a set,
+but publication is sequential. A new read epoch can briefly observe some
+worker annotations before the completion marker; this is the publication-gate
+follow-up recorded in `ai/improvements.md`.
 
 A multi-file invocation may stop after earlier files have committed. This is
 expected. Repeating the same invocation skips their completion records and
@@ -407,24 +421,22 @@ files with zero scoped results. Each selected file is classified as:
 - matching file completion record: skip;
 - source exists without completion: schedule it.
 
-Initial concurrency should follow the already-understood `append_all(...)`
-model rather than introduce a new performance policy:
+The current scheduler follows the already-understood `append_all(...)` model:
 
-- JSON and TSV currently contain many ordinary objects per file. Process one
-  such file at a time and parallelize its query intervals across workers.
-- Text and code currently contain one ordinary object per file. Process
-  several files concurrently with one worker per file.
-- Keep the overall worker count within the requested thread budget.
-- Look up source type through new `filename` metadata while accepting existing
-  source records that use `file`.
+- JSON and TSV contain many ordinary objects per file, so one such file is
+  processed at a time while its query intervals are divided across workers.
+- Text and code contain one ordinary object per file, so several files are
+  processed concurrently with one worker per file.
+- The overall worker count stays within the requested thread budget.
+- Source type is read through current `filename` metadata while historical
+  source records using `file` remain accepted.
 
-Once the formats and lifecycle are stable, file-size-aware scheduling and other
-performance experiments can be considered. Future logical file types may need
-a different scheduling classification.
+File-size-aware scheduling and other performance experiments remain deferred.
+Future logical file types may need a different scheduling classification.
 
 ## Command-Line Interface
 
-Change `apps/forage.cc` to:
+The command-line interface is:
 
 ```text
 usage: forage [--meadow meadow]
@@ -456,7 +468,7 @@ Supplying no files selects all files that contain the query.
 More precisely, the application passes file arguments unchanged to
 `forage_all(...)`; the library performs inventory expansion. Quoting a pattern
 prevents the host shell from expanding it first. This is the same selector path
-used by the Python wrapper. If any explicitly supplied selector matches no
+the Python wrapper should use. If any explicitly supplied selector matches no
 meadow file, the operation reports an error rather than treating the resolved
 empty set as "all files."
 
@@ -471,17 +483,17 @@ already exist, its query must match the positional query, and its stored
 parameters are used. Programmatic callers retain a distinct way to supply an
 explicitly empty parameter map.
 
-## `TfIdfStats` Reader Changes
+## `TfIdfStats` Reader
 
 In `TfIdfStats::make(...)`, `recipe` is the TF-IDF tag. It is not the query.
 
-For current metadata, Stats must select the unique primary record for:
+For current metadata, Stats selects the unique primary record for:
 
 ```text
 type=forager, name=tf-idf, tag=<recipe>, top-level query present
 ```
 
-It must not select one of the potentially many file completion records sharing
+It does not select one of the potentially many file completion records sharing
 the name and tag. It obtains:
 
 - the content query from the primary record's top-level `query`;
@@ -491,7 +503,7 @@ the name and tag. It obtains:
 Completion metadata is not consulted during ranking. Aggregate annotations
 surviving in the index determine the current statistics.
 
-Preserve all established reader fallbacks:
+The reader preserves these established fallbacks:
 
 - an empty recipe first probes legacy `@tf-idf:` metadata;
 - otherwise the current default tag is `none`;
@@ -500,70 +512,67 @@ Preserve all established reader fallbacks:
 - literal old JSON remains parseable;
 - old annotation prefixes remain readable.
 
-## Implementation Sequence
+## Implementation Record
 
-Work should proceed in small compile-checked steps after explicit coding
-authorization:
+The completed change:
 
-1. Extend metadata serialization/parsing for common `filename`, top-level
-   forager `query`, primary definitions, and parameter-free file completion
-   records. Preserve old parsing.
-2. Change new source-format metadata writers from `file` to `filename`; keep
-   read-side acceptance of both spellings where needed.
-3. Reshape `Forager` into a transaction-neutral interval worker: add the
-   Warren-aware/query-aware validation path, keep factory dispatch, add the
-   concrete existing-definition `make(warren, recipe, error)` path, remove
-   metadata labeling and transaction ownership, and split worker finalization
-   from `Warren::ready()`.
-4. Update `TfIdfForager` and `NullForager` to the revised worker lifecycle.
-5. Add primary-definition lookup, exact specification comparison, and narrow
-   legacy TF-IDF refusal in Meadowlark's coordinator layer.
-6. Add normalized `already_foraged(...)` using the file completion record.
-7. Implement singular per-file `forage(...)` with explicit
-   `(<< query normalized-filename)` scoping and coordinated atomic publication.
-8. Implement `forage_all(...)` inventory-selector expansion, empty-vector
-   discovery, preflight, skip/retry behavior, and the initial append-like
-   JSON/TSV versus text/code scheduling policy.
-9. Replace the old public interval/GCL forage overloads and update
-   `apps/forage.cc` to the new positional query, `name[:tag]`, and optional
-   selector interface. The application passes selector strings to the library
-   without meadow-inventory expansion.
-10. Update `TfIdfStats` to read only the new primary definition while retaining
-    every old-reader path.
-11. Add focused coverage and update the durable Meadowlark/exploration
-    documentation to distinguish the new format from historical forms.
-12. Compile-check affected library, application, and test targets. Do not run
-    regression tests unless the user explicitly requests it.
+1. Added common current `filename` metadata, top-level forager `query`, primary
+   definitions, and parameter-free file completion records while preserving
+   older parsing.
+2. Reduced `Forager` to a transaction-neutral interval worker and moved file
+   discovery, query iteration, transactions, retry policy, and metadata into
+   Meadowlark's coordinator.
+3. Added exact specification comparison, normalized `already_foraged(...)`,
+   current-definition factories, and narrow refusal to extend historical
+   TF-IDF layers.
+4. Added per-file `forage(...)` and selector-based `forage_all(...)` with
+   filename containment, completion skipping, explicit zero-result completion,
+   and coordinated annotation-plus-marker publication.
+5. Changed `apps/forage.cc` to the positional query, `name[:tag]`, and optional
+   selector interface.
+6. Changed `TfIdfStats` to select the current primary definition while
+   preserving literal historical JSON, old query-field fallbacks, empty-tag
+   lookup, and old annotation namespaces.
+7. Kept expensive worker `ready()` preparation parallel. Only publication is
+   serialized through the final `commit_all(...)`.
 
-## Focused Coverage
+## Verification
 
-Tests should cover, without the agent running them:
+Focused regression coverage includes:
 
-- current definition and completion JSON shapes;
-- compatibility parsing for literal and internally encoded old records;
-- filename normalization and `filename`/`file` read compatibility;
-- unique `(name, tag)` enforcement and exact query/parameter comparison;
-- parameter-omitting existing-definition construction, including `recipe` as
-  tag and failure when the primary definition is absent;
-- invalid query and invalid implementation setup before definition commit;
-- default `none` tag behavior;
-- `already_foraged(...)` and batch skipping;
-- explicit zero-result file completion;
-- exact filename-feature scoping for TSV/JSON query intervals and text/code
-  single-object behavior, including exclusion of cross-boundary results;
-- empty selector vectors discovering all matching files, shared pattern
-  expansion for command-line/Python callers, and nonempty unmatched selectors
-  failing instead of selecting all files;
-- atomic marker plus annotation publication and abort behavior;
-- legacy TF-IDF refusal for writing;
-- legacy TF-IDF ranking through `TfIdfStats`;
-- current Stats selecting the primary definition rather than a file completion
-  record;
-- deletion-sensitive placement of TF-IDF worker aggregates inside their file.
+- current definition and completion JSON shapes plus old literal/internal JSON
+  parsing;
+- current `filename` and historical `file` handling;
+- immutable `(name, tag)` specifications and parameter-omitting reuse;
+- validation failure before definition publication;
+- default `tf-idf:none`, `recipe`-as-tag, and current-primary Stats selection;
+- normalized completion lookup, batch skipping, selector expansion, unmatched
+  selector refusal, and explicit zero-result completion;
+- multi-worker TSV filename scoping, item totals, per-file aggregate placement,
+  and exclusion of terms outside the selected content;
+- current-writer refusal for historical layers and legacy TF-IDF ranking;
+- NullForager publication with a write-free worker transaction.
 
-## Non-Goals
+The user reports that the complete regression suite and additional tests pass.
+The user also exercised old indices, fresh construction, consolidation, and
+ranking. On the MS MARCO build used to diagnose scheduling, moving `ready()`
+back into each worker reduced foraging from 11:23.76 to 3:12.44 while ranking
+continued to complete normally.
 
-This step does not:
+## Deferred Follow-Ups
+
+Controlled publication failure after workers begin, a concurrent reader during
+`commit_all(...)`, and deletion of a file carrying worker aggregates are not
+directly exercised. The first two need controlled failure/concurrency support;
+deletion awaits the file-deletion surface. The short coordinated-commit read
+window is recorded separately in `ai/improvements.md`.
+
+File-size-aware scheduling and policies for future multi-object logical file
+types remain performance work, not format changes.
+
+## Boundaries
+
+This implementation does not:
 
 - implement file deletion;
 - migrate or rewrite old databases;
@@ -572,5 +581,5 @@ This step does not:
 - remove the general `check(...)` pattern across Cottontail;
 - change the indexed-regular-expression plan;
 - design SQL, Mongo-style, join, or pipeline languages;
-- optimize the final scheduling policy before the format is stable;
+- optimize scheduling around measured file sizes;
 - change whether TF-IDF's stored DF annotations should remain.

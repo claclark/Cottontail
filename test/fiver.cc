@@ -7,6 +7,7 @@
 #include "gtest/gtest.h"
 
 #include "src/cottontail.h"
+#include "src/hazel.h"
 #include "test/fake_text.h"
 
 TEST(Fiver, Basic) {
@@ -75,6 +76,198 @@ TEST(Fiver, Basic) {
   EXPECT_EQ(fiver->txt()->translate(0, 2), "I swear\nThat ");
   EXPECT_EQ(fiver->txt()->translate(24, 25), "Successors\nAnd ");
   fiver->end();
+}
+
+TEST(Fiver, EmptyAndTokenlessActivationAndMerge) {
+  const std::string burrow = "empty-tokenless-fiver.burrow";
+  std::string error;
+  std::shared_ptr<cottontail::Working> working =
+      cottontail::Working::mkdir(burrow, &error);
+  ASSERT_NE(working, nullptr) << error;
+  std::shared_ptr<cottontail::Featurizer> featurizer =
+      cottontail::Featurizer::make("hashing", "");
+  ASSERT_NE(featurizer, nullptr);
+  std::shared_ptr<cottontail::Tokenizer> tokenizer =
+      cottontail::Tokenizer::make("ascii", "");
+  ASSERT_NE(tokenizer, nullptr);
+  std::shared_ptr<cottontail::Compressor> posting_compressor =
+      cottontail::Compressor::make("zlib", "", &error);
+  ASSERT_NE(posting_compressor, nullptr) << error;
+  std::shared_ptr<cottontail::Compressor> fvalue_compressor =
+      cottontail::Compressor::make("zlib", "", &error);
+  ASSERT_NE(fvalue_compressor, nullptr) << error;
+  std::shared_ptr<cottontail::Compressor> text_compressor =
+      cottontail::Compressor::make("zlib", "", &error);
+  ASSERT_NE(text_compressor, nullptr) << error;
+
+  struct ShardSpec {
+    std::string text;
+    bool append;
+    bool tokenful;
+  };
+  const std::vector<ShardSpec> specs = {
+      {"", false, false},       {"", false, false},
+      {"\t \n", true, false},  {"alpha", true, true},
+      {" \r\n", true, false}, {"beta gamma", true, true},
+      {"\n\t\n", true, false}, {"", false, false},
+  };
+
+  cottontail::addr next_address = 0;
+  std::vector<std::shared_ptr<cottontail::Fiver>> originals;
+  for (size_t i = 0; i < specs.size(); i++) {
+    std::shared_ptr<cottontail::Fiver> fiver =
+        cottontail::Fiver::make(working, featurizer, tokenizer, &error,
+                                posting_compressor, fvalue_compressor,
+                                text_compressor);
+    ASSERT_NE(fiver, nullptr) << error;
+    fiver->set_sequence(i);
+    ASSERT_TRUE(fiver->transaction(&error)) << error;
+    if (specs[i].append) {
+      cottontail::addr p, q;
+      ASSERT_TRUE(fiver->appender()->append(specs[i].text, &p, &q, &error))
+          << error;
+    }
+    next_address = fiver->relocate(next_address);
+    ASSERT_TRUE(fiver->ready(&error)) << error;
+    fiver->commit();
+    originals.push_back(fiver);
+  }
+  EXPECT_EQ(next_address, 3);
+
+  auto activate = [&](cottontail::addr sequence) {
+    return cottontail::Fiver::unpickle(
+        cottontail::owsla_shard_name("fiver", sequence, sequence),
+        working, featurizer, tokenizer, &error, posting_compressor,
+        fvalue_compressor, text_compressor);
+  };
+  std::vector<std::shared_ptr<cottontail::Fiver>> active;
+  for (size_t i = 0; i < specs.size(); i++) {
+    std::shared_ptr<cottontail::Fiver> fiver = activate(i);
+    ASSERT_NE(fiver, nullptr) << error;
+    cottontail::addr sequence_start, sequence_end;
+    fiver->get_sequence(&sequence_start, &sequence_end);
+    EXPECT_EQ(sequence_start, static_cast<cottontail::addr>(i));
+    EXPECT_EQ(sequence_end, static_cast<cottontail::addr>(i));
+    fiver->start();
+    cottontail::addr p, q;
+    EXPECT_EQ(fiver->txt()->range(&p, &q), specs[i].tokenful);
+    fiver->end();
+    if (!specs[i].tokenful)
+      EXPECT_EQ(fiver->estimated_size(),
+                static_cast<cottontail::addr>(specs[i].text.size()));
+    else
+      EXPECT_GT(fiver->estimated_size(),
+                static_cast<cottontail::addr>(specs[i].text.size()));
+    active.push_back(fiver);
+  }
+
+  std::shared_ptr<cottontail::Fiver> empty =
+      cottontail::Fiver::merge({active[0], active[1]}, &error);
+  ASSERT_NE(empty, nullptr) << error;
+  cottontail::addr p, q;
+  cottontail::addr sequence_start, sequence_end;
+  empty->get_sequence(&sequence_start, &sequence_end);
+  EXPECT_EQ(sequence_start, 0);
+  EXPECT_EQ(sequence_end, 1);
+  EXPECT_EQ(empty->estimated_size(), 0);
+  empty->start();
+  EXPECT_FALSE(empty->txt()->range(&p, &q));
+  empty->end();
+
+  std::shared_ptr<cottontail::Fiver> empty_and_dust =
+      cottontail::Fiver::merge({empty, active[2]}, &error);
+  ASSERT_NE(empty_and_dust, nullptr) << error;
+  empty_and_dust->get_sequence(&sequence_start, &sequence_end);
+  EXPECT_EQ(sequence_start, 0);
+  EXPECT_EQ(sequence_end, 2);
+  EXPECT_EQ(empty_and_dust->estimated_size(),
+            static_cast<cottontail::addr>(specs[2].text.size()));
+  empty_and_dust->start();
+  EXPECT_FALSE(empty_and_dust->txt()->range(&p, &q));
+  std::shared_ptr<cottontail::Hazel> empty_hazel =
+      empty_and_dust->hazel(&error);
+  empty_and_dust->end();
+  ASSERT_NE(empty_hazel, nullptr) << error;
+  empty_hazel->start();
+  EXPECT_FALSE(empty_hazel->txt()->range(&p, &q));
+  empty_hazel->end();
+
+  auto check_mixed = [&](std::shared_ptr<cottontail::Fiver> fiver) {
+    ASSERT_NE(fiver, nullptr);
+    fiver->get_sequence(&sequence_start, &sequence_end);
+    EXPECT_EQ(sequence_start, 0);
+    EXPECT_EQ(sequence_end, 7);
+    fiver->start();
+    EXPECT_TRUE(fiver->txt()->range(&p, &q));
+    EXPECT_EQ(p, 0);
+    EXPECT_EQ(q, 2);
+    EXPECT_EQ(fiver->txt()->tokens(), 3);
+    std::unique_ptr<cottontail::Hopper> hopper =
+        fiver->hopper_from_gcl("alpha", &error);
+    ASSERT_NE(hopper, nullptr) << error;
+    hopper->tau(cottontail::minfinity + 1, &p, &q);
+    EXPECT_EQ(p, 0);
+    EXPECT_EQ(q, 0);
+    EXPECT_EQ(fiver->txt()->translate(p, q), "alpha\n \r\n");
+    hopper = fiver->hopper_from_gcl("beta", &error);
+    ASSERT_NE(hopper, nullptr) << error;
+    hopper->tau(cottontail::minfinity + 1, &p, &q);
+    EXPECT_EQ(p, 1);
+    EXPECT_EQ(q, 1);
+    EXPECT_EQ(fiver->txt()->translate(p, q), "beta ");
+    hopper = fiver->hopper_from_gcl("gamma", &error);
+    ASSERT_NE(hopper, nullptr) << error;
+    hopper->tau(cottontail::minfinity + 1, &p, &q);
+    EXPECT_EQ(p, 2);
+    EXPECT_EQ(q, 2);
+    EXPECT_EQ(fiver->txt()->translate(p, q), "gamma\n\n\t\n");
+    EXPECT_EQ(fiver->txt()->translate(0, 2),
+              "alpha\n \r\nbeta gamma\n\n\t\n");
+    EXPECT_EQ(fiver->txt()->translate(0, cottontail::maxfinity - 1),
+              "alpha\n \r\nbeta gamma\n\n\t\n");
+    fiver->end();
+  };
+
+  std::shared_ptr<cottontail::Fiver> merged =
+      cottontail::Fiver::merge(active, &error);
+  ASSERT_NE(merged, nullptr) << error;
+  check_mixed(merged);
+
+  std::shared_ptr<cottontail::Fiver> left = cottontail::Fiver::merge(
+      {active[0], active[1], active[2]}, &error);
+  ASSERT_NE(left, nullptr) << error;
+  std::shared_ptr<cottontail::Fiver> middle =
+      cottontail::Fiver::merge({active[3], active[4]}, &error);
+  ASSERT_NE(middle, nullptr) << error;
+  std::shared_ptr<cottontail::Fiver> right = cottontail::Fiver::merge(
+      {active[5], active[6], active[7]}, &error);
+  ASSERT_NE(right, nullptr) << error;
+  std::shared_ptr<cottontail::Fiver> tree =
+      cottontail::Fiver::merge({left, middle, right}, &error);
+  ASSERT_NE(tree, nullptr) << error;
+  check_mixed(tree);
+
+  merged->start();
+  std::shared_ptr<cottontail::Hazel> hazel = merged->hazel(&error);
+  merged->end();
+  ASSERT_NE(hazel, nullptr) << error;
+  hazel->start();
+  EXPECT_TRUE(hazel->txt()->range(&p, &q));
+  EXPECT_EQ(p, 0);
+  EXPECT_EQ(q, 2);
+  EXPECT_EQ(hazel->txt()->tokens(), 3);
+  std::unique_ptr<cottontail::Hopper> hopper =
+      hazel->hopper_from_gcl("alpha", &error);
+  ASSERT_NE(hopper, nullptr) << error;
+  hopper->tau(cottontail::minfinity + 1, &p, &q);
+  EXPECT_EQ(hazel->txt()->translate(p, q), "alpha\n \r\n");
+  hopper = hazel->hopper_from_gcl("gamma", &error);
+  ASSERT_NE(hopper, nullptr) << error;
+  hopper->tau(cottontail::minfinity + 1, &p, &q);
+  EXPECT_EQ(hazel->txt()->translate(p, q), "gamma\n\n\t\n");
+  EXPECT_EQ(hazel->txt()->translate(0, 2),
+            "alpha\n \r\nbeta gamma\n\n\t\n");
+  hazel->end();
 }
 
 std::shared_ptr<cottontail::Fiver>

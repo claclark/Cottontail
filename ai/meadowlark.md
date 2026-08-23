@@ -1,6 +1,6 @@
 # Meadowlark Database Conventions
 
-Status date: 2026-08-21.
+Status date: 2026-08-22.
 
 This is the durable reference for Meadowlark's machine-facing structure,
 metadata, source provenance, and append invariants. Completed implementation
@@ -47,8 +47,8 @@ Ordinary words and names remain available to source data and applications.
 | `::` | A TSV header record, when a header is requested. |
 | `#` | A token-bearing physical code line; its value is the one-based line number. |
 
-JSON member annotations use colon paths such as `:type:`, `:file:`, and
-`:parameters:contents:`. These describe fields inside an object; they do not
+JSON member annotations use colon paths such as `:type:`, `:filename:`, and
+`:parameters:container:`. These describe fields inside an object; they do not
 change the object's root role. In particular, an `@` metadata record has field
 annotations such as `:type:` but does not also receive the ordinary `:` root.
 
@@ -87,11 +87,11 @@ Current types are:
 
 | `type` | Meaning | Main fields |
 | --- | --- | --- |
-| `json` | A source represented as JSON objects | `file` |
-| `tsv` | A tabular source and its column mapping | `file`, `separator`, `header`, `columns` |
-| `text` | One unstructured text object | `file` |
-| `code` | One line-addressable source-code object | `file` |
-| `forager` | One derived annotation pass | `name`, `tag`, `parameters` |
+| `json` | A source represented as JSON objects | `filename` |
+| `tsv` | A tabular source and its column mapping | `filename`, `separator`, `header`, `columns` |
+| `text` | One unstructured text object | `filename` |
+| `code` | One line-addressable source-code object | `filename` |
+| `forager` | A derived annotation definition or file completion | `name`, `tag`, plus `query` or `filename` |
 
 The type vocabulary is open. Consumers must discover it from the records they
 find rather than assume this table is permanently exhaustive. `type` names the
@@ -132,12 +132,13 @@ continues to apply display translation at its boundary.
 
 ## File Metadata
 
-Every file-format record contains its normalized source identity in `file`:
+Every newly written file-format record contains its normalized source identity
+in `filename`:
 
 ```json
 {
   "type": "json",
-  "file": "./records.jsonl"
+  "filename": "./records.jsonl"
 }
 ```
 
@@ -145,8 +146,8 @@ Every file-format record contains its normalized source identity in `file`:
 type describes the representation in the database; current JSON input happens
 to use JSON Lines framing, so the metadata type is `json`, not `jsonl`.
 
-The `file` field is authoritative. Consumers should not guess a source's type
-from its extension.
+The `filename` field is authoritative. Readers accept the historical spelling
+`file`; consumers should not guess a source's type from its extension.
 
 ### TSV Metadata
 
@@ -156,7 +157,7 @@ columns to emitted features:
 ```json
 {
   "type": "tsv",
-  "file": "./records.tsv",
+  "filename": "./records.tsv",
   "separator": "\t",
   "header": true,
   "columns": [
@@ -209,17 +210,15 @@ number, while the normal provenance query recovers the file containing it.
 
 ## Forager Metadata
 
-A forager record describes one derived annotation run:
+A primary forager record defines one derived annotation layer:
 
 ```json
 {
   "type": "forager",
   "name": "tf-idf",
   "tag": "none",
+  "query": ":1:",
   "parameters": {
-    "start": "86",
-    "end": "523259267",
-    "contents": ":1:",
     "container": ":",
     "id": ":0:",
     "stemmer": "porter"
@@ -232,25 +231,40 @@ The conventions are:
 - `name` identifies the forager implementation and annotation family.
 - `tag` selects a particular output or statistics view in that family. New
   writers use the literal `none` when no tag is supplied.
-- `parameters` contains `start` and `end`, expressed as strings, for the
-  processed address range.
-- Other parameters depend on the forager, and other top-level keys are allowed.
+- `query` identifies the intervals processed and whose starts receive the
+  derived annotations.
+- `parameters` contains the forager-specific interpretation of those intervals.
+- The complete `(name, tag, query, parameters)` specification is global and
+  immutable for that layer.
 
 For current TF-IDF metadata specifically:
 
-- `contents` identifies the intervals whose text was processed and whose starts
-  carry term-frequency annotations.
 - `container` identifies the enclosing result objects and defaults to `:`.
 - `id` is optional and has no default. Ranking does not require it; consumers
   producing external identifiers, such as TREC output, do.
 
-Foraging annotates data already in the database. It is not a file append, so a
-forager record is outside file `/.` segments and has no source filename.
+Foraging applies the layer one logical file at a time. Its worker annotations
+and separate completion record form one coordinated commit set:
 
-For example, current TF-IDF records can be selected structurally with:
+```json
+{
+  "type": "forager",
+  "filename": "./records.tsv",
+  "name": "tf-idf",
+  "tag": "none"
+}
+```
+
+The completion record deliberately has neither `query` nor `parameters`; they
+come from the unique primary definition. Both forms are `@` metadata outside
+file `/.` segments. The completion-marker transaction is ordered after the
+worker transactions. `TfIdfStats` reads the primary definition only.
+
+For example, the current TF-IDF primary definition can be selected
+structurally with:
 
 ```text
-(>> (>> @ (>> :type: "forager")) (>> :name: "tf-idf"))
+(>> (>> (>> @ (>> :type: "forager")) (>> :name: "tf-idf")) :query:)
 ```
 
 The default current view additionally has `:tag:` equal to `"none"`. The
@@ -272,9 +286,13 @@ Readers preserve these older forms:
 - An empty requested statistics tag first checks the legacy `@tf-idf:` lookup
   feature. If none exists, it means the current literal tag `none`.
 - Explicit nonempty tags use the structured `@`, `:type:`, `:name:`, and
-  `:tag:` lookup.
-- Current metadata uses `contents`. Readers fall back to legacy `gcl`, then to
-  the resolved `container`, when `contents` is absent.
+  `:tag:` lookup. Current readers require top-level `query` when selecting a
+  primary so they do not select file completion records.
+- Current metadata uses top-level `query`. Readers fall back to historical
+  `parameters.contents`, then `parameters.gcl`, then to the resolved
+  `container`, when it is absent.
+- New file-oriented writers refuse to extend a historical interval-oriented
+  layer with the same `(name, tag)`; old layers remain readable.
 - No compatibility path invents an `id`.
 
 This compatibility was exercised against the older `b.meadow` and `c.meadow`
@@ -317,14 +335,14 @@ Useful provenance queries are:
 
 ```text
 /
-(>> @ (>> :file: "src/foo.cc"))
+(>> @ (>> :filename: "src/foo.cc"))
 (<< : src/foo.cc)
 (<< // (>> /. Q))
 ```
 
-These inventory canonical filenames, find metadata for one file, select that
-file's ordinary objects, and recover the filename associated with `Q`,
-respectively.
+These inventory canonical filenames, find current metadata for one file,
+select that file's ordinary objects, and recover the filename associated with
+`Q`, respectively. Use historical `:file:` when exploring an older meadow.
 
 The last query is the standard inverse lookup: given any interval query `Q`,
 find the `/.` segment containing it, then return that segment's leading `//`
@@ -344,9 +362,10 @@ backslashes, remain the known unusual ambiguity in this simple restart rule.
 
 ## Publication And Restart Invariants
 
-The canonical `/` marker must become visible atomically with the source
-metadata and data. Otherwise restart could mistake a partial append for a
-complete one.
+The canonical `/` marker is the durable completion marker for source
+ingestion. JSONL and TSV order its source transaction after their worker data
+transactions in the coordinated commit set so ordinary restart does not treat
+unpublished work as complete.
 
 The public `meadowlark::append_all(...)` operation declared in
 `meadowlark/meadowlark.h` preflights its typed input plan through `/`, skips
@@ -357,11 +376,19 @@ thin command-line caller of this library operation. The durable invariant is:
 > and safely retries missing or interrupted sources.
 
 JSONL and TSV coordinate their source transaction and worker transactions.
-Text and code use one transaction per complete file. A failure aborts the
-affected coordinated append rather than publishing its canonical marker alone.
-Committed data is visible to a newly started read epoch; an already-started
-Warren retains its existing view. Restart checks therefore run in a fresh
-started read epoch.
+Text and code use one transaction per complete file. A failure before
+publication aborts the affected coordinated append rather than publishing its
+canonical marker alone; interrupted publication is handled by the Bigwig/Fiver
+recovery path. Committed data is visible to a newly started read epoch; an
+already-started Warren retains its existing view. Restart checks therefore run
+in a fresh started read epoch.
+
+`Warren::commit_all(...)` currently publishes its already-readied Fivers
+sequentially. A read epoch starting during that short window can observe a
+proper subset, usually worker data before the final source or forager marker.
+Recovery still resolves the coordinated set, and ordinary Meadowlark command
+use does not overlap operations this way. A publication gate for newly starting
+readers is recorded as a possible improvement in `ai/improvements.md`.
 
 Any future file adapter must preserve the same contract: an explicit typed
 metadata record, a canonical `/` identity, a local `//`, a filename feature on
@@ -377,6 +404,11 @@ indices, a complete build from scratch, and the existing 1.3 TB ClimbMix index
 all worked without observed problems. These checks exercise both historical
 read compatibility and current-format construction; they do not rewrite old
 indices into the new metadata layout.
+
+After the 2026-08-22 file-oriented forager change and its follow-up coverage,
+the user reports that the complete regression suite and additional tests pass.
+The user also verified current MS MARCO construction and ranking and continued
+to query older indices successfully.
 
 ## Create-Time Warren Parameters
 

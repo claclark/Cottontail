@@ -39,15 +39,19 @@ Run:
 /
 ```
 
-This returns each canonical source filename. File metadata repeats that
-identity in its `file` field. To select metadata for a particular source:
+This returns each canonical source filename. Current file metadata repeats
+that identity in its `filename` field. To select metadata for a particular
+source:
 
 ```text
-(>> @ (>> :file: "src/foo.cc"))
+(>> @ (>> :filename: "src/foo.cc"))
 ```
 
 Do not infer the format from `.cc`, `.tsv`, or another suffix; use the metadata
 record's `type`.
+
+Older source metadata uses `file` instead of `filename`; query `:file:` when
+exploring such a meadow.
 
 Current filename text is internally framed as a JSON string, so display tools
 show names with quotes and preserve leading `./` or `/`. The corresponding
@@ -97,25 +101,27 @@ results themselves carry physical line-number values.
 
 ## Understand Derived Annotations
 
-A `forager` metadata record is a manifest for annotations added after ingestion.
-Read its:
+A no-filename `forager` metadata record defines an annotation layer. Read its:
 
 - `name`, which identifies the annotation family;
 - `tag`, which selects a particular view;
-- `parameters.start` and `parameters.end`, which delimit the processed range.
+- top-level `query`, which identifies the intervals processed; and
+- `parameters`, which describe the forager-specific interpretation.
 
 Other parameters are forager-specific. For a current TF-IDF record, inspect:
 
-- `parameters.contents`, which identifies the intervals processed;
 - `parameters.container`, which identifies enclosing result objects; and
 - optional `parameters.id`, which supplies external identifiers when needed.
 
 Current writers use the literal tag `none` when no tag was supplied. Older
-TF-IDF records may omit `type`, use `gcl` instead of `contents`, or use the
-legacy `@tf-idf:` lookup annotation.
+TF-IDF records may omit `type`, put the query in `parameters.contents` or
+`parameters.gcl`, include `start` and `end`, or use the legacy `@tf-idf:`
+lookup annotation.
 
-Foraging is not a file append. A forager record generally has no associated
-filename and sits outside `/.` file segments.
+Current file-oriented foraging also writes one completion record per processed
+file. It has `type`, `filename`, `name`, and `tag`, but no `query` or
+`parameters`; those come from the matching primary definition. All forager
+metadata sits outside `/.` file segments.
 
 File `@` records also sit outside `/.`. A `/.` interval is specifically a
 nonempty data segment containing its local `//` filename and data. A tokenless
@@ -130,9 +136,11 @@ For a fresh connection, use this order:
 1. Run `@` and inspect the full metadata records.
 2. Run `(<< :type: @)` to summarize explicit metadata types.
 3. Run `/` to inventory sources.
-4. Use each file record's `type`, `file`, and type-specific fields to construct
-   data queries.
-5. Use forager records to discover ranking or derived-annotation views.
+4. Use each file record's `type`, `filename`, and type-specific fields to
+   construct data queries; accept historical `file` as a reader.
+5. Use no-filename forager definitions to discover ranking or
+   derived-annotation views; treat filename-bearing records as completion
+   provenance.
 6. For any result interval, use `(<< // (>> /. Q))` to identify its source.
 
 The complete format contract and compatibility rules are in

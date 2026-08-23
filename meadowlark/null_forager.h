@@ -23,10 +23,10 @@ public:
        std::string *error = nullptr) {
     return std::shared_ptr<Forager>(new NullForager());
   };
-  static bool check(const std::string &tag,
-                    const std::map<std::string, std::string> &parameters,
-                    std::string *error = nullptr) {
-    return true;
+  static std::shared_ptr<Forager> make(std::shared_ptr<Warren> warren,
+                                       const std::string &recipe,
+                                       std::string *error = nullptr) {
+    return Forager::make(warren, "null", recipe, error);
   };
   virtual ~NullForager(){};
   NullForager(const NullForager &) = delete;

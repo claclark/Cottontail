@@ -8,14 +8,18 @@
 
 static void ExpectRoundtrip(const std::string &name, const std::string &tag,
                             const std::map<std::string, std::string> &params) {
-  const std::string j = cottontail::meadowlark::forager2json(name, tag, params);
+  const std::string query = ":contents:";
+  const std::string j =
+      cottontail::meadowlark::forager2json(name, tag, query, params);
 
-  std::string n2, t2;
-  std::map<std::string, std::string> p2;
-  ASSERT_TRUE(cottontail::meadowlark::json2forager(j, &n2, &t2, &p2));
-  EXPECT_EQ(n2, name);
-  EXPECT_EQ(t2, tag);
-  EXPECT_EQ(p2, params);
+  cottontail::meadowlark::ForagerMetadata metadata;
+  ASSERT_TRUE(cottontail::meadowlark::json2forager(j, &metadata));
+  EXPECT_EQ(metadata.name, name);
+  EXPECT_EQ(metadata.tag, tag);
+  EXPECT_TRUE(metadata.has_query);
+  EXPECT_EQ(metadata.query, query);
+  EXPECT_FALSE(metadata.has_filename);
+  EXPECT_EQ(metadata.parameters, params);
 }
 
 static void
@@ -43,19 +47,33 @@ TEST(ForagerJson, RoundtripEmptyParameters) {
 TEST(JsonMetadata, DescribesNormalizedFile) {
   const std::string j = cottontail::meadowlark::json_metadata("./whatever");
   EXPECT_NE(j.find("\"type\": \"json\""), std::string::npos);
-  EXPECT_NE(j.find("\"file\": \"./whatever\""), std::string::npos);
+  EXPECT_NE(j.find("\"filename\": \"./whatever\""), std::string::npos);
 }
 
 TEST(TextMetadata, DescribesNormalizedFile) {
   const std::string j = cottontail::meadowlark::text_metadata("./whatever");
   EXPECT_NE(j.find("\"type\": \"text\""), std::string::npos);
-  EXPECT_NE(j.find("\"file\": \"./whatever\""), std::string::npos);
+  EXPECT_NE(j.find("\"filename\": \"./whatever\""), std::string::npos);
 }
 
 TEST(CodeMetadata, DescribesNormalizedFile) {
   const std::string j = cottontail::meadowlark::code_metadata("./whatever");
   EXPECT_NE(j.find("\"type\": \"code\""), std::string::npos);
-  EXPECT_NE(j.find("\"file\": \"./whatever\""), std::string::npos);
+  EXPECT_NE(j.find("\"filename\": \"./whatever\""), std::string::npos);
+}
+
+TEST(FileMetadata, ReadsCurrentAndHistoricalFilenameFields) {
+  std::string type, filename;
+  ASSERT_TRUE(cottontail::meadowlark::json2file(
+      "{\"type\":\"text\",\"filename\":\"./new.txt\"}", &type,
+      &filename));
+  EXPECT_EQ(type, "text");
+  EXPECT_EQ(filename, "./new.txt");
+  ASSERT_TRUE(cottontail::meadowlark::json2file(
+      "{\"type\":\"text\",\"file\":\"./old.txt\"}", &type,
+      &filename));
+  EXPECT_EQ(type, "text");
+  EXPECT_EQ(filename, "./old.txt");
 }
 
 TEST(TsvMetadata, DescribesHeaderMapping) {
@@ -63,7 +81,7 @@ TEST(TsvMetadata, DescribesHeaderMapping) {
       "./table.tsv", "\t", true, {"Animal", "Favorite Food"},
       {":Animal:", ":Favorite_Food:"});
   EXPECT_NE(j.find("\"type\": \"tsv\""), std::string::npos);
-  EXPECT_NE(j.find("\"file\": \"./table.tsv\""), std::string::npos);
+  EXPECT_NE(j.find("\"filename\": \"./table.tsv\""), std::string::npos);
   EXPECT_NE(j.find("\"separator\": \"\\t\""), std::string::npos);
   EXPECT_NE(j.find("\"header\": true"), std::string::npos);
   EXPECT_NE(j.find("\"header\": \"Favorite Food\""), std::string::npos);
@@ -82,8 +100,19 @@ TEST(TsvMetadata, OmitsHeadingsWithoutHeader) {
 
 TEST(ForagerJson, WriterIncludesForagerType) {
   const std::string j =
-      cottontail::meadowlark::forager2json("alpha", "t0", {});
+      cottontail::meadowlark::forager2json("alpha", "t0", ":", {});
   EXPECT_NE(j.find("\"type\": \"forager\""), std::string::npos);
+}
+
+TEST(ForagerJson, FileRecordOmitsDefinitionFields) {
+  const std::string j = cottontail::meadowlark::forager_file2json(
+      "./whatever", "alpha", "t0");
+  cottontail::meadowlark::ForagerMetadata metadata;
+  ASSERT_TRUE(cottontail::meadowlark::json2forager(j, &metadata));
+  EXPECT_EQ(metadata.filename, "./whatever");
+  EXPECT_TRUE(metadata.has_filename);
+  EXPECT_FALSE(metadata.has_query);
+  EXPECT_TRUE(metadata.parameters.empty());
 }
 
 TEST(ForagerJson, RoundtripSimpleParameters) {

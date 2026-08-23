@@ -671,8 +671,6 @@ bool Fiver::ready_(std::string *error) {
   }
   if (!appender_->ready(error) || !annotator_->ready(error))
     return false;
-  if (annotations_->size() == 0)
-    return true;
   index_->clear();
   addr relocate = staging - where_;
   for (auto &annotation : (*annotations_))
@@ -1117,7 +1115,9 @@ bool hazel_write_txt_blob(std::fstream *out, std::shared_ptr<Idx> idx,
       return false;
     }
     if (!have_chunk) {
-      group_start = raw_start;
+      // group_start = raw_start;
+      // The first Hazel text-directory entry starts at raw byte zero.  The
+      // first token chunk can start later when tokenless Fivers precede it.
       have_chunk = true;
     } else if (raw_start - group_start >= target_chunk_size) {
       if (!hazel_write_text_chunk(out, chunk_space_start, text, group_start,

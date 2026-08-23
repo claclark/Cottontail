@@ -31,7 +31,9 @@
   metadata in a burrow.
 - `Bigwig` is the dynamic Warren backed by `Fiver` shards and `Fluffle` state.
   Meadowlark creation goes through Bigwig.
-- `Fiver` is the mutable/transaction shard format used by Bigwig.
+- `Fiver` is the mutable/transaction shard format used by Bigwig. Readying a
+  working-backed Fiver always serializes a commit artifact, including for a
+  write-free transaction or physical text that tokenizes to no annotations.
 - `Hazel` is the immutable single-file shard format produced from Fivers and
   opened as a standalone Warren.
 - Major objects are intended to be safe for concurrent use unless documented
@@ -121,12 +123,13 @@
 - `meadowlark::append_all(...)`, declared in `meadowlark/meadowlark.h`, owns the
   reusable typed input plan, duplicate preflight, and dispatch used by
   `apps/meadowlark`.
-- `meadowlark/forager.*`: pluggable annotation passes over intervals or GCL
-  query results.
+- `meadowlark/forager.*`: transaction-neutral workers for pluggable annotation
+  passes over file-scoped GCL query results.
 - Current foragers include `tf-idf_forager.*` and `null_forager.h`.
 - The durable format, metadata, provenance, and restart conventions are in
   `ai/meadowlark.md`. The concise model bootstrap is
-  `ai/exploring-meadowlark.md`.
+  `ai/exploring-meadowlark.md`. The implemented file-oriented foraging model is
+  recorded in `ai/forager.md`.
 - File `@` metadata is outside `/.`. Canonical filenames receive `/` only;
   every nonempty worker data chunk has a leading `//`, one encompassing `/.`,
   and one normalized-filename feature interval over the chunk's data.
@@ -134,6 +137,8 @@
   preserves leading punctuation. Tokenless files publish `/`, `@`, and `//`,
   but no `/.`, `:`, or filename-feature interval. Restart accepts historical
   raw filename text as well as framed text.
+- New source and file-specific metadata uses top-level `filename`; readers
+  accept historical source metadata using `file`.
 - `json_translate(...)` is a lossy arbitrary-interval display operation;
   `json_convert(...)` validates and produces external JSON from one complete
   internal value. `meadowlark::json2forager(...)` uses the latter.
@@ -155,8 +160,9 @@
   the type of its introducing option. Immediately after
   `--create`, checked `parameter:value` assignments may precede the first input
   flag; they are applied through `set_parameter(...)` before ingestion.
-- `apps/forage.cc`: run a Meadowlark forager over a query; supports
-  `--key value` and `--key=value` parameters.
+- `apps/forage.cc`: run `query name[:tag] [file ...]`; supports `--key value`
+  and `--key=value` parameters and passes file selectors to the shared
+  `forage_all(...)` library path.
 - `apps/fluffy.cc`: interactive GCL query shell over a burrow or Hazel. The
   Bazel build also emits the professional command name `inspect` as a symlink
   to `fluffy`. It uses Linenoise for editing and session-only history; no
@@ -211,6 +217,9 @@
   as the top-level input path.
 - `test/BUILD` contains aggregate `//test:tests` and dedicated
   `//test:hazel_test` and `//test:optimizer_test`.
+- On 2026-08-23 the user reported that the complete regression suite and
+  additional tests pass after the file-oriented forager and empty/tokenless
+  Fiver work.
 - Repository rule: agents should run compile/build checks only. Do not run test
   cases, including `bazel test`, unless the user explicitly asks for that
   specific test run.
@@ -258,6 +267,10 @@
 - Hazel txt activation loads the text map, uses a 16-reader `ReadGate`, keeps a
   mutex-protected `text_chunk_tag` hopper, and caches decompressed chunks
   without eviction.
+- Fiver-to-Hazel conversion always begins the first stored raw-text chunk at
+  byte zero, even when leading tokenless Fivers place the first token-chunk
+  anchor later. The anchor is not rebased, so leading dust remains physically
+  stored without acquiring a token address.
 - Started Hazel clones share the source `HazelIdx` and `HazelTxt` objects and
   therefore share both caches. Ending a clone does not release those components;
   cache memory remains until every owning Hazel Warren is destroyed.
@@ -444,20 +457,33 @@
 
 ## Current Ranking Notes
 
-- `Forager` retains forager construction and annotation behavior, while
-  `TfIdfStats` consumes the metadata parser directly.
+- `Forager` owns worker construction, per-interval annotation, and worker-local
+  finalization. Meadowlark's coordinator owns metadata, file selection,
+  transactions, and publication; `TfIdfStats` consumes the metadata parser
+  directly.
 - `TfIdfStats::make(...)` owns its ranking-view stemmer/tokenizer through
   private base `Stats` state initialized by constructor.
-- New foragers canonicalize omitted names to `tf-idf` and omitted tags to
+- Current foragers canonicalize omitted names to `tf-idf` and omitted tags to
   `none`, and their metadata is selected through `@`, `:type:`, `:name:`, and
   `:tag:`. An empty Stats recipe first checks the legacy `@tf-idf:` feature,
   then falls back to the new literal `none` tag.
-- New forage metadata calls its processed interval query `contents`.
-  `TfIdfStats` falls back through legacy `gcl` and then `container`; `id` has no
-  default and is only required by consumers such as TREC output.
+- A no-filename forager primary stores the layer's immutable query at top-level
+  `query` and its implementation settings in `parameters`. Filename-bearing
+  completion records contain only `type`, `filename`, `name`, and `tag`.
+  `TfIdfStats` reads the primary and falls back through historical
+  `parameters.contents`, `gcl`, and then `container`; `id` has no default and
+  is only required by consumers such as TREC output.
+- The base forager dispatcher rejects metadata-envelope keys in `parameters`.
+  TF-IDF additionally rejects historical writer keys `start`, `end`, `gcl`,
+  and `contents`, while its read compatibility remains intact.
 - User verified the current compatibility path against older `b.meadow` and
   `c.meadow` indexes with pre-current metadata field names; both remained
   usable.
+- Per-file foraging uses coordinated worker and completion transactions. Worker
+  transactions are readied in parallel and the completion marker is ordered
+  last in `commit_all(...)`. A newly starting reader can still observe a
+  proper subset during the short sequential publication window; the possible
+  publication gate is recorded in `ai/improvements.md`.
 - Meadowlark ranking uses forager metadata defaults (`stemmer=porter`,
   `tokenizer=ascii`) rather than Warren-global DNA stemmer settings.
 - New Meadowlark creation no longer writes a Warren-global `container`
@@ -539,6 +565,13 @@
   digit-for-digit stability alongside the new build's upward swing confirms
   that the observed MRR movement is normal between-build tie/order churn, not
   a permanent quality drop.
+- On 2026-08-23, the first file-oriented MS MARCO run exposed serialized
+  forager readiness: ingestion took 1:01.49, foraging 11:23.76, consolidation
+  5:08.87, and ranking reported MRR@10 `0.18987253831809695`. Readying each
+  worker in its own thread restored foraging to 3:12.44; the repeated build
+  took 1:02.37 for ingestion and 5:13.65 for consolidation, and ranking
+  reported MRR@10 `0.18977896029471947`. Both ranked 6,980 topics and emitted
+  the same two established fake-result topics.
 - Comparing the saved top tens found 883 changed topics: 724 retained the same
   top-10 set in a different order, 159 changed at the cutoff, 39 changed the
   first-ranked document, and 40 changed reciprocal rank. Those 40 changes

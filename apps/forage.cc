@@ -2,15 +2,15 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <vector>
 
-#include "meadowlark/forager.h"
 #include "meadowlark/meadowlark.h"
 #include "src/cottontail.h"
 
 void usage(std::string program_name) {
   std::cerr << "usage: " << program_name
             << " [--meadow meadow] [--key value | --key=value ...] "
-            << "query [name [tag]]\n";
+            << "query name[:tag] [file ...]\n";
 }
 
 int main(int argc, char **argv) {
@@ -68,20 +68,28 @@ int main(int argc, char **argv) {
     }
   }
 
-  // Remaining args: query [name [tag]]
-  if (argc < 1 || argc > 3) {
+  // Remaining args: query name[:tag] [file ...]
+  if (argc < 2) {
     usage(program_name);
     return 1;
   }
 
   std::string query = argv[0];
-  std::string name;
+  std::string forager = argv[1];
+  std::string name = forager;
   std::string tag;
-
-  if (argc > 1)
-    name = argv[1];
-  if (argc > 2)
-    tag = argv[2];
+  size_t colon = forager.find(':');
+  if (colon != std::string::npos) {
+    name = forager.substr(0, colon);
+    tag = forager.substr(colon + 1);
+  }
+  if (name.empty()) {
+    usage(program_name);
+    return 1;
+  }
+  std::vector<std::string> filenames;
+  for (int i = 2; i < argc; i++)
+    filenames.emplace_back(argv[i]);
 
   std::shared_ptr<cottontail::Warren> warren;
 
@@ -95,8 +103,14 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  if (!cottontail::meadowlark::forage(warren, query, name, tag, parameters,
-                                      &error)) {
+  bool okay;
+  if (parameters.empty())
+    okay = cottontail::meadowlark::forage_all(warren, filenames, query, name,
+                                              tag, &error);
+  else
+    okay = cottontail::meadowlark::forage_all(
+        warren, filenames, query, name, tag, parameters, &error);
+  if (!okay) {
     std::cerr << program_name << ": " << error << "\n";
     return 1;
   }

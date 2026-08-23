@@ -5,6 +5,7 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "meadowlark/forager.h"
 #include "meadowlark/metadata.h"
@@ -36,6 +37,11 @@ std::string forager_query(const std::string &name, const std::string &tag) {
   return "(>> " + named + " (>> :tag: " + gcl_string(tag) + "))";
 }
 
+std::string current_forager_query(const std::string &name,
+                                  const std::string &tag) {
+  return "(>> " + forager_query(name, tag) + " :query:)";
+}
+
 void no_stats(const std::string &recipe, std::string *error) {
   if (recipe == "")
     safe_error(error) = "No tf-idf stats in meadow";
@@ -51,6 +57,8 @@ std::shared_ptr<Stats> TfIdfStats::make(const std::string &recipe,
   std::string metadata_tag = recipe;
   std::unique_ptr<Hopper> hopper;
   bool legacy = false;
+  ForagerMetadata metadata;
+  bool have_metadata = false;
   if (recipe == "") {
     hopper =
         warren->idx()->hopper(warren->featurizer()->featurize("@tf-idf:"));
@@ -62,25 +70,40 @@ std::shared_ptr<Stats> TfIdfStats::make(const std::string &recipe,
       metadata_tag = "none";
   }
   if (!legacy) {
-    hopper = warren->hopper_from_gcl(forager_query("tf-idf", metadata_tag),
-                                     error);
-    if (hopper == nullptr)
-      return nullptr;
-    hopper->tau(minfinity + 1, &p, &q);
-    if (p == maxfinity) {
+    std::vector<std::string> queries = {
+        current_forager_query("tf-idf", metadata_tag),
+        forager_query("tf-idf", metadata_tag)};
+    for (const auto &query : queries) {
+      hopper = warren->hopper_from_gcl(query, error);
+      if (hopper == nullptr)
+        return nullptr;
+      for (hopper->tau(minfinity + 1, &p, &q); p < maxfinity;
+           hopper->tau(p + 1, &p, &q)) {
+        ForagerMetadata candidate;
+        if (!json2forager(warren->txt()->translate(p, q), &candidate, error))
+          return nullptr;
+        if (candidate.has_filename)
+          continue;
+        metadata = candidate;
+        have_metadata = true;
+        break;
+      }
+      if (have_metadata)
+        break;
+    }
+    if (!have_metadata) {
       no_stats(recipe, error);
       return nullptr;
     }
   }
-  std::string name, tag;
-  std::map<std::string, std::string> parameters;
-  if (!json2forager(warren->txt()->translate(p, q), &name, &tag, &parameters,
-                    error))
+  if (legacy &&
+      !json2forager(warren->txt()->translate(p, q), &metadata, error))
     return nullptr;
-  if (name != "tf-idf" || tag != metadata_tag) {
+  if (metadata.name != "tf-idf" || metadata.tag != metadata_tag) {
     safe_error(error) = "Metadata inconsistency";
     return nullptr;
   }
+  std::map<std::string, std::string> parameters = metadata.parameters;
   std::string label = forager_label("tf-idf", metadata_tag);
   std::string id_query;
   if (parameters.find("id") != parameters.end())
@@ -93,7 +116,9 @@ std::shared_ptr<Stats> TfIdfStats::make(const std::string &recipe,
   if ((hopper = warren->hopper_from_gcl(container_query, error)) == nullptr)
     return nullptr;
   std::string contents_query;
-  if (parameters.find("contents") != parameters.end())
+  if (metadata.has_query)
+    contents_query = metadata.query;
+  else if (parameters.find("contents") != parameters.end())
     contents_query = parameters["contents"];
   else if (parameters.find("gcl") != parameters.end())
     contents_query = parameters["gcl"];
