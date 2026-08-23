@@ -23,8 +23,7 @@ public:
                                        const std::string &recipe,
                                        std::string *error = nullptr);
   static bool check(std::shared_ptr<Warren> warren,
-                    const std::string &query, const std::string &name,
-                    const std::string &tag,
+                    const std::string &name, const std::string &tag,
                     const std::map<std::string, std::string> &parameters,
                     std::string *error = nullptr);
   inline bool forage(addr p, addr q, std::string *error = nullptr) {

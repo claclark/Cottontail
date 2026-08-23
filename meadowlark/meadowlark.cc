@@ -922,9 +922,13 @@ bool resolve_definition(
       return false;
     }
     *resolved = definition.parameters;
-    return Forager::check(warren, query, name, tag, *resolved, error);
+    if (warren->hopper_from_gcl(query, error) == nullptr)
+      return false;
+    return Forager::check(warren, name, tag, *resolved, error);
   }
-  if (!Forager::check(warren, query, name, tag, *supplied, error))
+  if (warren->hopper_from_gcl(query, error) == nullptr)
+    return false;
+  if (!Forager::check(warren, name, tag, *supplied, error))
     return false;
   if (definition.current) {
     if (definition.query != query || definition.parameters != *supplied) {

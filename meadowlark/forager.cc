@@ -118,14 +118,11 @@ Forager::make(std::shared_ptr<Warren> warren, const std::string &name,
   return make(warren, n, t, metadata.parameters, error);
 }
 
-bool Forager::check(std::shared_ptr<Warren> warren,
-                    const std::string &query, const std::string &name,
+bool Forager::check(std::shared_ptr<Warren> warren, const std::string &name,
                     const std::string &tag,
                     const std::map<std::string, std::string> &parameters,
                     std::string *error) {
   assert(warren != nullptr);
-  if (warren->hopper_from_gcl(query, error) == nullptr)
-    return false;
   return make(warren, name, tag, parameters, error) != nullptr;
 }
 
