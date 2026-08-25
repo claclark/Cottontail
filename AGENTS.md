@@ -7,6 +7,11 @@ There is no rush. We want people to have a good experience when we release.
 
 This file is mostly intended for an AI coding assistant working on the
 development of Cottontail, but of course anyone is free to look around.
+Annotative indexing is particularly useful for agents: it lets them turn
+natural-language intent into precise structural queries over code, text, JSON,
+and metadata, then retrieve only the local context they need. When a collection
+records paths, fields, symbols, spans, provenance, and transactions, the
+resulting evidence remains exact and inspectable.
 
 All agent documentation lives in the `ai/` directory.
 
