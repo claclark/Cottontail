@@ -1,321 +1,368 @@
-# Preliminary Workplan for Indexed Regular Expressions
+# Preliminary Workplan for Indexed String Matching
 
-This document records the current design discussion. It is preliminary and is
-expected to be revised as examples expose problems. Work proceeds one agreed
-step at a time; this document does not authorize coding any step.
+This is a preliminary, stepwise engineering plan. The first goal is literal
+byte-string matching over an n-gram index, with one explicit whitespace
+equivalence described below. General regular-expression matching comes later
+and is deliberately not yet planned.
 
-The implementation sequence is:
+Work proceeds one approved step at a time. This document does not authorize
+source changes.
 
-1. Make the narrow `HashingFeaturizer` correction and reserve feature `-1`.
-2. Add visibly literal features to GCL.
-3. Add the contextual byte-gram tokenizer and featurizer.
-4. Improve phrase search as the first restricted form of regular-expression
-   matching.
-5. Add regular-expression matching over the positional index.
+## Current Sequence
 
-Each step should be completed, checked, and discussed before work begins on
-the next one.
+1. Fix the `HashingFeaturizer` boundary case and define features `0` and `-1`.
+2. Move append separator normalization into the public append operations.
+3. Add `count`, `bow`, and `phrase` to the `Tokenizer` interface.
+4. Add general literal feature strings to GCL with `|...|`.
+5. Implement `NGramFeaturizer` and `NGramTokenizer` together.
+6. Compile quoted phrases into literal byte-string matches.
+7. Design and implement indexed regular-expression matching later.
 
-## Semantic Foundation
+The first two steps are narrow and have priority. Each step should be reviewed,
+compile-checked, and discussed before beginning the next one.
 
-A regular-expression result is a generalized concordance list. Matches use
-the shortest-substring semantics developed for GCL: results do not properly
-contain other results satisfying the expression. In automaton terms, when
-paths collide in the same state, the largest starting address is retained.
+## 1. Feature Foundations
 
-The matcher does not define a built-in search universe. Documents, fields,
-JSON elements, passages, code regions, and arbitrary annotations are imposed
-by ordinary GCL composition. Likewise, a newline is not the implicit unit of
-search.
-
-The expression operates over token addresses, not an undifferentiated byte
-stream. The planned tokenizer normalizes the distinctions that the index can
-reasonably support. In particular, this work does not aim for rigid POSIX
-regular-expression compatibility.
-
-## Step 1: Featurizer Boundary and the Universal Feature
-
-### `HashingFeaturizer`
+### `HashingFeaturizer` Boundary
 
 `HashingFeaturizer` intends to return non-negative features, but negating the
-one hash value equal to `INT64_MIN` does not produce a positive value. Fix this
-without changing any existing index feature other than that single boundary
-case:
+one hash value equal to `INT64_MIN` cannot produce a positive value. Correct
+that case without changing any other existing feature:
 
-- Detect `INT64_MIN` before attempting to negate it.
-- Map it to one fixed, randomly selected positive feature value.
-- Choose the replacement from the hashed-feature namespace, excluding `0`,
-  `-1`, other reserved values, and values used by the reversible short-string
-  encoding.
-- Select the replacement once and make it a stable constant. Indexing must not
+- Detect `INT64_MIN` before negation.
+- Map it to one fixed positive value chosen from the hashed-feature namespace.
+- Exclude `0`, `-1`, other reserved values, and the reversible short-string
+  namespace.
+- Select the replacement once and store it as a constant; indexing must not
   involve runtime randomness.
 
-The added branch should be effectively free in the indexing path. Big-endian
-portability of feature encodings is explicitly deferred; Cottontail indices
-need not currently be portable between machines.
+The branch should have negligible indexing cost. Existing indices and every
+non-boundary hash value must remain unchanged. Big-endian index portability is
+deferred.
 
-### Feature `-1`
+### Reserved Features
 
-Reserve feature `-1` as the universal positional feature:
+Feature `0` remains the null feature. A tokenizer may emit a token position
+whose feature input is a designated internal noncharacter that the featurizer
+maps to `0`. The position participates in address and text accounting, but no
+posting is stored.
 
-- `Idx::hopper(-1)` returns a universal hopper equivalent to `(# 1)`.
+Feature `-1` is the universal positional feature:
+
+- `Idx::hopper(-1)` returns a `UniversalHopper` equivalent to `(# 1)`.
 - `Idx::count(-1)` returns `0`.
 - Feature `-1` has no stored posting list.
-- Index construction continues to store only ordinary non-negative features.
-- Bag-of-words and ranking consumers ignore `-1`; it has positional meaning
-  but no collection frequency.
+- Index construction continues to store ordinary non-negative features.
+- Bag-of-words and ranking consumers ignore `-1`.
 
-`UniversalHopper` is the tentative name for the hopper implementation. The
-contract must be observed by all index implementations and wrappers, rather
-than being an accidental property of one index type.
+The `-1` contract belongs to every index implementation and wrapper, not to
+one concrete index.
 
-The immediate compatibility requirement is that existing indices continue to
-produce the same features and remain readable.
+## 2. Append Normalization
 
-## Step 2: Literal Features in GCL
+An append operation may add a newline to prevent a token splice. This is an
+append contract, not a storage-implementation detail.
 
-Extend GCL with a `|...|` form representing one literal feature. The form is
-needed because contextual text features may contain whitespace, punctuation,
-or internal Unicode noncharacters and must remain visibly a single GCL term.
+Move normalization into the public entry points:
 
-The literal form should support a conservative, C/C++-like set of escapes:
+- `Appender::append(...)` normalizes its nonempty input before calling
+  `append_(...)`.
+- `Builder::add_text(...)` applies the same rule before calling
+  `add_text_(...)`, because builders are also used directly.
+- A concrete appender stores and tokenizes exactly the bytes it receives.
+- Remove duplicate newline insertion from `FiverAppender`, `SimpleAppender`,
+  and `SimpleBuilder`.
+- Empty appends remain empty.
 
-- `\\` for backslash and `\|` for the delimiter;
-- the familiar named ASCII control escapes, including `\r` and `\t`;
-- fixed-width hexadecimal and Unicode escapes;
-- an unknown escape drops the backslash, so for example `\q` denotes `q`
-  rather than being rejected;
-- a trailing unpaired backslash is an error.
+Use exactly four append separators: space, tab, carriage return, and newline.
+All four prevent token splices for the current tokenizers. They are also the
+four bytes that the n-gram representation normalizes to space. Keeping the two
+sets identical avoids turning a trailing carriage return into CRLF and thereby
+creating two normalized spaces. Do not include other controls such as vertical
+tab or form feed.
 
-A literal newline is rejected, as is an escaped newline. Newline has a deep
-meaning in Cottontail text: it prevents token splices during append. NUL is
-also excluded for now. Other ASCII controls may be represented; serialization
-must use a canonical visible escape, so a literal carriage return is emitted
-as `\r`.
+This makes Fiver consistent with Simple. Currently Fiver adds the newline to
+stored text but tokenizes the original input, while Simple tokenizes the
+extended stored buffer. The existing tokenizers do not make these separator
+bytes tokens, so the change should not alter their ordinary term postings. An
+append ending in carriage return will retain that carriage return rather than
+acquiring an additional newline.
 
-The parser and serializer must round-trip literal features. Unicode escapes
-must reject surrogate values and values outside the Unicode range.
+## 3. Tokenizer Interface
 
-Contextual textual features occupy a distinct feature type. Internally, a
-designated Unicode noncharacter tells the new featurizer to use reversible
-textual encoding rather than hashing. In discussion this marker is written as
-`#` for visibility, but the implementation will use an actual noncharacter.
-The marker is a dispatch/type marker and is not part of the textual payload.
-Consequently a typed textual literal that visibly contains `:foo:` is not the
-same feature as the structural annotation `:foo:`.
-
-## Step 3: Contextual Byte-Gram Tokenizer and Featurizer
-
-The new representation is provisionally described as *minimum four-byte
-contextual grams*. It is not a conventional fixed four-character or four-byte
-gram index:
-
-- An annotation starts only at a token boundary.
-- Its textual payload contains at least four and at most seven UTF-8 bytes.
-- It ends on a Unicode character boundary.
-- A token position may carry multiple annotations where variable-width UTF-8
-  requires them to preserve possible pattern endings.
-- A position with no usable textual annotation is represented in phrase
-  construction by the universal feature `-1`, not by a stored posting.
-
-The featurizer can pack up to seven payload bytes reversibly into an `addr`.
-The proposed implementation uses a zeroed union of `char[8]` and `addr`, then
-fills the byte buffer. The internal textual marker selects this path but does
-not consume one of the seven payload bytes. All other features continue to be
-hashed into the existing positive hashed-feature namespace.
-
-The dictionary can therefore expand regular expressions over textual
-features, while structural annotations such as `:id:` and `:docno:` remain in
-a separate hashed namespace and are not accidentally matched.
-
-### Character Classes
-
-Tokenization distinguishes four classes:
-
-- **TOKEN**: a Unicode character that creates a token address and may start a
-  contextual annotation.
-- **WHITESPACE**: a maximal run of whitespace other than newline. The run is
-  one token and contributes a single ordinary space to annotations.
-- **IGNORE**: a character such as a presentation selector. It creates no token,
-  contributes no annotation bytes, and does not break a whitespace run.
-- **BREAK**: a newline. It creates no token and no annotation, terminates
-  context, and prevents token splicing.
-
-The exact Unicode membership of these classes remains to be reviewed.
-Regular-expression classes such as `\d` are a parser concern and do not belong
-in this tokenizer classification.
-
-For example, U+FE0F VARIATION SELECTOR-16 is ignored for annotation purposes.
-In `U+2764 U+FE0F`, U+2764 contributes the text and U+FE0F does not. Since
-U+2764 is only three UTF-8 bytes, a heart alone has no four-byte textual
-feature, but context makes expressions such as `I U+2764 NY` and `A U+2764`
-searchable. U+1F916 ROBOT FACE is four bytes and can be represented as a
-feature by itself. Ranked retrieval of an isolated three-byte heart is not a
-goal.
-
-### Malformed UTF-8
-
-Tokenization must be robust in the presence of malformed input:
-
-- A UTF-8 continuation byte can never begin a token or annotation.
-- Every apparent UTF-8 leading byte increments the token count, even when it
-  does not begin a correctly formed character. This preserves the ability to
-  identify token boundaries by inspecting bytes.
-- An annotation contains only complete, correctly formed UTF-8 characters.
-- On malformed context, annotation construction stops and tokenization moves
-  on; it does not splice text across the malformed sequence.
-
-### Context Selection
-
-Starting at a valid token, collect normalized right context until at least
-four payload bytes are available, without crossing a break. Additional
-annotations may extend the same start position, up to seven bytes, when they
-are needed to represent a possible phrase or expression ending that cannot be
-covered by an annotation beginning at the next token.
-
-All-ASCII text normally yields four-byte annotations: one byte from the
-current character and three bytes of right context. Three-byte characters
-typically combine with right context. For a Chinese sequence such as
-`中国人`, the annotation beginning at `中` is `中国` (six bytes), and the one
-beginning at `国` is `国人` when that context exists. There is no three-byte
-singleton annotation for `中`.
-
-The exact rule deciding which additional annotations are necessary remains
-preliminary. Before implementation, work through a table of examples covering:
-
-- ASCII words and punctuation;
-- single and repeated whitespace;
-- phrase endings and end of text;
-- Chinese and mixed-width scripts;
-- combining and presentation characters;
-- four-byte characters;
-- malformed UTF-8; and
-- newline boundaries.
-
-The examples must demonstrate both how an input is indexed and how a phrase
-against that input is compiled and matched.
-
-### Tokenizer Interface
-
-Replace the overloaded uses of `split` with operations named for their
-semantics:
-
-- `tokenize`: emit every annotation required for indexing, including multiple
-  annotations at one position;
-- `skip`: advance over the next token according to the same scanner;
-- `count`: count token positions without manufacturing a feature vector;
-- `bow`: return one feature per useful bag-of-words position, provisionally
-  selecting the shortest right context and omitting universal positions;
-- `phrase`: return the representation best suited to exact phrase expansion,
-  provisionally selecting the longest required right context and retaining
-  universal positions.
-
-Existing `split` consumers must be classified before changing the interface.
-Traditional ranking code normally wants `bow`; phrase expansion wants
-`phrase`; token accounting wants `count`. The phrase return type and its
-relationship to generated GCL remain open design questions.
-
-## Step 4: Phrase Search
-
-Phrase search is the first restricted form of indexed regular-expression
-matching and should establish the compiler boundary used by the general
-matcher.
-
-The tokenizer should provide enough information to compile a quoted phrase
-into GCL over contextual features and universal positions. Phrase expansion
-then uses ordinary positional and containment operators, after which the
-existing optimizer may rewrite the result. A phrase such as `rubber` denotes
-the complete phrase, not merely one indexed gram.
-
-This step must settle:
-
-- how the phrase extent is represented in generated GCL;
-- how leading and trailing universal positions preserve the full phrase;
-- how normalized whitespace and ignored characters affect equality;
-- how phrase boundaries interact with available right context;
-- which feature `phrase` selects when a position has several annotations; and
-- how ranking code uses `bow` independently of phrase semantics.
-
-Phrase examples should be evaluated in both directions: compile the phrase,
-then walk its generated operators against the annotations produced for
-candidate text. This is intended to expose false negatives, accidental token
-splices, and boundary errors before general regular expressions add more
-moving parts.
-
-## Step 5: Indexed Regular-Expression Matching
-
-The final stage adds regular-expression terms to GCL. Illustrative intended
-uses include:
+The current `split` operation is used for several unrelated purposes. Add
+operations named for their consumers:
 
 ```text
-(^ 'foo[dt]' 'bar[ft]')
-(+ 'foo[dt]' 'bar[ft]')
+count(text)  -> number of token positions
+bow(text)    -> vector<string> for bag-of-words and ranking use
+phrase(text) -> vector<string> for literal phrase expansion
 ```
 
-Quotes distinguish a regular expression from a literal term. A pattern such
-as `foo.*bar` should be compiled into positional operations over the useful
-literal portions, with the gap represented by ordinary GCL machinery where
-possible, rather than forcing a raw-text scan.
+Defaults preserve the current tokenizers:
 
-The matcher should:
+```text
+count(text)  = split(text).size()
+bow(text)    = split(text)
+phrase(text) = split(text)
+```
 
-- parse the supported regular-expression language;
-- expand applicable textual grams through the Warren dictionary;
-- construct an automaton or equivalent matrix representation over posting
-  lists;
-- retain the largest start address when paths collide in an automaton state;
-- emit shortest, nonnested matching intervals as an ordinary hopper;
-- compile useful fixed and bounded pieces into existing GCL operations;
-- plan from selective posting lists where possible; and
-- preserve an exact but potentially expensive universal path for expressions
-  with no selective feature.
+ASCII and UTF-8 tokenization therefore remain unchanged. `NGramTokenizer`
+will override the operations.
 
-Regular-expression terms do not cross newline breaks. Anchors `^` and `$` are
-not initial goals: collections do not have a single natural notion of a line
-or document, and boundary conditions can be expressed through GCL structure.
-Regular-expression character classes and escapes are interpreted by the
-regular-expression parser, not by the tokenizer.
+`phrase` returns raw feature strings to be handed to the active featurizer.
+It does not return GCL. The current phrase expander already consumes a
+`vector<string>` from `split` and featurizes its terms later, so it can call
+`phrase` instead.
 
-The first implementation need not cover every conventional regexp feature.
-The supported language, behavior of empty matches, repetition bounds, and
-resource limits must be made explicit before coding. Exact semantics and
-composability are more important than nominal POSIX compatibility.
+The expander currently concatenates generated terms into GCL text and reparses
+it. Arbitrary feature strings make that fragile. It should construct the
+S-expression directly, or serialize each term through the literal feature
+syntax described below.
 
-Selective expressions may run in a few hundred milliseconds over very large
-collections. Expressions dominated by universal transitions may still require
-work proportional to a large portion of the address space. The universal
-feature makes such expressions expressible; it does not make them selective.
+The interface audit should also move the ranking code that calls `tokenize`
+only to obtain offsets for fragment windows onto an operation suited to that
+purpose. Text token accounting and recovery should use `count`, rather than
+constructing a vector solely to inspect its size.
 
-## Related Work to Revisit
+## 4. Literal Feature Strings in GCL
 
-The implementation should be informed by, and clearly distinguished from:
+Add a general GCL term form:
 
-- Clarke's *An Algebra for Structured Text Search* (1996), for generalized
-  concordance lists, shortest-substring semantics, inverted-list execution,
-  structured pattern matching, and ranking;
-- Clarke and Cormack's *On the Use of Regular Expressions for Searching Text*
-  (1995), especially the automaton-state rule retaining the largest start;
-- Qiu, Yang, Wang, and Wang's *Efficient Regular Expression Matching Based on
-  Positional Inverted Index* (2020/2022), particularly its gram-driven NFA and
-  posting-list query plans; and
-- n-gram filter-and-verify systems such as Zoekt and workload-selected
-  multigram indexes, as useful engineering contrasts rather than the intended
-  semantics.
+```text
+|literal feature string|
+```
 
-Regular-expression evaluation over an inverted index is not itself a novelty
-claim. The relevant design combination is exact positional evaluation with
-shortest nonnested interval results, GCL-supplied structure and scope, and
-integration with phrase and ranked retrieval.
+The contents denote exactly one feature string. The GCL parser unescapes the
+contents and later passes the resulting bytes to the active featurizer. The
+parser does not decide whether the string is hashed, reversibly encoded, or
+otherwise interpreted.
 
-## Review Gates
+Support a conservative C/C++-like escape set:
 
-Before each implementation step:
+- `\\` for backslash and `\|` for the delimiter;
+- named ASCII controls such as `\a`, `\b`, `\f`, `\n`, `\r`, `\t`, and
+  `\v`;
+- fixed-width byte and Unicode escapes;
+- an unknown escape drops the backslash, so `\q` denotes `q`;
+- a trailing unpaired backslash is an error.
 
-1. Review the corresponding contract and examples.
-2. Inspect the affected interfaces and enumerate consumers.
-3. Decide compatibility and serialization behavior.
-4. Agree on focused tests and compile targets.
-5. Obtain explicit authorization to code that step only.
+A physical newline cannot occur inside a GCL term, but `\n` may represent a
+newline byte. NUL support remains deferred. Serialization should choose a
+canonical visible form and round-trip all supported byte strings. Unicode
+escapes must reject surrogates and out-of-range values.
 
-The first proposed coding step is limited to the `HashingFeaturizer`
-`INT64_MIN` correction and the index-wide feature `-1` convention.
+This syntax is independent of n-grams. It is useful whenever a feature string
+contains whitespace, controls, delimiters, or other bytes awkward to express
+as an ordinary GCL term.
+
+## 5. N-Gram Featurizer and Tokenizer
+
+`NGramTokenizer` and `NGramFeaturizer` implement one shared feature-string
+protocol and must be designed and tested together.
+
+### Shared Typed-String Protocol
+
+Reserve internal Unicode noncharacters for protocol strings:
+
+- An n-gram marker followed by payload bytes requests reversible n-gram
+  encoding.
+- A null marker maps to feature `0`.
+- A universal marker maps to feature `-1` for phrase construction.
+
+`NGramTokenizer` produces these marked strings. `NGramFeaturizer` recognizes
+and converts them. An unmarked string is hashed normally, preserving the
+ordinary namespace for structural features such as `:id:` and `:docno:`.
+
+The marker is a type/dispatch prefix and is not part of the n-gram payload.
+The same marked feature string can be written explicitly in GCL by escaping it
+inside `|...|`.
+
+### Gram Size and Encoding
+
+Support exactly one configured gram size per index:
+
+```text
+1 <= n <= 7
+```
+
+Record `n` in the tokenizer/featurizer DNA. Do not select the default yet;
+four and five are the leading candidates. Four makes short code fragments such
+as `skip`, `case`, `bool`, and `addr` independently searchable, while five
+should provide shorter posting lists on very large collections. Smaller grams
+remain valid for experiments and specialized collections, but their posting
+lists are likely to be long; one-grams in particular are unlikely to be an
+efficient general-purpose configuration.
+
+The reversible representation packs up to seven payload bytes into an `addr`.
+The exact bit layout and endian handling must be settled during implementation;
+indices need not currently be portable between endian architectures.
+
+### Whitespace Equivalence
+
+Before reversible n-gram encoding, normalize exactly these four input bytes to
+an ordinary space (`0x20`):
+
+```text
+space  tab  carriage return  newline
+```
+
+The shared n-gram feature encoding applies this rule to both indexed text and
+query grams. Vertical tab and form feed are not included. Normalization is
+one-for-one: it does not collapse runs, so one separator byte and two separator
+bytes remain distinguishable. Every other payload byte is preserved exactly.
+
+Stored text is never normalized. Token addresses, byte counts, translation,
+and final regular-expression checking continue to use the original bytes.
+Newline also retains its lexical-boundary role even though a gram ending at a
+newline carries a space in its encoded payload.
+
+### Token Positions and Translation
+
+Every stored byte is a token position, including newline and malformed UTF-8.
+The tokenizer performs no character decoding or classification.
+
+For every returned token:
+
+- `address` is the byte's relative position;
+- `offset` is the byte offset in the supplied buffer;
+- `length` is `1`.
+
+Within a text window, token address and byte offset therefore differ only by
+the window's base. `skip(buffer, length, n)` is bounded pointer addition, and
+`translate(p, q)` can return the exact inclusive byte interval selected by the
+addresses.
+
+This relies on append normalization giving the tokenizer exactly the bytes
+stored, including an automatically inserted newline.
+
+### Index Annotation Generation
+
+An n-gram candidate begins at each byte position. A proper textual feature is
+emitted only when a complete `n`-byte gram is available within the local
+lexical region.
+
+- A gram does not cross the end of the appended structural element.
+- A gram does not resume with text after a newline.
+- Real newline bytes may appear at the end of a gram beginning before the
+  newline.
+- A newline position itself and any position without a complete local gram
+  receive the null marker and therefore feature `0`.
+- There is exactly one token record per byte position and at most one stored
+  textual annotation at that position.
+
+For example, with `n = 4`, the bytes `hello\n` produce:
+
+```text
+0  hell
+1  ello
+2  llo<space>  (from llo\n)
+3  NULL
+4  NULL
+5  NULL        newline position
+```
+
+Lexical matching is local to a line or structural element because the
+tokenizer has no context outside it and matching across JSON elements is not
+meaningful. Token positions remain globally composable: phrases and other GCL
+expressions may relate local evidence across boundaries when desired.
+
+The initial textual-matching contract is explicitly limited by the selected
+n-gram representation. A text fragment not covered by any complete local gram
+may still be selected and translated through its structural annotations, but
+it is not independently discoverable through n-gram text matching.
+
+### `count`, `bow`, and `phrase`
+
+For `NGramTokenizer`:
+
+- `count` returns the number of stored bytes.
+- `bow` returns the marked gram strings appropriate for traditional ranking,
+  omitting null and universal positions.
+- `phrase` returns a linear vector of marked feature strings for literal phrase
+  expansion. Positions needed only to complete the interval can use the
+  universal marker and be featurized as `-1`.
+
+Work through representative boundary examples before fixing the precise
+`bow` and `phrase` emission rules, but retain the simple `vector<string>`
+interface.
+
+## 6. Literal Byte-String Matching
+
+Before implementing general regular expressions, make quoted phrases mean:
+
+```text
+this sequence of bytes after the four separator bytes are normalized to space
+```
+
+Otherwise matching is byte-for-byte. Thus a quoted phrase does not distinguish
+space, tab, carriage return, and newline where the local n-gram representation
+can supply evidence, but it does distinguish the number of separator bytes.
+Stored text and returned intervals remain unchanged.
+
+`NGramTokenizer::phrase` produces the raw marked feature strings. Phrase
+expansion turns them into positional GCL over their featurized n-grams and
+universal positions, then the existing optimizer may rewrite the result.
+
+Individual n-gram evidence remains local. GCL supplies interval width,
+ordering, containment, and any explicit composition across line or structural
+boundaries. This stage should establish precise extent and translation behavior
+before regular-expression automata add alternatives and repetition.
+
+Examples must be checked in both directions: generate index tokens for the
+candidate text, compile the literal query, and walk the resulting positional
+constraints. Include all four normalized separator bytes, separator runs,
+append boundaries, arbitrary UTF-8 bytes, malformed input, and strings shorter
+than `n`.
+
+## 7. Regular Expressions: Direction Only
+
+General indexed regular-expression matching is intentionally not planned yet.
+The literal matcher should be implemented and understood first.
+
+Known design inputs to revisit later are:
+
+- regular-expression terms expand over the reversible n-gram dictionary;
+- matching is local to lines and structural elements, with GCL handling wider
+  relationships;
+- results are shortest, nonnested intervals;
+- when automaton paths collide in one state, retain the largest starting
+  address;
+- selective posting lists should drive query planning;
+- regexp syntax need not promise POSIX compatibility; and
+- unselective expressions cannot be made selective merely by introducing a
+  universal feature.
+
+Relevant prior work includes Clarke's *An Algebra for Structured Text Search*
+(1996), Clarke and Cormack's *On the Use of Regular Expressions for Searching
+Text* (1995), and Qiu et al.'s *Efficient Regular Expression Matching Based on
+Positional Inverted Index* (2020/2022). Positional regexp evaluation itself is
+not a novelty claim.
+
+## Rejected Tokenization Plan
+
+The earlier plan attempted to preserve Unicode characters as token positions
+while indexing variable-width contextual byte grams. It divided Unicode input
+into four classes:
+
+- `TOKEN`: a character that created a position and could start an annotation;
+- `WHITESPACE`: a maximal non-newline whitespace run represented as one token;
+- `IGNORE`: presentation selectors and similar characters removed from token
+  and annotation semantics; and
+- `BREAK`: newline, which created no position and terminated context.
+
+Annotations were required to contain at least four and at most seven UTF-8
+bytes, end on a valid character boundary, and sometimes appear multiple times
+at one position. The plan included special rules for Chinese bigrams,
+four-byte emoji, variation selectors, combining context, incomplete UTF-8,
+continuation bytes, normalized whitespace, and positions represented only by
+the universal feature.
+
+This plan was rejected. Preserving character positions forced the tokenizer to
+solve Unicode interpretation, normalization, variable-width context, malformed
+input, multiple annotations per position, and translation accounting all at
+once. Those complications were not required by the index.
+
+The replacement is deliberately mechanical: every stored byte is a token
+position, every proper gram has one configured byte length, and Unicode
+semantics—if wanted—belong above the positional representation.
