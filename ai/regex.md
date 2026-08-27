@@ -18,11 +18,11 @@ source changes.
 6. Compile quoted phrases into literal byte-string matches.
 7. Design and implement indexed regular-expression matching later.
 
-The first two steps were implemented together on 2026-08-27. Step 3 was
-implemented separately later that day. Step 4 remains a separate change
+The first two steps were implemented together on 2026-08-27. Steps 3 and 4
+were implemented separately later that day. Step 5 remains a separate change
 requiring review and authorization.
 
-### Implementation Checkpoint: Steps 1 Through 3
+### Implementation Checkpoint: Steps 1 Through 4
 
 - `HashingFeaturizer` maps the `INT64_MIN` hash boundary to one stable positive
   hashed feature without changing any other hash value.
@@ -41,8 +41,12 @@ requiring review and authorization.
   based on `split`. Phrase expansion, token accounting, and bag-of-words
   consumers use the corresponding operation. Address-aligned consumers retain
   `split`.
-- `bazel build //...` succeeds. Runtime and regression tests are left to the
-  user under the repository verification rule.
+- GCL now parses quoted forms as semantic `QUOTE` nodes while `|...|` decodes
+  to an ordinary `TERM`. Ordinary terms serialize raw when safe and otherwise
+  through canonical literal syntax. Phrase expansion retains its current
+  generated-GCL implementation but safely serializes generated feature terms.
+- `bazel build //...` succeeds. The user reports that basic tests pass and
+  considers deeper testing unnecessary for this narrow parser change.
 
 ## 1. Feature Foundations
 
@@ -169,16 +173,31 @@ otherwise interpreted.
 Support a conservative C/C++-like escape set:
 
 - `\\` for backslash and `\|` for the delimiter;
-- named ASCII controls such as `\a`, `\b`, `\f`, `\n`, `\r`, `\t`, and
-  `\v`;
-- fixed-width byte and Unicode escapes;
+- named ASCII controls `\a`, `\b`, `\f`, `\n`, `\r`, `\t`, and `\v`;
+- the exact-width byte escape `\xHH`;
+- the exact-width Unicode escapes `\uHHHH` and `\UHHHHHHHH`, encoded as
+  UTF-8;
 - an unknown escape drops the backslash, so `\q` denotes `q`;
+- an incomplete byte or Unicode escape follows the same unknown-escape rule;
 - a trailing unpaired backslash is an error.
 
 A physical newline cannot occur inside a GCL term, but `\n` may represent a
 newline byte. NUL support remains deferred. Serialization should choose a
 canonical visible form and round-trip all supported byte strings. Unicode
 escapes must reject surrogates and out-of-range values.
+
+Quoted forms are represented separately from literal features. The parser
+stores the complete quoted spelling, including its delimiter, in a `QUOTE`
+node without assigning semantics to the delimiter. Thus `"foo bar"` is a
+`QUOTE`, while `|"foo bar"|` is a `TERM` containing the same bytes. Phrase
+expansion interprets `QUOTE` nodes marked with `"`; a later stage may interpret
+single quotes as regular expressions. Backticks remain reserved.
+
+`term_to_gcl(...)` is the canonical inverse of literal parsing. It emits a raw
+term exactly when that spelling reparses as the same ordinary `TERM`, and uses
+escaped `|...|` otherwise. Consequently `|foo|` serializes as `foo`, while
+`|foo bar|` remains literal syntax. The existing phrase expander uses this
+function when inserting tokenizer-produced features into generated GCL.
 
 This syntax is independent of n-grams. It is useful whenever a feature string
 contains whitespace, controls, delimiters, or other bytes awkward to express

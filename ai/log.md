@@ -413,3 +413,16 @@
   consumers to their explicit operations while retaining `split` for
   address-aligned uses. Added focused default-projection coverage and verified
   the repository with `bazel build //...`; runtime tests remain with the user.
+2026-08-27T18:10:23+00:00
+
+- Implemented indexed string-matching workplan step 4. GCL now distinguishes
+  syntactic `QUOTE` nodes from ordinary decoded `|...|` feature terms, supports
+  the agreed byte/control/Unicode escapes, canonically serializes terms through
+  `term_to_gcl`, handles quoted backslash parity, minimally normalizes phrase
+  escapes, and safely serializes tokenizer-produced phrase features. Added
+  focused parser and expansion coverage. `bazel build //...` succeeds; no
+  runtime tests were run.
+2026-08-27T19:12:45+00:00
+
+- Recorded the user's report that basic literal-feature tests pass and the
+  decision that deeper testing is unnecessary for this narrow parser change.

@@ -20,6 +20,7 @@ class Optimizer;
 
 enum Operator {
   TERM,
+  QUOTE,
   FIXED,
   ONE_OF,
   ALL_OF,

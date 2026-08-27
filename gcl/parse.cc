@@ -1,5 +1,6 @@
 #include "gcl/parse.h"
 
+#include <cstdint>
 #include <iostream>
 #include <map>
 #include <memory>
@@ -86,6 +87,218 @@ inline bool is_quote_character(char c) {
 inline bool is_width_character(char c) { return c >= '0' && c <= '9'; }
 
 inline int width_character_value(char c) { return c - '0'; }
+
+inline int hex_character_value(char c) {
+  if (c >= '0' && c <= '9')
+    return c - '0';
+  if (c >= 'a' && c <= 'f')
+    return c - 'a' + 10;
+  if (c >= 'A' && c <= 'F')
+    return c - 'A' + 10;
+  return -1;
+}
+
+bool hex_value(const char *where, size_t digits, uint32_t *value) {
+  *value = 0;
+  for (size_t i = 0; i < digits; i++) {
+    int digit = hex_character_value(where[i]);
+    if (digit < 0)
+      return false;
+    *value = 16 * *value + digit;
+  }
+  return true;
+}
+
+bool append_utf8(uint32_t value, std::string *text) {
+  if (value == 0 || value > 0x10ffff ||
+      (value >= 0xd800 && value <= 0xdfff))
+    return false;
+  if (value <= 0x7f) {
+    text->push_back(static_cast<char>(value));
+  } else if (value <= 0x7ff) {
+    text->push_back(static_cast<char>(0xc0 | (value >> 6)));
+    text->push_back(static_cast<char>(0x80 | (value & 0x3f)));
+  } else if (value <= 0xffff) {
+    text->push_back(static_cast<char>(0xe0 | (value >> 12)));
+    text->push_back(static_cast<char>(0x80 | ((value >> 6) & 0x3f)));
+    text->push_back(static_cast<char>(0x80 | (value & 0x3f)));
+  } else {
+    text->push_back(static_cast<char>(0xf0 | (value >> 18)));
+    text->push_back(static_cast<char>(0x80 | ((value >> 12) & 0x3f)));
+    text->push_back(static_cast<char>(0x80 | ((value >> 6) & 0x3f)));
+    text->push_back(static_cast<char>(0x80 | (value & 0x3f)));
+  }
+  return true;
+}
+
+const char *term_literal(const char *where, std::string *term, bool *okay) {
+  *okay = false;
+  where++;
+  while (*where != '\0' && *where != '|') {
+    if (*where == '\n')
+      return where;
+    if (*where != '\\') {
+      term->push_back(*where++);
+      continue;
+    }
+    const char *escape = where++;
+    if (*where == '\0' || *where == '\n')
+      return escape;
+    switch (*where) {
+    case '\\':
+      term->push_back('\\');
+      where++;
+      break;
+    case '|':
+      term->push_back('|');
+      where++;
+      break;
+    case 'a':
+      term->push_back('\a');
+      where++;
+      break;
+    case 'b':
+      term->push_back('\b');
+      where++;
+      break;
+    case 'f':
+      term->push_back('\f');
+      where++;
+      break;
+    case 'n':
+      term->push_back('\n');
+      where++;
+      break;
+    case 'r':
+      term->push_back('\r');
+      where++;
+      break;
+    case 't':
+      term->push_back('\t');
+      where++;
+      break;
+    case 'v':
+      term->push_back('\v');
+      where++;
+      break;
+    case 'x': {
+      uint32_t value;
+      if (!hex_value(where + 1, 2, &value)) {
+        term->push_back(*where++);
+      } else {
+        if (value == 0)
+          return escape;
+        term->push_back(static_cast<char>(value));
+        where += 3;
+      }
+      break;
+    }
+    case 'u': {
+      uint32_t value;
+      if (!hex_value(where + 1, 4, &value)) {
+        term->push_back(*where++);
+      } else {
+        if (!append_utf8(value, term))
+          return escape;
+        where += 5;
+      }
+      break;
+    }
+    case 'U': {
+      uint32_t value;
+      if (!hex_value(where + 1, 8, &value)) {
+        term->push_back(*where++);
+      } else {
+        if (!append_utf8(value, term))
+          return escape;
+        where += 9;
+      }
+      break;
+    }
+    default:
+      term->push_back(*where++);
+      break;
+    }
+  }
+  if (*where != '|')
+    return where;
+  *okay = true;
+  return where + 1;
+}
+
+// Use raw syntax exactly when it reparses as the same ordinary term.
+std::string term_to_gcl(const std::string &term) {
+  bool raw = !term.empty() && term[0] != '|' &&
+             !is_quote_character(term[0]);
+  for (unsigned char c : term)
+    if (!is_term_character(static_cast<char>(c)) || c < 0x20 || c == 0x7f) {
+      raw = false;
+      break;
+    }
+  if (raw)
+    return term;
+  static const char hex[] = "0123456789abcdef";
+  std::string gcl = "|";
+  for (unsigned char c : term) {
+    switch (c) {
+    case '\\':
+      gcl += "\\\\";
+      break;
+    case '|':
+      gcl += "\\|";
+      break;
+    case '\a':
+      gcl += "\\a";
+      break;
+    case '\b':
+      gcl += "\\b";
+      break;
+    case '\f':
+      gcl += "\\f";
+      break;
+    case '\n':
+      gcl += "\\n";
+      break;
+    case '\r':
+      gcl += "\\r";
+      break;
+    case '\t':
+      gcl += "\\t";
+      break;
+    case '\v':
+      gcl += "\\v";
+      break;
+    default:
+      if (c < 0x20 || c == 0x7f) {
+        gcl += "\\x";
+        gcl.push_back(hex[c >> 4]);
+        gcl.push_back(hex[c & 0x0f]);
+      } else {
+        gcl.push_back(static_cast<char>(c));
+      }
+      break;
+    }
+  }
+  return gcl + "|";
+}
+
+// Phrase quoting currently protects only its delimiter and backslash. Leave
+// other backslashes intact for the tokenizer and any later phrase semantics.
+std::string phrase_to_string(const std::string &term) {
+  std::string phrase;
+  if (term.size() < 2)
+    return phrase;
+  char marker = term.front();
+  for (size_t i = 1; i + 1 < term.size(); i++) {
+    if (term[i] == '\\' && i + 2 < term.size() &&
+        (term[i + 1] == '\\' || term[i + 1] == marker)) {
+      phrase.push_back(term[++i]);
+    } else {
+      phrase.push_back(term[i]);
+    }
+  }
+  return phrase;
+}
 } // namespace
 
 std::shared_ptr<SExpression> SExpression::make(
@@ -108,25 +321,35 @@ const char *parse_expr(const char *where, std::shared_ptr<SExpression> expr,
     if (!is_term_character(*where))
       return where;
     const char *start = where;
-    if (is_quote_character(*start)) {
+    if (*start == '|') {
+      bool literal_okay;
+      std::string term;
+      where = term_literal(where, &term, &literal_okay);
+      if (!literal_okay)
+        return where;
+      expr->kind_ = Operator::TERM;
+      expr->term_ = term;
+    } else if (is_quote_character(*start)) {
       // quoted term
       char the_quote = *start;
       where++;
       bool escaped = false;
       while (*where != '\0' && (*where != the_quote || escaped)) {
-        escaped = (*where == '\\');
+        escaped = (*where == '\\' && !escaped);
         where++;
       }
       if (*where != *start)
         return where;
       where++;
+      expr->kind_ = Operator::QUOTE;
+      expr->term_ = std::string(start, where);
     } else {
       // raw term
       while (is_term_character(*where))
         where++;
+      expr->kind_ = Operator::TERM;
+      expr->term_ = std::string(start, where);
     }
-    expr->kind_ = Operator::TERM;
-    expr->term_ = std::string(start, where);
     expr->width_ = 0;
     while (is_whitespace(*where))
       where++;
@@ -172,6 +395,8 @@ const char *parse_expr(const char *where, std::shared_ptr<SExpression> expr,
       std::shared_ptr<SExpression> subx = std::make_shared<SExpression>();
       bool sub_okay;
       where = parse_expr(where, subx, &sub_okay);
+      if (!sub_okay)
+        return where;
       expr->subx_.push_back(subx);
     } else {
       return where;
@@ -200,6 +425,8 @@ std::shared_ptr<SExpression> SExpression::from_string(std::string s,
 
 std::string SExpression::to_string() {
   if (kind_ == Operator::TERM)
+    return term_to_gcl(term_);
+  if (kind_ == Operator::QUOTE)
     return term_;
   if (kind_ == Operator::FIXED)
     return "(# " + std::to_string(width_) + ")";
@@ -214,13 +441,13 @@ std::string SExpression::to_string() {
 std::shared_ptr<SExpression>
 SExpression::expand_phrases(std::shared_ptr<cottontail::Tokenizer> tokenizer,
                             char marker) {
-  if (kind_ == TERM && term_.length() > 2 && term_[0] == marker &&
+  if (kind_ == QUOTE && term_.length() >= 2 && term_[0] == marker &&
       term_[term_.length() - 1] == marker) {
-    std::string phrase = term_.substr(1, term_.length() - 2);
+    std::string phrase = phrase_to_string(term_);
     std::vector<std::string> terms = tokenizer->phrase(phrase);
     if (terms.size() == 1) {
       std::shared_ptr<SExpression> expr = std::make_shared<SExpression>();
-      expr->kind_ = kind_;
+      expr->kind_ = TERM;
       expr->term_ = terms[0];
       expr->width_ = 0;
       return expr;
@@ -230,7 +457,7 @@ SExpression::expand_phrases(std::shared_ptr<cottontail::Tokenizer> tokenizer,
       s += std::to_string(terms.size());
       s += ") (...";
       for (auto &term : terms)
-        s += (" " + term);
+        s += (" " + term_to_gcl(term));
       s += "))";
       std::string error;
       std::shared_ptr<SExpression> expr = SExpression::from_string(s, &error);
@@ -273,6 +500,8 @@ SExpression::to_hopper(std::shared_ptr<Featurizer> featurizer,
   if (kind_ == TERM) {
     return idx->hopper(featurizer->featurize(term_));
   }
+  if (kind_ == QUOTE)
+    return nullptr;
   if (kind_ == FIXED) {
     return std::make_unique<FixedWidthHopper>(width_);
   }
@@ -281,6 +510,8 @@ SExpression::to_hopper(std::shared_ptr<Featurizer> featurizer,
       return nullptr;
     std::unique_ptr<cottontail::Hopper> expr =
         subx_[0]->to_hopper(featurizer, idx);
+    if (expr == nullptr)
+      return nullptr;
     return std::make_unique<cottontail::gcl::Link>(std::move(expr));
   }
   if (kind_ == MATERIALIZE) {
@@ -305,6 +536,8 @@ SExpression::to_hopper(std::shared_ptr<Featurizer> featurizer,
       subx_[0]->to_hopper(featurizer, idx);
   std::unique_ptr<cottontail::Hopper> right =
       subx_[1]->to_hopper(featurizer, idx);
+  if (left == nullptr || right == nullptr)
+    return nullptr;
   switch (kind_) {
   case ONE_OF:
     return std::make_unique<cottontail::gcl::Or>(std::move(left),

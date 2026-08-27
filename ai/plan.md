@@ -63,17 +63,21 @@ various ways and are ready to commit.
 ## Active Direction
 
 The current push is the preliminary indexed string-matching work recorded in
-`ai/regex.md`. Steps 1 through 3 are implemented: feature `-1` is virtual
+`ai/regex.md`. Steps 1 through 4 are implemented: feature `-1` is virtual
 universal position evidence with zero count; the `HashingFeaturizer` boundary
 is fixed; append normalization is centralized with space, tab, carriage
 return, and newline as separators; and `Tokenizer` now separates counting,
 bag-of-words, phrase, and address-aligned split consumers while preserving the
-existing tokenizers through defaults. Agent verification was compile-only
-through `bazel build //...`; user regression testing is pending.
+existing tokenizers through defaults. GCL literal feature strings now decode
+`|...|` into ordinary terms, quoted forms remain typed syntax for later
+semantic expansion, and ordinary terms serialize canonically and safely.
+Agent verification was compile-only through `bazel build //...`; user
+basic tests pass, and no deeper testing is planned for this narrow parser
+change.
 
-Do not begin step 4, the GCL literal feature-string syntax, without review and
-explicit authorization. The Meadowlark file-oriented metadata work remains
-complete, and the separate Python wrapper still follows later.
+Do not begin step 5, the paired `NGramFeaturizer` and `NGramTokenizer`, without
+review and explicit authorization. The Meadowlark file-oriented metadata work
+remains complete, and the separate Python wrapper still follows later.
 
 ## Completed Meadowlark Filename And Labeling Step
 
