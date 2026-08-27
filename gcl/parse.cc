@@ -217,7 +217,7 @@ SExpression::expand_phrases(std::shared_ptr<cottontail::Tokenizer> tokenizer,
   if (kind_ == TERM && term_.length() > 2 && term_[0] == marker &&
       term_[term_.length() - 1] == marker) {
     std::string phrase = term_.substr(1, term_.length() - 2);
-    std::vector<std::string> terms = tokenizer->split(phrase);
+    std::vector<std::string> terms = tokenizer->phrase(phrase);
     if (terms.size() == 1) {
       std::shared_ptr<SExpression> expr = std::make_shared<SExpression>();
       expr->kind_ = kind_;

@@ -18,10 +18,11 @@ source changes.
 6. Compile quoted phrases into literal byte-string matches.
 7. Design and implement indexed regular-expression matching later.
 
-The first two steps were implemented together on 2026-08-27. Step 3 remains a
-separate change requiring review and authorization.
+The first two steps were implemented together on 2026-08-27. Step 3 was
+implemented separately later that day. Step 4 remains a separate change
+requiring review and authorization.
 
-### Implementation Checkpoint: Steps 1 and 2
+### Implementation Checkpoint: Steps 1 Through 3
 
 - `HashingFeaturizer` maps the `INT64_MIN` hash boundary to one stable positive
   hashed feature without changing any other hash value.
@@ -36,6 +37,10 @@ separate change requiring review and authorization.
 - Concrete Fiver and Simple append/build paths now store and tokenize exactly
   the normalized input they receive. Redundant Fiver newline mutations during
   readiness and Hazel serialization were removed as part of that contract.
+- `Tokenizer` now exposes `count`, `bow`, and `phrase`, with inherited defaults
+  based on `split`. Phrase expansion, token accounting, and bag-of-words
+  consumers use the corresponding operation. Address-aligned consumers retain
+  `split`.
 - `bazel build //...` succeeds. Runtime and regression tests are left to the
   user under the repository verification rule.
 
@@ -125,6 +130,10 @@ bow(text)    = split(text)
 phrase(text) = split(text)
 ```
 
+`split` remains the lightweight form of tokenization: it returns one canonical
+feature string per token position, preserving token order and address
+alignment, without featurization or annotation metadata.
+
 ASCII and UTF-8 tokenization therefore remain unchanged. `NGramTokenizer`
 will override the operations.
 
@@ -138,10 +147,11 @@ it. Arbitrary feature strings make that fragile. It should construct the
 S-expression directly, or serialize each term through the literal feature
 syntax described below.
 
-The interface audit should also move the ranking code that calls `tokenize`
-only to obtain offsets for fragment windows onto an operation suited to that
-purpose. Text token accounting and recovery should use `count`, rather than
-constructing a vector solely to inspect its size.
+Text token accounting and recovery use `count`, rather than constructing a
+vector solely to inspect its size. Traditional ranking, feedback, and
+foraging consumers use `bow`. Phrase expansion uses `phrase`. Ranking code
+that relies on vector position for token addresses, and diagnostic code that
+expects the canonical token at an address, continue to use `split`.
 
 ## 4. Literal Feature Strings in GCL
 

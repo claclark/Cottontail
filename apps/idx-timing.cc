@@ -97,7 +97,7 @@ int main(int argc, char **argv) {
   for (auto &query : queries) {
     cottontail::addr total = 0, t0 = cottontail::now();
     std::cout << "\n" << "Query: " << query.second << "\n";
-    std::vector<std::string> terms = warren->tokenizer()->split(query.second);
+    std::vector<std::string> terms = warren->tokenizer()->bow(query.second);
     std::vector<std::shared_ptr<cottontail::Hopper>> hoppers;
     for (auto &term : terms) {
       std::string tf = "tf:" + warren->stemmer()->stem(term);

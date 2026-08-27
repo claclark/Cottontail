@@ -93,7 +93,7 @@ int main(int argc, char **argv) {
       std::cerr << program_name << ": weird question: " << line;
       return 1;
     }
-    std::vector<std::string> words = warren->tokenizer()->split(question);
+    std::vector<std::string> words = warren->tokenizer()->bow(question);
     std::vector<std::string> keywords;
     std::set<std::string> seen;
     std::string query;

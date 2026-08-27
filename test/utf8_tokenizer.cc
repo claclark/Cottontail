@@ -181,6 +181,18 @@ TEST(Utf8Tokenizer, Split) {
   EXPECT_EQ(tokens[17], "الدكتور");
 }
 
+TEST(Utf8Tokenizer, DefaultProjections) {
+  std::shared_ptr<cottontail::Tokenizer> tokenizer =
+      cottontail::Tokenizer::make("utf8", "");
+  ASSERT_NE(tokenizer, nullptr);
+  std::string text = "HeLlO     wOrLd";
+  std::vector<std::string> tokens = tokenizer->split(text);
+  EXPECT_EQ(tokenizer->count(text),
+            static_cast<cottontail::addr>(tokens.size()));
+  EXPECT_EQ(tokenizer->bow(text), tokens);
+  EXPECT_EQ(tokenizer->phrase(text), tokens);
+}
+
 namespace {
 void skip_test(std::shared_ptr<cottontail::Tokenizer> tokenizer,
                std::shared_ptr<cottontail::Featurizer> featurizer,

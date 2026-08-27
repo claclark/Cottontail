@@ -97,7 +97,7 @@ template <std::vector<RankingResult> ALGORITHM(
 std::vector<RankingResult>
 ranking(std::shared_ptr<Stats> stats, const std::string &query,
         const std::map<std::string, fval> &parameters) {
-  std::vector<std::string> terms = stats->tokenizer()->split(query);
+  std::vector<std::string> terms = stats->tokenizer()->bow(query);
   std::map<std::string, fval> weighted_query;
   for (auto &term : terms)
     weighted_query[term] += 1.0;
@@ -143,7 +143,7 @@ build_tiers(std::shared_ptr<Warren> warren, const std::string &query,
             const std::map<std::string, fval> &parameters) {
   fval delta = ranking_parameter("tiered", "delta", parameters);
   std::vector<std::string> tiers;
-  std::vector<std::string> raw_terms = warren->tokenizer()->split(query);
+  std::vector<std::string> raw_terms = warren->tokenizer()->bow(query);
   if (raw_terms.size() == 0)
     return tiers;
   std::set<std::string> seen;
@@ -408,7 +408,7 @@ std::vector<RankingResult> icover_ranking(std::shared_ptr<Warren> warren,
                                           const std::string &container,
                                           size_t depth) {
   std::vector<RankingResult> top;
-  std::vector<std::string> terms = warren->tokenizer()->split(query);
+  std::vector<std::string> terms = warren->tokenizer()->bow(query);
   if (terms.size() == 0)
     return top;
   std::string error;
@@ -701,7 +701,8 @@ std::vector<std::string> kld_prf(std::shared_ptr<Warren> warren,
   std::map<std::string, fval> frequencies;
   std::map<std::string, fval> expectations;
   for (auto &&text : texts) {
-    std::vector<std::string> tokens = warren->tokenizer()->split(text);
+    addr token_count = warren->tokenizer()->count(text);
+    std::vector<std::string> tokens = warren->tokenizer()->bow(text);
     std::set<std::string> seen;
     for (auto &&token : tokens) {
       if (seen.find(token) == seen.end()) {
@@ -713,7 +714,7 @@ std::vector<std::string> kld_prf(std::shared_ptr<Warren> warren,
         addr feature = warren->featurizer()->featurize(token);
         addr count = warren->idx()->count(feature);
         fval token_prob = (count + 1.0) / (txt_tokens + idx_vocab);
-        fval expectation = 1.0 - std::pow(1.0 - token_prob, tokens.size());
+        fval expectation = 1.0 - std::pow(1.0 - token_prob, token_count);
         if (expectations.find(token) == expectations.end())
           expectations[token] = expectation;
         else
@@ -993,7 +994,7 @@ bool tf_idf_annotations(std::shared_ptr<Warren> warren, std::string *error,
     N++;
     total_length += q - p + 1;
     std::string text = warren->txt()->translate(p, q);
-    std::vector<std::string> tokens = warren->tokenizer()->split(text);
+    std::vector<std::string> tokens = warren->tokenizer()->bow(text);
     std::map<std::string, addr> tf;
     if (include_unstemmed) {
       for (auto &token : tokens) {
@@ -1149,7 +1150,7 @@ std::vector<std::string> rsj_prf(std::shared_ptr<Warren> warren,
   std::map<std::string, fval> frequencies;
   bool unstemmed = stats->have("unstemmed");
   for (auto &&text : texts) {
-    std::vector<std::string> tokens = warren->tokenizer()->split(text);
+    std::vector<std::string> tokens = warren->tokenizer()->bow(text);
     std::set<std::string> seen;
     for (auto &&token : tokens) {
       std::string t;
@@ -1204,7 +1205,7 @@ lmd_ranking(std::shared_ptr<Warren> warren, const std::string &query,
             const std::map<std::string, fval> &parameters) {
   // TODO: rewrite lmd_ranking to use stats and switch back to templates
   // return ranking<lmd_ranking>(warren, query, parameters);
-  std::vector<std::string> terms = warren->tokenizer()->split(query);
+  std::vector<std::string> terms = warren->tokenizer()->bow(query);
   std::map<std::string, fval> weighted_query;
   for (auto &term : terms)
     weighted_query[term] += 1.0;
@@ -1452,7 +1453,7 @@ std::vector<std::string> qap(std::shared_ptr<Warren> warren,
     }
   }
   {
-    std::vector<std::string> tokens = warren->tokenizer()->split(query);
+    std::vector<std::string> tokens = warren->tokenizer()->bow(query);
     for (auto &token : tokens)
       weights.erase(token);
   }
@@ -1479,7 +1480,7 @@ std::vector<std::string> qap(std::shared_ptr<Warren> warren,
   std::vector<fval> scores;
   std::vector<size_t> indices;
   for (size_t i = 0; i < candidates.size(); i++) {
-    std::vector<std::string> tokens = warren->tokenizer()->split(candidates[i]);
+    std::vector<std::string> tokens = warren->tokenizer()->bow(candidates[i]);
     std::set<std::string> seen;
     for (auto &token : tokens)
       if (seen.find(token) == seen.end())
@@ -1551,7 +1552,7 @@ std::vector<RankingResult>
 product_ranking(std::shared_ptr<Warren> warren, const std::string &query,
                 const std::map<std::string, fval> &parameters,
                 const std::string &tag, bool convert) {
-  std::vector<std::string> terms = warren->tokenizer()->split(query);
+  std::vector<std::string> terms = warren->tokenizer()->bow(query);
   std::map<std::string, fval> weighted_query;
   for (auto &term : terms)
     if (weighted_query.find(term) == weighted_query.end())
@@ -1699,7 +1700,7 @@ bool tf_field_annotations(std::shared_ptr<Warren> warren, std::string *error) {
       if (q0 <= q) {
         length += q0 - p0 + 1;
         std::string text = warren->txt()->translate(p0, q0);
-        std::vector<std::string> tokens = warren->tokenizer()->split(text);
+        std::vector<std::string> tokens = warren->tokenizer()->bow(text);
         std::map<std::string, cottontail::addr> ftf;
         for (auto &&token : tokens) {
           std::string stem = warren->stemmer()->stem(token);

@@ -42,8 +42,21 @@ public:
   const char *skip(const char *buffer, size_t length, addr n) {
     return skip_(buffer, length, n);
   };
+  // Lightweight tokenization: one canonical feature string per token
+  // position, preserving order and address alignment.
   std::vector<std::string> split(const std::string &text) {
     return split_(text);
+  };
+  // Return the number of token positions without requiring callers to
+  // materialize the strings returned by split.
+  addr count(const std::string &text) { return count_(text); };
+  // Return the feature strings best suited to bag-of-words indexing and
+  // ranking. A tokenizer may omit null or universal positional placeholders.
+  std::vector<std::string> bow(const std::string &text) { return bow_(text); };
+  // Return the feature strings needed to express the text as a literal phrase,
+  // including any positional placeholders required by the tokenizer.
+  std::vector<std::string> phrase(const std::string &text) {
+    return phrase_(text);
   };
   bool destructive() { return destructive_(); };
 
@@ -62,6 +75,14 @@ private:
                                        char *buffer, size_t length) = 0;
   virtual const char *skip_(const char *buffer, size_t length, addr n) = 0;
   virtual std::vector<std::string> split_(const std::string &text) = 0;
+  // Existing tokenizers inherit projections equivalent to split.
+  virtual addr count_(const std::string &text) { return split_(text).size(); };
+  virtual std::vector<std::string> bow_(const std::string &text) {
+    return split_(text);
+  };
+  virtual std::vector<std::string> phrase_(const std::string &text) {
+    return split_(text);
+  };
   virtual bool destructive_() = 0;
   std::string name_ = "";
 };

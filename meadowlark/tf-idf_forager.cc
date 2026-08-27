@@ -78,7 +78,7 @@ bool TfIdfForager::forage_(addr p, addr q, std::string *error) {
   total_length_ += q - p + 1;
   std::map<std::string, addr> tf;
   std::string text = warren_->txt()->translate(p, q);
-  std::vector<std::string> tokens = tokenizer_->split(text);
+  std::vector<std::string> tokens = tokenizer_->bow(text);
   for (auto &token : tokens) {
     std::string stem;
     {

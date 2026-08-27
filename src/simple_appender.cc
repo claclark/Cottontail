@@ -287,8 +287,8 @@ bool SimpleAppender::transaction_(std::string *error) {
       return false;
     }
     std::string tail_string = tail.get();
-    std::vector<std::string> tail_tokens = tokenizer_->split(tail_string);
-    if (tail_tokens.size() == 0) {
+    addr tail_tokens = tokenizer_->count(tail_string);
+    if (tail_tokens == 0) {
       safe_error(error) =
           "SimpleAppender found sizing error in: " + txt_filename_;
       failed_ = true;
@@ -299,7 +299,7 @@ bool SimpleAppender::transaction_(std::string *error) {
       lock_.unlock();
       return false;
     }
-    address_ = txtr.pq + tail_tokens.size();
+    address_ = txtr.pq + tail_tokens;
   }
   adding_ = true;
   lock_.unlock();

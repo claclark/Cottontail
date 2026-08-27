@@ -219,11 +219,11 @@ addr SimpleTxt::tokens_() {
   else
     full_blocks = map_blocking_ * (map_size_ - 2);
   std::string tail_string = translate(full_blocks, maxfinity);
-  std::vector<std::string> tail_tokens = tokenizer_->split(tail_string);
+  addr tail_tokens = tokenizer_->count(tail_string);
   const std::lock_guard<std::mutex> lock(mutex_);
   if (computed_tokens_valid_)
     return computed_tokens_;
-  computed_tokens_ = full_blocks + tail_tokens.size();
+  computed_tokens_ = full_blocks + tail_tokens;
   computed_tokens_valid_ = true;
   return computed_tokens_;
 }

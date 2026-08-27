@@ -49,7 +49,7 @@ public:
 private:
   void cook() {
     if (weighted_query_.size() == 0 && raw_query_ != "") {
-      std::vector<std::string> terms = stats_->tokenizer()->split(raw_query_);
+      std::vector<std::string> terms = stats_->tokenizer()->bow(raw_query_);
       for (auto &term : terms)
         if (weighted_query_.find(term) == weighted_query_.end())
           weighted_query_[term] = 1.0;

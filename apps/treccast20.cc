@@ -128,7 +128,7 @@ int main(int argc, char **argv) {
     parameters["bm25:k1"] = 0.5;
     parameters["rsj:expansions"] = 16;
     parameters["rsj:depth"] = 32;
-    std::vector<std::string> words = warren->tokenizer()->split(query);
+    std::vector<std::string> words = warren->tokenizer()->bow(query);
     std::vector<std::string> tokens;
     for (const auto &word : words)
       if (stopwords.find(word) == stopwords.end())
