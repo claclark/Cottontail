@@ -574,10 +574,8 @@ bool SimpleBuilder::add_text_(const std::string &text, addr *p, addr *q,
   }
   addr length = text.size();
   std::unique_ptr<char[]> buffer =
-      std::unique_ptr<char[]>(new char[length + 2]);
+      std::unique_ptr<char[]>(new char[length + 1]);
   memcpy(buffer.get(), text.c_str(), length);
-  if (!separator(buffer[length - 1]))
-    buffer[length++] = '\n';
   buffer[length] = '\0';
   io_->append(buffer.get(), length);
   std::vector<Token> tokens =
@@ -595,7 +593,7 @@ bool SimpleBuilder::add_text_(const std::string &text, addr *p, addr *q,
   addr last_pq = -1;
   for (auto &token : tokens) {
     token.address += address_;
-    if (token.feature != null_feature)
+    if (token.feature > null_feature)
       tokens_->emplace_back(token.feature, token.address);
     if (token.address % TXT_BLOCKING == 0 && token.address != last_pq) {
       txtr.pq = token.address;
@@ -658,7 +656,7 @@ bool SimpleBuilder::add_annotation_(addr feature, addr p, addr q, fval v,
                                     std::string *error) {
   // for various reasons, it should be correct to silently ignore invalid
   // annotations
-  if (feature != null_feature && p >= 0 && p <= q) {
+  if (feature > null_feature && p >= 0 && p <= q) {
     annotations_->emplace_back(feature, p, q, v);
     maybe_flush_annotations(false, error);
   }

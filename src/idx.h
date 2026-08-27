@@ -22,9 +22,17 @@ public:
   inline std::string name() { return name_; }
 
   inline std::unique_ptr<Hopper> hopper(addr feature) {
-    return hopper_(feature);
+    if (feature == universal_feature)
+      return std::make_unique<UniversalHopper>();
+    else
+      return hopper_(feature);
   };
-  inline addr count(addr feature) { return count_(feature); };
+  inline addr count(addr feature) {
+    if (feature == universal_feature)
+      return 0;
+    else
+      return count_(feature);
+  };
   inline addr vocab() { return vocab_(); }
   inline void reset(){reset_();};
 

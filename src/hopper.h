@@ -176,5 +176,21 @@ private:
 
   addr width_;
 };
+
+class UniversalHopper final : public Hopper {
+public:
+  UniversalHopper(){};
+  virtual ~UniversalHopper(){};
+  UniversalHopper(const UniversalHopper &) = delete;
+  UniversalHopper &operator=(const UniversalHopper &) = delete;
+  UniversalHopper(UniversalHopper &&) = delete;
+  UniversalHopper &operator=(UniversalHopper &&) = delete;
+
+private:
+  void tau_(addr k, addr *p, addr *q, fval *v) final;
+  void rho_(addr k, addr *p, addr *q, fval *v) final;
+  void uat_(addr k, addr *p, addr *q, fval *v) final;
+  void ohr_(addr k, addr *p, addr *q, fval *v) final;
+};
 } // namespace cottontail
 #endif // COTTONTAIL_SRC_HOPPER_H_

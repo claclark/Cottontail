@@ -6,6 +6,7 @@
 #include "gcl/materialize.h"
 #include "src/core.h"
 #include "src/hopper.h"
+#include "src/null_idx.h"
 
 namespace {
 
@@ -328,6 +329,46 @@ TEST(Hopper, FixedWidth) {
   EXPECT_EQ(p, cottontail::minfinity);
   EXPECT_EQ(q, cottontail::minfinity);
   EXPECT_EQ(v, 0.0);
+}
+
+TEST(Hopper, Universal) {
+  cottontail::UniversalHopper hopper;
+  cottontail::addr p, q;
+  cottontail::fval v;
+
+  hopper.tau(37, &p, &q, &v);
+  EXPECT_EQ(p, 37);
+  EXPECT_EQ(q, 37);
+  EXPECT_EQ(v, 0.0);
+  hopper.rho(37, &p, &q, &v);
+  EXPECT_EQ(p, 37);
+  EXPECT_EQ(q, 37);
+  hopper.uat(37, &p, &q, &v);
+  EXPECT_EQ(p, 37);
+  EXPECT_EQ(q, 37);
+  hopper.ohr(37, &p, &q, &v);
+  EXPECT_EQ(p, 37);
+  EXPECT_EQ(q, 37);
+
+  hopper.tau(cottontail::minfinity, &p, &q);
+  EXPECT_EQ(p, cottontail::minfinity);
+  EXPECT_EQ(q, cottontail::minfinity);
+  hopper.ohr(cottontail::maxfinity, &p, &q);
+  EXPECT_EQ(p, cottontail::maxfinity);
+  EXPECT_EQ(q, cottontail::maxfinity);
+}
+
+TEST(Idx, UniversalFeature) {
+  std::shared_ptr<cottontail::Idx> idx = cottontail::NullIdx::make("");
+  ASSERT_NE(idx, nullptr);
+  EXPECT_EQ(idx->count(cottontail::universal_feature), 0);
+  std::unique_ptr<cottontail::Hopper> hopper =
+      idx->hopper(cottontail::universal_feature);
+  ASSERT_NE(hopper, nullptr);
+  cottontail::addr p, q;
+  hopper->tau(42, &p, &q);
+  EXPECT_EQ(p, 42);
+  EXPECT_EQ(q, 42);
 }
 
 TEST(Hopper, MemoizationReusesEquivalentForwardQueries) {

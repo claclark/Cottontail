@@ -123,10 +123,8 @@ bool SimpleAppender::append_(const std::string &text, addr *p, addr *q,
   }
   addr length = text.size();
   std::unique_ptr<char[]> buffer =
-      std::unique_ptr<char[]>(new char[length + 2]);
+      std::unique_ptr<char[]>(new char[length + 1]);
   memcpy(buffer.get(), text.c_str(), length);
-  if (!separator(buffer[length - 1]))
-    buffer[length++] = '\n';
   buffer[length] = '\0';
   io_->append(buffer.get(), length);
   std::vector<Token> tokens =

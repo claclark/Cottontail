@@ -18,8 +18,26 @@ source changes.
 6. Compile quoted phrases into literal byte-string matches.
 7. Design and implement indexed regular-expression matching later.
 
-The first two steps are narrow and have priority. Each step should be reviewed,
-compile-checked, and discussed before beginning the next one.
+The first two steps were implemented together on 2026-08-27. Step 3 remains a
+separate change requiring review and authorization.
+
+### Implementation Checkpoint: Steps 1 and 2
+
+- `HashingFeaturizer` maps the `INT64_MIN` hash boundary to one stable positive
+  hashed feature without changing any other hash value.
+- Feature `-1` is named `universal_feature`. The public `Idx` operations return
+  a `UniversalHopper`, equivalent to `FixedWidthHopper(1)`, and count zero, so
+  the contract automatically applies to every concrete index and wrapper.
+- Indexing paths continue to ignore non-positive features; in particular,
+  direct `SimpleBuilder` use cannot store the virtual universal feature.
+- Public `Appender::append(...)` and `Builder::add_text(...)` add a newline to
+  nonempty input only when its final byte is not space, tab, carriage return,
+  or newline.
+- Concrete Fiver and Simple append/build paths now store and tokenize exactly
+  the normalized input they receive. Redundant Fiver newline mutations during
+  readiness and Hazel serialization were removed as part of that contract.
+- `bazel build //...` succeeds. Runtime and regression tests are left to the
+  user under the repository verification rule.
 
 ## 1. Feature Foundations
 

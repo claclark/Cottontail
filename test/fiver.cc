@@ -78,6 +78,31 @@ TEST(Fiver, Basic) {
   fiver->end();
 }
 
+TEST(Fiver, AppendSeparators) {
+  std::shared_ptr<cottontail::Featurizer> featurizer =
+      cottontail::Featurizer::make("hashing", "");
+  ASSERT_NE(featurizer, nullptr);
+  std::shared_ptr<cottontail::Tokenizer> tokenizer =
+      cottontail::Tokenizer::make("ascii", "");
+  ASSERT_NE(tokenizer, nullptr);
+  std::shared_ptr<cottontail::Fiver> fiver =
+      cottontail::Fiver::make(nullptr, featurizer, tokenizer);
+  ASSERT_NE(fiver, nullptr);
+  fiver->start();
+  ASSERT_TRUE(fiver->transaction());
+  cottontail::addr p, q;
+  ASSERT_TRUE(fiver->appender()->append("alpha\r", &p, &q));
+  ASSERT_TRUE(fiver->appender()->append("beta\t", &p, &q));
+  ASSERT_TRUE(fiver->appender()->append("gamma\n", &p, &q));
+  ASSERT_TRUE(fiver->appender()->append("delta ", &p, &q));
+  ASSERT_TRUE(fiver->ready());
+  fiver->commit();
+  EXPECT_EQ(fiver->txt()->tokens(), 4);
+  EXPECT_EQ(fiver->txt()->translate(0, 3),
+            "alpha\rbeta\tgamma\ndelta ");
+  fiver->end();
+}
+
 TEST(Fiver, EmptyAndTokenlessActivationAndMerge) {
   const std::string burrow = "empty-tokenless-fiver.burrow";
   std::string error;

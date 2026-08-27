@@ -17,6 +17,7 @@ typedef double fval;  // Feature value
 constexpr addr maxfinity = INT64_MAX;
 constexpr addr minfinity = INT64_MIN;
 constexpr addr null_feature = 0;
+constexpr addr universal_feature = -1;
 
 inline addr fval2addr(fval v) {
   union {
@@ -106,7 +107,9 @@ struct Annotation {
 
 // If an append doesn't end in one of these character we add a newline.
 // Otherwise, we may get a token splice.
-inline bool separator(char c) { return c == ' ' || c == '\t' || c == '\n'; }
+inline bool separator(char c) {
+  return c == ' ' || c == '\t' || c == '\r' || c == '\n';
+}
 
 } // namespace cottontail
 

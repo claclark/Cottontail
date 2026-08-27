@@ -27,7 +27,12 @@ public:
       safe_error(error) = "Can't add text after build finalized";
       return false;
     } else {
-      failed_ = !add_text_(text, p, q, error);
+      if (text.empty() || separator(text.back())) {
+        failed_ = !add_text_(text, p, q, error);
+      } else {
+        std::string normalized = text + "\n";
+        failed_ = !add_text_(normalized, p, q, error);
+      }
       return !failed_;
     }
   };

@@ -61,6 +61,11 @@ uint64_t MurmurHash64A(const void *key, int len, unsigned int seed) {
 namespace cottontail {
 namespace {
 
+// Stable replacement for the one hash value that cannot be made positive.
+// Its high byte is nonzero, keeping it out of the short-string namespace.
+constexpr addr hashing_overflow_feature = 0x6f2d4b18a937c5e1LL;
+static_assert(hashing_overflow_feature > null_feature);
+
 addr try_digit(char c) {
   switch (c) {
   case '0':
@@ -133,6 +138,8 @@ addr HashingFeaturizer::featurize_(const char *key, addr length) {
       u.s[i] = '\0';
   } else {
     u.v = MurmurHash64A(key, length, 588503011);
+    if (u.a == minfinity)
+      return hashing_overflow_feature;
     u.a = u.a > 0 ? u.a : -u.a;
     u.s[sizeof(addr) - 1] |= 0x1;
   }

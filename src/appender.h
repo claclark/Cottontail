@@ -31,7 +31,10 @@ public:
 
   bool append(const std::string &text, addr *p, addr *q,
               std::string *error = nullptr) {
-    return append_(text, p, q, error);
+    if (text.empty() || separator(text.back()))
+      return append_(text, p, q, error);
+    std::string normalized = text + "\n";
+    return append_(normalized, p, q, error);
   };
 
   virtual ~Appender(){};

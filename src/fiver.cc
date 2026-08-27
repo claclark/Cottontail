@@ -124,8 +124,6 @@ private:
     }
     addr offset = text_->length();
     *text_ += text;
-    if (!separator(text.back()))
-      *text_ += "\n";
     std::vector<Token> tokens = tokenizer_->tokenize(featurizer_, text);
     if (tokens.size() == 0) {
       *p = address_ + 1;
@@ -161,8 +159,6 @@ private:
     return true;
   };
   bool ready_(std::string *error) {
-    if (text_->length() > 0 && text_->back() != '\n')
-      *text_ += "\n";
     if (address_ > first_address_)
       if (!annotator_->annotate(featurizer_->featurize(transaction_tag),
                                 first_address_, address_ - 1, error))
@@ -1215,8 +1211,6 @@ bool Fiver::hazel(const std::string &filename, std::string *error,
     safe_error(error) = "Hazel text chunk size must be positive";
     return false;
   }
-  if (text_->size() > 0 && !separator(text_->back()))
-    *text_ += "\n";
   std::string dna =
       hazel_dna(featurizer_, tokenizer_, posting_compressor_,
                 fvalue_compressor_, text_compressor_, sequence_start_,

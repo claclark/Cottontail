@@ -141,4 +141,20 @@ void FixedWidthHopper::ohr_(addr k, addr *p, addr *q, fval *v) {
     *p = *q = minfinity;
   }
 }
+
+void UniversalHopper::tau_(addr k, addr *p, addr *q, fval *v) {
+  *p = *q = k;
+}
+
+void UniversalHopper::rho_(addr k, addr *p, addr *q, fval *v) {
+  *p = *q = k;
+}
+
+void UniversalHopper::uat_(addr k, addr *p, addr *q, fval *v) {
+  *p = *q = k;
+}
+
+void UniversalHopper::ohr_(addr k, addr *p, addr *q, fval *v) {
+  *p = *q = k;
+}
 }
