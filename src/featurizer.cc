@@ -7,6 +7,7 @@
 #include "src/core.h"
 #include "src/hashing_featurizer.h"
 #include "src/json_featurizer.h"
+#include "src/ngram_featurizer.h"
 #include "src/null_featurizer.h"
 #include "src/recipe.h"
 #include "src/tagging_featurizer.h"
@@ -22,6 +23,8 @@ std::shared_ptr<Featurizer> Featurizer::make(const std::string &name,
   if (name == "" || name == "hashing") {
     featurizer = HashingFeaturizer::make(recipe, error);
     return featurizer;
+  } else if (name == "ngram") {
+    return NGramFeaturizer::make(recipe, error);
   } else if (name == "tagging") {
     featurizer = TaggingFeaturizer::make(recipe, error, working);
     return featurizer;
@@ -50,6 +53,8 @@ bool Featurizer::check(const std::string &name, const std::string &recipe,
                        std::string *error) {
   if (name == "" || name == "hashing") {
     return HashingFeaturizer::check(recipe, error);
+  } else if (name == "ngram") {
+    return NGramFeaturizer::check(recipe, error);
   } else if (name == "tagging") {
     return TaggingFeaturizer::check(recipe, error);
   } else if (name == "vocab") {

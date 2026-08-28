@@ -1,9 +1,8 @@
 # Preliminary Workplan for Indexed String Matching
 
 This is a preliminary, stepwise engineering plan. The first goal is literal
-byte-string matching over an n-gram index, with one explicit whitespace
-equivalence described below. General regular-expression matching comes later
-and is deliberately not yet planned.
+byte-string matching over an n-gram index. General regular-expression matching
+comes later and is deliberately not yet planned.
 
 Work proceeds one approved step at a time. This document does not authorize
 source changes.
@@ -20,8 +19,9 @@ source changes.
 8. Design and implement indexed regular-expression matching later.
 
 The first two steps were implemented together on 2026-08-27. Steps 3 and 4
-were implemented separately later that day. Step 5 remains a separate change
-requiring review and authorization.
+were implemented separately later that day. The `NGramFeaturizer` half of step
+5 was implemented on 2026-08-28; `NGramTokenizer` remains a separate reviewed
+change.
 
 ### Implementation Checkpoint: Steps 1 Through 4
 
@@ -213,18 +213,33 @@ protocol and must be designed and tested together.
 
 Reserve internal Unicode noncharacters for protocol strings:
 
-- An n-gram marker followed by payload bytes requests reversible n-gram
-  encoding.
-- A null marker maps to feature `0`.
-- A universal marker maps to feature `-1` for phrase construction.
+- U+FDDA is the n-gram marker. A payload shorter than eight bytes is packed as
+  a reversible, NUL-terminated feature string; a longer payload maps to `0`.
+- U+FDDB is the universal marker. Any token beginning with it maps to `-1`,
+  with any remaining payload ignored.
+- U+FDDC is the translation marker. Its payload is the hexadecimal value of a
+  hashed feature; malformed encodings map to `0`.
+- The empty string remains the null feature `0`.
+- The ten JSON structural tokens U+FDD0--U+FDD9 also map to `0`, replacing the
+  behavior supplied by `JsonFeaturizer` in an n-gram configuration.
 
-`NGramTokenizer` produces these marked strings. `NGramFeaturizer` recognizes
-and converts them. An unmarked string is hashed normally, preserving the
-ordinary namespace for structural features such as `:id:` and `:docno:`.
+`NGramTokenizer` will produce these marked strings. `NGramFeaturizer`
+recognizes and converts them. An unmarked nonempty string is always hashed,
+preserving a namespace distinct from reversible textual n-grams. Whenever
+`HashingFeaturizer` and `NGramFeaturizer` hash the same bytes, they use the same
+MurmurHash routine, seed, sign normalization, overflow replacement, and hashed
+feature marker bit, and therefore produce the same feature value.
 
 The marker is a type/dispatch prefix and is not part of the n-gram payload.
 The same marked feature string can be written explicitly in GCL by escaping it
 inside `|...|`.
+
+`NGramFeaturizer::translate` returns the universal marker for a negative
+feature, the n-gram marker plus literal bytes for a reversible feature, or the
+translation marker plus lowercase hexadecimal for a hashed feature. Thus
+`featurize(translate(feature))` preserves every supported feature class; null
+translates as an n-gram marker with an empty payload. The featurizer has no
+recipe and does not know the configured gram size.
 
 ### Gram Size and Encoding
 
@@ -234,7 +249,7 @@ Support exactly one configured gram size per index:
 1 <= n <= 7
 ```
 
-Record `n` in the tokenizer/featurizer DNA. Do not select the default yet;
+Record `n` in the tokenizer DNA. Do not select the default yet;
 four and five are the leading candidates. Four makes short code fragments such
 as `skip`, `case`, `bool`, and `addr` independently searchable, while five
 should provide shorter posting lists on very large collections. Smaller grams

@@ -75,9 +75,14 @@ Agent verification was compile-only through `bazel build //...`; user
 basic tests pass, and no deeper testing is planned for this narrow parser
 change.
 
-Do not begin step 5, the paired `NGramFeaturizer` and `NGramTokenizer`, without
-review and explicit authorization. The Meadowlark file-oriented metadata work
-remains complete, and the separate Python wrapper still follows later.
+The user separately authorized and reviewed the `NGramFeaturizer` half of step
+5. It is implemented with no recipe and no gram-size knowledge; the shared
+MurmurHash routine preserves existing hashed values, and the typed marker
+protocol covers reversible grams, universal positions, hash translation, and
+JSON structural nulls. All 54 targets compile successfully. Do not begin
+`NGramTokenizer` without separate review and explicit authorization. The
+Meadowlark file-oriented metadata work remains complete, and the separate
+Python wrapper still follows later.
 
 ## Completed Meadowlark Filename And Labeling Step
 

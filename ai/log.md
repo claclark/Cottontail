@@ -448,3 +448,13 @@
   over-specific new diagnostic assertion because `safe_error` appends its
   source location; the assertion now checks the stable offset prefix, and the
   aggregate target compiles without warnings.
+2026-08-28T15:12:27+00:00
+
+- Implemented the featurizer half of indexed string-matching step 5 without a
+  tokenizer. Moved MurmurHash64A into a shared source module without changing
+  `HashingFeaturizer` values; added recipe-free `NGramFeaturizer` with typed
+  n-gram, universal, and hash-translation markers, JSON structural nulls,
+  always-hashed unmarked terms, strict hexadecimal recovery, and feature
+  translation round trips; and wired `ngram` into the general featurizer
+  factory. Added focused compile-time coverage. All 54 Bazel targets compile
+  successfully; no runtime tests were run.
