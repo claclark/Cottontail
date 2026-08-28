@@ -21,8 +21,10 @@ const std::string comma_token = "\xEF\xB7\x97";
 const std::string open_number_token = "\xEF\xB7\x98";
 const std::string close_number_token = "\xEF\xB7\x99";
 inline bool json_internal_token(const char *token, addr length) {
-  return length == 3 && token[0] == '\xEF' && token[1] == '\xB7' &&
-         (token[2] >= '\x90' || token[2] >= '\x99');
+  return length == 3 && static_cast<unsigned char>(token[0]) == 0xEF &&
+         static_cast<unsigned char>(token[1]) == 0xB7 &&
+         static_cast<unsigned char>(token[2]) >= 0x90 &&
+         static_cast<unsigned char>(token[2]) <= 0x99;
 }
 
 bool json_scribe(const std::string &s, std::shared_ptr<Scribe> scribe,

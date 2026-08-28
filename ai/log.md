@@ -426,3 +426,16 @@
 
 - Recorded the user's report that basic literal-feature tests pass and the
   decision that deeper testing is unnecessary for this narrow parser change.
+2026-08-27T20:26:05+00:00
+
+- Added a deferred pre-regexp work item to revise Meadowlark code ingestion so
+  code structural elements can span source lines and n-grams can cross embedded
+  newlines, while retaining line metadata through annotations or foraging. No
+  source code changed.
+2026-08-27T23:35:14+00:00
+
+- Corrected the UTF-8 byte ranges used by JSON's internal-token predicate and
+  input sanitizer. Internal tokens are now exactly U+FDD0--U+FDD9, while
+  sanitization stops at U+FDEF and preserves valid U+FDF0--U+FDFF characters.
+  Added structural-range boundary coverage. All 54 Bazel targets compile
+  successfully; no runtime tests were run.

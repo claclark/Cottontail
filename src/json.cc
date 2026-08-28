@@ -149,14 +149,15 @@ bool contains_utf8_noncharacters(const std::string &s) {
   int state = 0;
   for (const char *c = s.c_str(); *c; c++)
     if (state == 0) {
-      if (*c == '\xEF')
+      if (static_cast<unsigned char>(*c) == 0xEF)
         state = 1;
     } else if (state == 1) {
-      if (*c == '\xB7')
+      if (static_cast<unsigned char>(*c) == 0xB7)
         state = 2;
       else
         state = 0;
-    } else if (*c >= '\x90' || *c <= '\xAF') {
+    } else if (static_cast<unsigned char>(*c) >= 0x90 &&
+               static_cast<unsigned char>(*c) <= 0xAF) {
       return true;
     } else {
       state = 0;
@@ -165,8 +166,10 @@ bool contains_utf8_noncharacters(const std::string &s) {
 }
 
 inline bool noncharacter_next(const char *c) {
-  return c[0] && c[0] == '\xEF' && c[1] && c[1] == '\xB7' && c[2] &&
-         (c[2] >= '\x90' || c[2] >= '\xAF');
+  return c[0] && static_cast<unsigned char>(c[0]) == 0xEF && c[1] &&
+         static_cast<unsigned char>(c[1]) == 0xB7 && c[2] &&
+         static_cast<unsigned char>(c[2]) >= 0x90 &&
+         static_cast<unsigned char>(c[2]) <= 0xAF;
 }
 
 std::string sanitize(const std::string &s) {

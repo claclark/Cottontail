@@ -26,6 +26,10 @@ TEST(JSON, Tokens) {
     EXPECT_TRUE(cottontail::json_internal_token(c + 3 * i, 3));
   EXPECT_FALSE(cottontail::json_internal_token(nullptr, 2));
   EXPECT_FALSE(cottontail::json_internal_token("the", 3));
+  EXPECT_FALSE(cottontail::json_internal_token("\xEF\xB7\x8F", 3));
+  EXPECT_FALSE(cottontail::json_internal_token("\xEF\xB7\x9A", 3));
+  EXPECT_FALSE(cottontail::json_internal_token("\xEF\xB7\xAF", 3));
+  EXPECT_FALSE(cottontail::json_internal_token("\xEF\xB7\xB0", 3));
 }
 
 TEST(JSON, Encode) {

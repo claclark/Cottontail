@@ -16,7 +16,8 @@ source changes.
 4. Add general literal feature strings to GCL with `|...|`.
 5. Implement `NGramFeaturizer` and `NGramTokenizer` together.
 6. Compile quoted phrases into literal byte-string matches.
-7. Design and implement indexed regular-expression matching later.
+7. Fix Meadowlark code ingestion so literal matching can cross source lines.
+8. Design and implement indexed regular-expression matching later.
 
 The first two steps were implemented together on 2026-08-27. Steps 3 and 4
 were implemented separately later that day. Step 5 remains a separate change
@@ -362,7 +363,17 @@ constraints. Include all four normalized separator bytes, separator runs,
 append boundaries, arbitrary UTF-8 bytes, malformed input, and strings shorter
 than `n`.
 
-## 7. Regular Expressions: Direction Only
+## 7. Meadowlark Code Line Boundaries
+
+Before general regular-expression work, revise the Meadowlark `code` input
+path so one code structural element may span source lines. The n-gram tokenizer
+can then see and index grams across embedded newline bytes instead of treating
+each source line as a structural boundary. Preserve line-oriented metadata
+through annotations or later foraging rather than by splitting the indexed
+text into line-sized elements. This is a deferred Meadowlark ingestion change,
+not part of the tokenizer/featurizer implementation.
+
+## 8. Regular Expressions: Direction Only
 
 General indexed regular-expression matching is intentionally not planned yet.
 The literal matcher should be implemented and understood first.
