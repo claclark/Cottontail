@@ -44,6 +44,10 @@ std::unique_ptr<Hopper> hopper(const std::string &query, Warren *warren,
   if (expr == nullptr)
     return nullptr;
   expr = expr->expand_phrases(warren->tokenizer());
+  if (expr->is_error()) {
+    safe_error(error) = expr->message();
+    return nullptr;
+  }
   expr = Optimizer::optimize(expr, warren);
   std::unique_ptr<Hopper> hopper =
       expr->to_hopper(warren->featurizer(), warren->idx());

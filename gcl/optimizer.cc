@@ -31,6 +31,8 @@ addr Optimizer::estimate_memory(std::shared_ptr<SExpression> expr,
   if (expr == nullptr || warren == nullptr)
     return 0;
   expr = expr->expand_phrases(warren->tokenizer());
+  if (expr->is_error())
+    return 0;
   std::set<addr> features;
   std::vector<std::shared_ptr<SExpression>> pending = {expr};
   while (!pending.empty()) {
@@ -53,6 +55,8 @@ addr Optimizer::estimate_memory(std::shared_ptr<SExpression> expr,
 
 std::shared_ptr<SExpression>
 Optimizer::optimize(std::shared_ptr<SExpression> expr, Warren *warren) {
+  if (expr == nullptr || expr->is_error())
+    return expr;
   if (!enabled)
     return expr;
   (void)warren;
@@ -70,6 +74,8 @@ Optimizer::optimize_(std::shared_ptr<SExpression> expr,
   *materialize_me = false;
   if (expr == nullptr)
     return nullptr;
+  if (expr->kind_ == ERROR)
+    return expr;
   if (expr->kind_ == MATERIALIZE)
     return expr;
   std::vector<std::shared_ptr<SExpression>> subx;

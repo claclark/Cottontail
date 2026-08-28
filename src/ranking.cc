@@ -417,6 +417,8 @@ std::vector<RankingResult> icover_ranking(std::shared_ptr<Warren> warren,
   if (expr == nullptr)
     return top;
   expr = expr->expand_phrases(warren->tokenizer());
+  if (expr->is_error())
+    return top;
   std::unique_ptr<cottontail::Hopper> chopper =
       expr->to_hopper(warren->featurizer(), warren->idx());
   if (chopper == nullptr)

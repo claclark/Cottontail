@@ -425,7 +425,18 @@ std::shared_ptr<SExpression> SExpression::from_string(std::string s,
   return nullptr;
 }
 
+std::shared_ptr<SExpression>
+SExpression::make_error(const std::string &message) {
+  std::shared_ptr<SExpression> expr = std::make_shared<SExpression>();
+  expr->kind_ = ERROR;
+  expr->message_ = message;
+  expr->width_ = 0;
+  return expr;
+}
+
 std::string SExpression::to_string() {
+  if (kind_ == Operator::ERROR)
+    return "ERROR: " + message_;
   if (kind_ == Operator::TERM)
     return term_to_gcl(term_);
   if (kind_ == Operator::QUOTE)
@@ -443,11 +454,15 @@ std::string SExpression::to_string() {
 std::shared_ptr<SExpression>
 SExpression::expand_phrases(std::shared_ptr<cottontail::Tokenizer> tokenizer,
                             char marker) {
+  if (kind_ == ERROR)
+    return make_error(message_);
   if (kind_ == QUOTE && term_.length() >= 2 && term_[0] == marker &&
       term_[term_.length() - 1] == marker) {
     std::string phrase = phrase_to_string(term_);
     std::vector<std::string> terms = tokenizer->phrase(phrase);
-    if (terms.size() == 1) {
+    if (terms.size() == 0) {
+      return make_error("Cannot expand phrase: " + term_);
+    } else if (terms.size() == 1) {
       std::shared_ptr<SExpression> expr = std::make_shared<SExpression>();
       expr->kind_ = TERM;
       expr->term_ = terms[0];
@@ -465,21 +480,31 @@ SExpression::expand_phrases(std::shared_ptr<cottontail::Tokenizer> tokenizer,
       std::shared_ptr<SExpression> expr = SExpression::from_string(s, &error);
       if (expr != nullptr)
         return expr;
+      return make_error("Cannot expand phrase " + term_ + ": " + error);
     }
   }
   std::shared_ptr<SExpression> expr = std::make_shared<SExpression>();
   expr->kind_ = kind_;
   expr->term_ = term_;
+  expr->message_ = message_;
   expr->width_ = width_;
-  for (size_t i = 0; i < subx_.size(); i++)
-    expr->subx_.push_back(subx_[i]->expand_phrases(tokenizer, marker));
+  for (size_t i = 0; i < subx_.size(); i++) {
+    std::shared_ptr<SExpression> subx =
+        subx_[i]->expand_phrases(tokenizer, marker);
+    if (subx->is_error())
+      return subx;
+    expr->subx_.push_back(subx);
+  }
   return expr;
 }
 
 std::shared_ptr<SExpression> SExpression::to_binary() {
+  if (kind_ == ERROR)
+    return make_error(message_);
   std::shared_ptr<SExpression> expr = std::make_shared<SExpression>();
   expr->kind_ = kind_;
   expr->term_ = term_;
+  expr->message_ = message_;
   expr->width_ = width_;
   size_t i = 0;
   for (; i < subx_.size() && i < 2; i++)
@@ -488,6 +513,7 @@ std::shared_ptr<SExpression> SExpression::to_binary() {
     std::shared_ptr<SExpression> outer = std::make_shared<SExpression>();
     outer->kind_ = kind_;
     outer->term_ = term_;
+    outer->message_ = message_;
     outer->width_ = width_;
     outer->subx_.push_back(expr);
     outer->subx_.push_back(subx_[i]->to_binary());
@@ -502,7 +528,7 @@ SExpression::to_hopper(std::shared_ptr<Featurizer> featurizer,
   if (kind_ == TERM) {
     return idx->hopper(featurizer->featurize(term_));
   }
-  if (kind_ == QUOTE)
+  if (kind_ == QUOTE || kind_ == ERROR)
     return nullptr;
   if (kind_ == FIXED) {
     if (width_ == 1)

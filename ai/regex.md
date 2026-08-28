@@ -20,8 +20,8 @@ source changes.
 
 The first two steps were implemented together on 2026-08-27. Steps 3 and 4
 were implemented separately later that day. The `NGramFeaturizer` half of step
-5 was implemented on 2026-08-28; `NGramTokenizer` remains a separate reviewed
-change.
+5 was implemented on 2026-08-28. The GCL semantic-error prerequisite for the
+tokenizer was then added; `NGramTokenizer` remains a separate reviewed change.
 
 ### Implementation Checkpoint: Steps 1 Through 4
 
@@ -203,6 +203,20 @@ function when inserting tokenizer-produced features into generated GCL.
 This syntax is independent of n-grams. It is useful whenever a feature string
 contains whitespace, controls, delimiters, or other bytes awkward to express
 as an ordinary GCL term.
+
+### Semantic Expansion Errors
+
+GCL has an internal `ERROR` expression for failures discovered after parsing.
+It is not surface syntax and cannot be parsed from user input. An error stores
+an explanatory message, propagates through parent expressions during phrase
+expansion, and is reported before optimization or hopper construction.
+`Optimizer::estimate_memory(...)` returns zero for such an uncompilable
+expression.
+
+In particular, a quoted phrase for which `Tokenizer::phrase(...)` returns no
+terms becomes an `ERROR`. This provides the clean failure path needed for
+n-gram queries shorter than the selected gram size and can later carry regexp
+compilation errors without overloading `term_`.
 
 ## 5. N-Gram Featurizer and Tokenizer
 

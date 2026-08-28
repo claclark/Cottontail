@@ -159,3 +159,19 @@ TEST(GCLParseTest, PhraseExpansionEscapesAndSerializesTerms) {
   ASSERT_NE(expr, nullptr);
   EXPECT_EQ(expr->to_string(), "|foo bar|");
 }
+
+TEST(GCLParseTest, PhraseExpansionErrorsPropagate) {
+  std::shared_ptr<RecordingTokenizer> tokenizer =
+      std::make_shared<RecordingTokenizer>(std::vector<std::string>{});
+  std::shared_ptr<cottontail::gcl::SExpression> expr =
+      parse("(^ hello \"\" world)")->expand_phrases(tokenizer);
+  ASSERT_NE(expr, nullptr);
+  EXPECT_TRUE(expr->is_error());
+  EXPECT_EQ(expr->message(), "Cannot expand phrase: \"\"");
+  EXPECT_EQ(expr->to_string(), "ERROR: Cannot expand phrase: \"\"");
+
+  std::shared_ptr<cottontail::Featurizer> featurizer =
+      cottontail::HashingFeaturizer::make();
+  std::shared_ptr<cottontail::Idx> idx = cottontail::NullIdx::make("");
+  EXPECT_EQ(expr->to_hopper(featurizer, idx), nullptr);
+}

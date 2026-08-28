@@ -51,6 +51,13 @@ TEST(GCLTest, E2E) {
   EXPECT_EQ(cottontail::gcl::Optimizer::estimate_memory(
                 "\"hello world\"", warren.get()),
             8 * posting_bytes);
+  EXPECT_EQ(cottontail::gcl::Optimizer::estimate_memory("\"\"", warren.get()),
+            0);
+
+  error = "";
+  EXPECT_EQ(warren->hopper_from_gcl("(^ hello \"\" world)", &error),
+            nullptr);
+  EXPECT_NE(error.find("Cannot expand phrase: \"\""), std::string::npos);
 
   auto compile = [&](std::string g) -> std::unique_ptr<cottontail::Hopper> {
     std::shared_ptr<cottontail::gcl::SExpression> expr =

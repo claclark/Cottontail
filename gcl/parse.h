@@ -30,7 +30,8 @@ enum Operator {
   NOT_CONTAINED_IN,
   NOT_CONTAINING,
   LINK,
-  MATERIALIZE
+  MATERIALIZE,
+  ERROR
 };
 
 class SExpression final {
@@ -47,6 +48,9 @@ public:
        const std::vector<std::shared_ptr<SExpression>> &subx);
   static std::shared_ptr<SExpression> from_string(std::string s,
                                                   std::string *error);
+  static std::shared_ptr<SExpression> make_error(const std::string &message);
+  bool is_error() const { return kind_ == ERROR; }
+  const std::string &message() const { return message_; }
   std::string to_string();
   std::shared_ptr<SExpression> to_binary();
   std::shared_ptr<SExpression>
@@ -65,6 +69,7 @@ public:
 private:
   Operator kind_;
   std::string term_;
+  std::string message_;
   addr width_;
   std::vector<std::shared_ptr<SExpression>> subx_;
 };

@@ -79,10 +79,14 @@ The user separately authorized and reviewed the `NGramFeaturizer` half of step
 5. It is implemented with no recipe and no gram-size knowledge; the shared
 MurmurHash routine preserves existing hashed values, and the typed marker
 protocol covers reversible grams, universal positions, hash translation, and
-JSON structural nulls. All 54 targets compile successfully. Do not begin
-`NGramTokenizer` without separate review and explicit authorization. The
-Meadowlark file-oriented metadata work remains complete, and the separate
-Python wrapper still follows later.
+JSON structural nulls. The GCL tree now also has an internal semantic `ERROR`
+node: failed phrase expansion, including an empty tokenizer phrase, propagates
+an explanatory message to the public compilation boundary instead of becoming
+an indirectly invalid tree. Memory estimation treats such an expression as
+uncompilable. All 54 targets compile successfully. `NGramTokenizer` remains
+unimplemented and requires separate review before work begins. The Meadowlark
+file-oriented metadata work remains complete, and the separate Python wrapper
+still follows later.
 
 ## Completed Meadowlark Filename And Labeling Step
 

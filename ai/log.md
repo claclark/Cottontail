@@ -458,3 +458,11 @@
   translation round trips; and wired `ngram` into the general featurizer
   factory. Added focused compile-time coverage. All 54 Bazel targets compile
   successfully; no runtime tests were run.
+2026-08-28T16:49:49+00:00
+
+- Added an internal GCL `ERROR` expression with a dedicated message. Semantic
+  phrase-expansion failures now propagate to the root and are reported before
+  optimization or hopper construction; empty tokenizer phrases use this path,
+  and optimizer memory estimation returns zero. Added focused parser and
+  public-compilation coverage. All 54 Bazel targets compile successfully; no
+  runtime tests were run. `NGramTokenizer` remains unimplemented.
