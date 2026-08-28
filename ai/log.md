@@ -484,3 +484,20 @@
 - Recorded the user's report that basic `NGramTokenizer` testing works. The
   implementation and its updated indexed string-matching plan are ready for
   the user's commit.
+2026-08-28T18:58:56+00:00
+
+- Added n-gram Meadowlark creation through `--create ngram[:n]`, with
+  pre-creation validation and canonical word recipes. Added a recipe-bearing
+  `create_meadow` entry point that appends overrides to one shared default
+  Bigwig recipe, made empty meadow names consistently select `a.meadow`, and
+  simplified the app to one creation call and one opening call. All 54 Bazel
+  targets compile successfully; no runtime tests were run.
+2026-08-28T19:49:25+00:00
+
+- Recorded the user's successful basic end-to-end n-gram checks over `ai/` and
+  `src/`: exact punctuation-heavy C++ substrings compose with ordinary GCL to
+  recover containing source objects, `//` filenames, and fixed-width context
+  crossing a source newline. Marked literal matching as operational through
+  the existing phrase-expansion path, code ingestion across source lines as
+  the next implementation step, and exhaustive testing as the gate before
+  regexp work. No source code changed in this documentation pass.

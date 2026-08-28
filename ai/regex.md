@@ -22,8 +22,19 @@ The first two steps were implemented together on 2026-08-27. Steps 3 and 4
 were implemented separately later that day. The `NGramFeaturizer` half of step
 5 was implemented on 2026-08-28. The GCL semantic-error prerequisite for the
 tokenizer was then added, followed by the reviewed `NGramTokenizer`. Step 5 is
-complete; all targets compile and the user's basic testing works. Literal
-phrase compilation remains separate.
+complete; all targets compile and the user's basic testing works. The existing
+phrase-expansion path then supplied step 6 without further source changes:
+quoted strings compile through `NGramTokenizer::phrase` into exact positional
+GCL and work against an n-gram Meadowlark in basic interactive testing.
+
+Meadowlark can create an n-gram collection with `--create ngram` or
+`--create ngram:n`. The latter accepts the tokenizer's numeric and word forms,
+validates before creating the burrow, and writes the canonical word recipe.
+Creation appends standard Bigwig option overrides, replacing both the UTF-8
+tokenizer and JSON-wrapped hashing featurizer with their n-gram counterparts.
+Bare `--create` retains the existing configuration. Step 7, revising code
+ingestion so one structural element spans source lines, is next. Exhaustive
+testing is deliberately deferred until that change is complete.
 
 ### Implementation Checkpoint: Steps 1 Through 4
 
@@ -374,6 +385,15 @@ constraints. Include all four literal separator bytes, separator runs,
 append boundaries, arbitrary UTF-8 bytes, malformed input, and strings shorter
 than `n`.
 
+The basic end-to-end path is working without additional implementation beyond
+the completed tokenizer, featurizer, and phrase-expansion work. Interactive
+checks over `ai/` and `src/` found exact punctuation-heavy C++ fragments,
+including fragments beginning and ending inside identifiers and C++ escape
+spellings. Ordinary GCL containment recovered the containing source object and
+its `//` filename annotation, while fixed-width context composed around the
+literal match and crossed a source newline. These are smoke tests only; the
+systematic cases above remain for the exhaustive pass after step 7.
+
 ## 7. Meadowlark Code Line Boundaries
 
 Before general regular-expression work, revise the Meadowlark `code` input
@@ -382,7 +402,9 @@ can then see and index grams across embedded newline bytes instead of treating
 each source line as a structural boundary. Preserve line-oriented metadata
 through annotations or later foraging rather than by splitting the indexed
 text into line-sized elements. This is a deferred Meadowlark ingestion change,
-not part of the tokenizer/featurizer implementation.
+not part of the tokenizer/featurizer implementation. It is the next coding
+step. After it is complete, run the exhaustive literal-matching tests before
+beginning regular-expression work.
 
 ## 8. Regular Expressions: Direction Only
 

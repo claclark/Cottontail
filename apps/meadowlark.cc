@@ -7,10 +7,12 @@
 
 #include "apps/walk.h"
 #include "meadowlark/meadowlark.h"
+#include "src/tokenizer.h"
 
 void usage(std::string program_name) {
   std::cerr << "usage: " << program_name
-            << " [--meadow meadow] [--create [parameter:value ...]]"
+            << " [--meadow meadow]"
+            << " [--create [ngram[:n]] [parameter:value ...]]"
             << " [--tsv path...] [--jsonl|--json path...]"
             << " [--text path...] [--code path...]...\n";
 }
@@ -52,10 +54,37 @@ int main(int argc, char **argv) {
     return 0;
   bool create =
       argv[1] == std::string("-c") || argv[1] == std::string("--create");
+  std::string recipe;
   std::vector<std::pair<std::string, std::string>> parameters;
   if (create) {
     --argc;
     argv++;
+    if (argc > 1) {
+      std::string specification = argv[1];
+      if (specification == "ngram" ||
+          specification.compare(0, 6, "ngram:") == 0) {
+        std::string ngram_recipe;
+        if (specification != "ngram")
+          ngram_recipe = specification.substr(6);
+        if (ngram_recipe == "" && specification != "ngram") {
+          std::cerr << program_name << ": Invalid ngram specification "
+                    << specification << "\n";
+          usage(program_name);
+          return 1;
+        }
+        std::shared_ptr<cottontail::Tokenizer> tokenizer =
+            cottontail::Tokenizer::make("ngram", ngram_recipe, &error);
+        if (tokenizer == nullptr) {
+          std::cerr << program_name << ": " << error << "\n";
+          usage(program_name);
+          return 1;
+        }
+        recipe = "featurizer:name:ngram tokenizer:name:ngram tokenizer:" +
+                 tokenizer->recipe();
+        --argc;
+        argv++;
+      }
+    }
     while (argc > 1 && argv[1][0] != '-') {
       std::string key;
       std::string value;
@@ -71,17 +100,10 @@ int main(int argc, char **argv) {
     }
   }
   std::shared_ptr<cottontail::Warren> warren;
-  if (create) {
-    if (meadow == "")
-      warren = cottontail::meadowlark::create_meadow(&error);
-    else
-      warren = cottontail::meadowlark::create_meadow(meadow, &error);
-  } else {
-    if (meadow == "")
-      warren = cottontail::meadowlark::open_meadow(&error);
-    else
-      warren = cottontail::meadowlark::open_meadow(meadow, &error);
-  }
+  if (create)
+    warren = cottontail::meadowlark::create_meadow(meadow, recipe, &error);
+  else
+    warren = cottontail::meadowlark::open_meadow(meadow, &error);
   if (warren == nullptr) {
     std::cerr << program_name << ": " << error << "\n";
     return 1;

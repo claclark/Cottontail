@@ -86,10 +86,24 @@ those positions and structural-element ends. `split` remains address-aligned,
 `bow` retains complete grams, and `phrase` supplies universal positional tails
 or returns empty when no gram evidence exists. The GCL tree's internal semantic
 `ERROR` node reports that last case cleanly. All 54 targets compile
-successfully, and the user reports that basic testing works. Literal phrase
-compilation is the next separately reviewed step; it has not begun. The
+successfully, and the user reports that basic testing works. The existing
+phrase expander completes step 6 by compiling quoted strings into exact
+positional GCL; no additional source change was required for that step. The
 Meadowlark file-oriented metadata work remains complete, and the separate
 Python wrapper still follows later.
+
+Meadowlark creation now exposes the n-gram configuration. `--create ngram`
+uses the canonical default `five`, while `--create ngram:n` accepts the
+tokenizer's numeric or word recipes and stores the canonical word. The app
+validates this before creating the burrow, then appends ordinary Bigwig recipe
+overrides for the n-gram tokenizer and featurizer. Empty meadow names now mean
+`a.meadow` consistently for creation and opening. All 54 targets compile; the
+user's initial interactive checks over `ai/` and `src/` find exact
+punctuation-heavy C++ substrings, compose them with structural containment to
+recover source objects and filenames, and add fixed-width context across a
+source newline. These checks are intentionally basic. Step 7, changing code
+ingestion so a structural element can span source lines, is next; exhaustive
+literal-matching testing follows that change and precedes regexp work.
 
 ## Completed Meadowlark Filename And Labeling Step
 

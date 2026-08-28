@@ -36,12 +36,18 @@ bool is_meadow(std::shared_ptr<Warren> warren, std::string *error) {
 
 const std::string DEFAULT_MEADOW = "a.meadow";
 
+namespace {
+const std::string default_recipe =
+    "tokenizer:name:utf8 featurizer@json idx:fvalue_compressor:zlib "
+    "idx:posting_compressor:post txt:compressor:zlib ";
+}
+
 std::shared_ptr<Warren> create_meadow(const std::string &meadow,
+                                      const std::string &recipe,
                                       std::string *error) {
-  std::string options =
-      "tokenizer:name:utf8 featurizer@json idx:fvalue_compressor:zlib "
-      "idx:posting_compressor:post txt:compressor:zlib ";
-  std::shared_ptr<Warren> bigwig = Bigwig::make(meadow, options, error);
+  std::string the_meadow = meadow == "" ? DEFAULT_MEADOW : meadow;
+  std::shared_ptr<Warren> bigwig =
+      Bigwig::make(the_meadow, default_recipe + recipe, error);
   if (bigwig == nullptr ||
       !bigwig->set_parameter("format", "meadowlark", error))
     return nullptr;
@@ -49,13 +55,19 @@ std::shared_ptr<Warren> create_meadow(const std::string &meadow,
     return bigwig;
 }
 
+std::shared_ptr<Warren> create_meadow(const std::string &meadow,
+                                      std::string *error) {
+  return create_meadow(meadow, "", error);
+}
+
 std::shared_ptr<Warren> create_meadow(std::string *error) {
-  return create_meadow(DEFAULT_MEADOW, error);
+  return create_meadow("", "", error);
 }
 
 std::shared_ptr<Warren> open_meadow(const std::string &meadow,
                                     std::string *error) {
-  std::shared_ptr<Warren> warren = Warren::make(meadow, error);
+  std::string the_meadow = meadow == "" ? DEFAULT_MEADOW : meadow;
+  std::shared_ptr<Warren> warren = Warren::make(the_meadow, error);
   warren->start();
   if (is_meadow(warren, error)) {
     warren->end();
@@ -67,7 +79,7 @@ std::shared_ptr<Warren> open_meadow(const std::string &meadow,
 }
 
 std::shared_ptr<Warren> open_meadow(std::string *error) {
-  return open_meadow(DEFAULT_MEADOW, error);
+  return open_meadow("", error);
 }
 
 namespace {

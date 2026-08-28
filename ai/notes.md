@@ -582,6 +582,18 @@
   of reorderings are consistent with equal-score traversal-order churn caused
   by different physical merge layouts, not a partially incorrect merge.
 
+## N-Gram Literal Matching
+
+- `--create ngram[:n]` selects the paired n-gram tokenizer and featurizer;
+  the default and canonical recipe is `five`.
+- Quoted strings already compile through the general phrase-expansion path
+  into exact positional GCL over n-gram features.
+- Basic interactive checks over `ai/` and `src/` recover exact C++ substrings,
+  containing source objects, `//` filenames, and fixed-width context across a
+  source newline.
+- Meadowlark code ingestion spanning source lines is the next step. Exhaustive
+  literal-matching tests follow it and precede regexp implementation.
+
 ## Current Local Worktree Notes
 
 - Do not rely on this section as durable truth without checking `git status`.
