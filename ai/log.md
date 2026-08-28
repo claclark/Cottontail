@@ -466,3 +466,21 @@
   and optimizer memory estimation returns zero. Added focused parser and
   public-compilation coverage. All 54 Bazel targets compile successfully; no
   runtime tests were run. `NGramTokenizer` remains unimplemented.
+2026-08-28T17:18:51+00:00
+
+- Implemented `NGramTokenizer` and general tokenizer-factory wiring, completing
+  indexed string-matching step 5. Recipes accept numeric or word widths from
+  one through seven, default to and canonicalize as `five`; ordinary bytes are
+  literal positions, the full U+FDD0--U+FDEF block is atomic structural nulls,
+  and grams stop at structural or supplied-element boundaries. Added explicit
+  address-aligned `split`, complete-gram `bow`, universal-tail `phrase`, token
+  counting, and skipping behavior with focused compile-time coverage. The
+  n-gram implementation keeps its fixed three-byte structural-token length
+  private; JSON retains its public length constant and now uses it in its
+  internal-token predicate. All 54 Bazel targets compile cleanly; no runtime
+  tests were run.
+2026-08-28T17:47:03+00:00
+
+- Recorded the user's report that basic `NGramTokenizer` testing works. The
+  implementation and its updated indexed string-matching plan are ready for
+  the user's commit.

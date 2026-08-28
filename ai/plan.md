@@ -75,18 +75,21 @@ Agent verification was compile-only through `bazel build //...`; user
 basic tests pass, and no deeper testing is planned for this narrow parser
 change.
 
-The user separately authorized and reviewed the `NGramFeaturizer` half of step
-5. It is implemented with no recipe and no gram-size knowledge; the shared
-MurmurHash routine preserves existing hashed values, and the typed marker
-protocol covers reversible grams, universal positions, hash translation, and
-JSON structural nulls. The GCL tree now also has an internal semantic `ERROR`
-node: failed phrase expansion, including an empty tokenizer phrase, propagates
-an explanatory message to the public compilation boundary instead of becoming
-an indirectly invalid tree. Memory estimation treats such an expression as
-uncompilable. All 54 targets compile successfully. `NGramTokenizer` remains
-unimplemented and requires separate review before work begins. The Meadowlark
-file-oriented metadata work remains complete, and the separate Python wrapper
-still follows later.
+Step 5 is now implemented. `NGramFeaturizer` has no recipe or gram-size
+knowledge; the shared MurmurHash routine preserves existing hashed values, and
+the typed marker protocol covers reversible grams, universal positions, hash
+translation, and JSON structural nulls. `NGramTokenizer` indexes literal bytes
+with a configurable width from one through seven, defaults to `five`, and
+canonicalizes its recipe as a word. Every ordinary byte is a position; every
+U+FDD0--U+FDEF reserved noncharacter is one atomic null position; grams stop at
+those positions and structural-element ends. `split` remains address-aligned,
+`bow` retains complete grams, and `phrase` supplies universal positional tails
+or returns empty when no gram evidence exists. The GCL tree's internal semantic
+`ERROR` node reports that last case cleanly. All 54 targets compile
+successfully, and the user reports that basic testing works. Literal phrase
+compilation is the next separately reviewed step; it has not begun. The
+Meadowlark file-oriented metadata work remains complete, and the separate
+Python wrapper still follows later.
 
 ## Completed Meadowlark Filename And Labeling Step
 

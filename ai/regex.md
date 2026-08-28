@@ -21,7 +21,9 @@ source changes.
 The first two steps were implemented together on 2026-08-27. Steps 3 and 4
 were implemented separately later that day. The `NGramFeaturizer` half of step
 5 was implemented on 2026-08-28. The GCL semantic-error prerequisite for the
-tokenizer was then added; `NGramTokenizer` remains a separate reviewed change.
+tokenizer was then added, followed by the reviewed `NGramTokenizer`. Step 5 is
+complete; all targets compile and the user's basic testing works. Literal
+phrase compilation remains separate.
 
 ### Implementation Checkpoint: Steps 1 Through 4
 
@@ -103,11 +105,10 @@ Move normalization into the public entry points:
 - Empty appends remain empty.
 
 Use exactly four append separators: space, tab, carriage return, and newline.
-All four prevent token splices for the current tokenizers. They are also the
-four bytes that the n-gram representation normalizes to space. Keeping the two
-sets identical avoids turning a trailing carriage return into CRLF and thereby
-creating two normalized spaces. Do not include other controls such as vertical
-tab or form feed.
+All four prevent token splices for the existing word tokenizers. Do not include
+other controls such as vertical tab or form feed. The n-gram tokenizer treats
+the stored separator byte literally; this append rule only establishes the
+stored boundary byte when one must be added.
 
 This makes Fiver consistent with Simple. Currently Fiver adds the newline to
 stored text but tokenizes the original input, while Simple tokenizes the
@@ -263,86 +264,74 @@ Support exactly one configured gram size per index:
 1 <= n <= 7
 ```
 
-Record `n` in the tokenizer DNA. Do not select the default yet;
-four and five are the leading candidates. Four makes short code fragments such
-as `skip`, `case`, `bool`, and `addr` independently searchable, while five
-should provide shorter posting lists on very large collections. Smaller grams
-remain valid for experiments and specialized collections, but their posting
-lists are likely to be long; one-grams in particular are unlikely to be an
-efficient general-purpose configuration.
+Record `n` in the tokenizer DNA. The empty recipe defaults to `five`. Input
+recipes accept `1` through `7` and
+the words `one` through `seven`; `recipe()` always returns the word. Four makes
+short code fragments such as `skip`, `case`, `bool`, and `addr` independently
+searchable, while five should provide shorter posting lists on very large
+collections. Smaller grams remain valid for experiments and specialized
+collections, but their posting lists are likely to be long; one-grams in
+particular are unlikely to be an efficient general-purpose configuration.
 
 The reversible representation packs up to seven payload bytes into an `addr`.
-The exact bit layout and endian handling must be settled during implementation;
-indices need not currently be portable between endian architectures.
-
-### Whitespace Equivalence
-
-Before reversible n-gram encoding, normalize exactly these four input bytes to
-an ordinary space (`0x20`):
-
-```text
-space  tab  carriage return  newline
-```
-
-The shared n-gram feature encoding applies this rule to both indexed text and
-query grams. Vertical tab and form feed are not included. Normalization is
-one-for-one: it does not collapse runs, so one separator byte and two separator
-bytes remain distinguishable. Every other payload byte is preserved exactly.
-
-Stored text is never normalized. Token addresses, byte counts, translation,
-and final regular-expression checking continue to use the original bytes.
-Newline also retains its lexical-boundary role even though a gram ending at a
-newline carries a space in its encoded payload.
+Input bytes are preserved literally, including space, tab, carriage return,
+newline, and malformed UTF-8. The existing encoding is machine-local;
+big-endian index portability remains deferred.
 
 ### Token Positions and Translation
 
-Every stored byte is a token position, including newline and malformed UTF-8.
-The tokenizer performs no character decoding or classification.
+Every ordinary stored byte is a token position, including newline and malformed
+UTF-8. The tokenizer performs no character decoding or classification. Each
+complete UTF-8 encoding in the reserved U+FDD0--U+FDEF noncharacter block is
+instead one atomic structural position. This covers the ten assigned JSON
+tokens and leaves the rest of the block available for future structure.
 
 For every returned token:
 
-- `address` is the byte's relative position;
+- `address` is the token's relative position;
 - `offset` is the byte offset in the supplied buffer;
-- `length` is `1`.
+- `length` is `1` for an ordinary byte and `3` for a reserved structural token.
 
-Within a text window, token address and byte offset therefore differ only by
-the window's base. `skip(buffer, length, n)` is bounded pointer addition, and
-`translate(p, q)` can return the exact inclusive byte interval selected by the
-addresses.
+`skip(buffer, length, n)` scans token boundaries because structural tokens
+consume three bytes while advancing one address. Translation can still return
+the exact inclusive byte interval selected by the addresses.
 
 This relies on append normalization giving the tokenizer exactly the bytes
 stored, including an automatically inserted newline.
 
 ### Index Annotation Generation
 
-An n-gram candidate begins at each byte position. A proper textual feature is
-emitted only when a complete `n`-byte gram is available within the local
-lexical region.
+An n-gram candidate begins at each ordinary byte position. A proper textual
+feature is emitted only when `n` literal bytes are available before the next
+structural token or the end of the supplied structural element.
 
 - A gram does not cross the end of the appended structural element.
-- A gram does not resume with text after a newline.
-- Real newline bytes may appear at the end of a gram beginning before the
-  newline.
-- A newline position itself and any position without a complete local gram
-  receive the null marker and therefore feature `0`.
-- There is exactly one token record per byte position and at most one stored
-  textual annotation at that position.
+- A gram does not include or cross a reserved structural token.
+- Newline is an ordinary byte; grams may include it and cross it when the
+  newline occurs inside one supplied element.
+- An ordinary position without a complete local gram receives the universal
+  marker and therefore virtual feature `-1`.
+- A reserved structural position receives the empty string and therefore null
+  feature `0`.
+- There is exactly one token record per logical position and at most one stored
+  textual annotation at each ordinary position.
 
 For example, with `n = 4`, the bytes `hello\n` produce:
 
 ```text
 0  hell
 1  ello
-2  llo<space>  (from llo\n)
-3  NULL
-4  NULL
-5  NULL        newline position
+2  llo\n
+3  UNIVERSAL
+4  UNIVERSAL
+5  UNIVERSAL   newline position
 ```
 
-Lexical matching is local to a line or structural element because the
+Lexical matching is local to a supplied structural element because the
 tokenizer has no context outside it and matching across JSON elements is not
-meaningful. Token positions remain globally composable: phrases and other GCL
-expressions may relate local evidence across boundaries when desired.
+meaningful. A newline is not a boundary when it occurs inside that element.
+Token positions remain globally composable: phrases and other GCL expressions
+may relate local evidence across boundaries when desired.
 
 The initial textual-matching contract is explicitly limited by the selected
 n-gram representation. A text fragment not covered by any complete local gram
@@ -353,29 +342,22 @@ it is not independently discoverable through n-gram text matching.
 
 For `NGramTokenizer`:
 
-- `count` returns the number of stored bytes.
-- `bow` returns the marked gram strings appropriate for traditional ranking,
-  omitting null and universal positions.
-- `phrase` returns a linear vector of marked feature strings for literal phrase
-  expansion. Positions needed only to complete the interval can use the
-  universal marker and be featurized as `-1`.
-
-Work through representative boundary examples before fixing the precise
-`bow` and `phrase` emission rules, but retain the simple `vector<string>`
-interface.
+- `count` scans and returns the number of logical positions.
+- `split` mirrors tokenization without address metadata: complete marked grams,
+  universal ordinary tails, and empty structural positions remain aligned.
+- `bow` returns only complete marked grams, omitting universal and null
+  positions.
+- `phrase` returns the address-aligned marked grams and converts every other
+  position to the universal marker. If the input contains no complete gram, it
+  returns an empty vector so phrase expansion reports a semantic error rather
+  than constructing an evidence-free query.
 
 ## 6. Literal Byte-String Matching
 
-Before implementing general regular expressions, make quoted phrases mean:
-
-```text
-this sequence of bytes after the four separator bytes are normalized to space
-```
-
-Otherwise matching is byte-for-byte. Thus a quoted phrase does not distinguish
-space, tab, carriage return, and newline where the local n-gram representation
-can supply evidence, but it does distinguish the number of separator bytes.
-Stored text and returned intervals remain unchanged.
+Before implementing general regular expressions, make quoted phrases mean this
+exact sequence of bytes. Space, tab, carriage return, and newline are distinct,
+as are repeated separator bytes. Stored text and returned intervals are
+unchanged.
 
 `NGramTokenizer::phrase` produces the raw marked feature strings. Phrase
 expansion turns them into positional GCL over their featurized n-grams and
@@ -388,7 +370,7 @@ before regular-expression automata add alternatives and repetition.
 
 Examples must be checked in both directions: generate index tokens for the
 candidate text, compile the literal query, and walk the resulting positional
-constraints. Include all four normalized separator bytes, separator runs,
+constraints. Include all four literal separator bytes, separator runs,
 append boundaries, arbitrary UTF-8 bytes, malformed input, and strings shorter
 than `n`.
 

@@ -21,7 +21,8 @@ const std::string comma_token = "\xEF\xB7\x97";
 const std::string open_number_token = "\xEF\xB7\x98";
 const std::string close_number_token = "\xEF\xB7\x99";
 inline bool json_internal_token(const char *token, addr length) {
-  return length == 3 && static_cast<unsigned char>(token[0]) == 0xEF &&
+  return length == static_cast<addr>(noncharacter_token_length) &&
+         static_cast<unsigned char>(token[0]) == 0xEF &&
          static_cast<unsigned char>(token[1]) == 0xB7 &&
          static_cast<unsigned char>(token[2]) >= 0x90 &&
          static_cast<unsigned char>(token[2]) <= 0x99;
