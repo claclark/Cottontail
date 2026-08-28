@@ -439,3 +439,12 @@
   sanitization stops at U+FDEF and preserves valid U+FDF0--U+FDFF characters.
   Added structural-range boundary coverage. All 54 Bazel targets compile
   successfully; no runtime tests were run.
+2026-08-28T00:42:26+00:00
+
+- Compiled GCL `(# 1)` directly into the virtual `UniversalHopper` and rejected
+  the invalid zero-width form `(# 0)` during parsing. Added focused branch and
+  parse-error coverage. `//test:tests` compiles successfully; no runtime tests
+  were run. The user's full run passed every substantive case but exposed an
+  over-specific new diagnostic assertion because `safe_error` appends its
+  source location; the assertion now checks the stable offset prefix, and the
+  aggregate target compiles without warnings.

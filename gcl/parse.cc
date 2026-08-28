@@ -376,6 +376,8 @@ const char *parse_expr(const char *where, std::shared_ptr<SExpression> expr,
     addr width = width_character_value(*where++);
     while (is_width_character(*where))
       width = 10 * width + width_character_value(*where++);
+    if (width == 0)
+      return where;
     expr->width_ = width;
     while (is_whitespace(*where))
       where++;
@@ -503,7 +505,10 @@ SExpression::to_hopper(std::shared_ptr<Featurizer> featurizer,
   if (kind_ == QUOTE)
     return nullptr;
   if (kind_ == FIXED) {
-    return std::make_unique<FixedWidthHopper>(width_);
+    if (width_ == 1)
+      return std::make_unique<UniversalHopper>();
+    else
+      return std::make_unique<FixedWidthHopper>(width_);
   }
   if (kind_ == LINK) {
     if (subx_.size() != 1)

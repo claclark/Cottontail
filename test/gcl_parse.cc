@@ -107,6 +107,13 @@ TEST(GCLParseTest, InvalidLiteralTerms) {
   expect_invalid(R"gcl(|\U00110000|)gcl");
 }
 
+TEST(GCLParseTest, InvalidFixedWidths) {
+  std::string error;
+  EXPECT_EQ(cottontail::gcl::SExpression::from_string("(# 0 )", &error),
+            nullptr);
+  EXPECT_EQ(error.find("parse error at offset 4:(# 0 )"), (size_t)0);
+}
+
 TEST(GCLParseTest, QuoteKindsAndBackslashParity) {
   EXPECT_EQ(canonical("\"foo bar\""), "\"foo bar\"");
   EXPECT_EQ(canonical("'foo bar'"), "'foo bar'");
@@ -119,6 +126,20 @@ TEST(GCLParseTest, QuoteKindsAndBackslashParity) {
   std::shared_ptr<cottontail::Idx> idx = cottontail::NullIdx::make("");
   EXPECT_EQ(parse("'foo'")->to_hopper(featurizer, idx), nullptr);
   EXPECT_NE(parse("|'foo'|")->to_hopper(featurizer, idx), nullptr);
+}
+
+TEST(GCLParseTest, FixedWidthOneCompilesToUniversalHopper) {
+  std::shared_ptr<cottontail::Featurizer> featurizer =
+      cottontail::HashingFeaturizer::make();
+  std::shared_ptr<cottontail::Idx> idx = cottontail::NullIdx::make("");
+  std::unique_ptr<cottontail::Hopper> one =
+      parse("(# 1)")->to_hopper(featurizer, idx);
+  std::unique_ptr<cottontail::Hopper> two =
+      parse("(# 2)")->to_hopper(featurizer, idx);
+  ASSERT_NE(one, nullptr);
+  ASSERT_NE(two, nullptr);
+  EXPECT_NE(dynamic_cast<cottontail::UniversalHopper *>(one.get()), nullptr);
+  EXPECT_NE(dynamic_cast<cottontail::FixedWidthHopper *>(two.get()), nullptr);
 }
 
 TEST(GCLParseTest, PhraseExpansionEscapesAndSerializesTerms) {
