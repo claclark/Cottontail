@@ -82,10 +82,13 @@ translation, and JSON structural nulls. `NGramTokenizer` indexes literal bytes
 with a configurable width from one through seven, defaults to `five`, and
 canonicalizes its recipe as a word. Every ordinary byte is a position; every
 U+FDD0--U+FDEF reserved noncharacter is one atomic null position; grams stop at
-those positions and structural-element ends. `split` remains address-aligned,
-`bow` retains complete grams, and `phrase` supplies universal positional tails
-or returns empty when no gram evidence exists. The GCL tree's internal semantic
-`ERROR` node reports that last case cleanly. All 54 targets compile
+those positions and structural-element ends. Complete grams are shortened to
+the literal available suffix at those boundaries, preserving every ordinary
+position for later dictionary-backed short matching. `split` remains
+address-aligned, `bow` retains complete grams, and, until Warren-level phrase
+expansion has dictionary access, `phrase` supplies universal positional tails
+or returns empty when no complete-gram evidence exists. The GCL tree's internal
+semantic `ERROR` node reports that last case cleanly. All 54 targets compile
 successfully, and the user reports that basic testing works. The existing
 phrase expander completes step 6 by compiling quoted strings into exact
 positional GCL; no additional source change was required for that step. The

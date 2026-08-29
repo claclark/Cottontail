@@ -55,19 +55,29 @@ TEST(NGramTokenizer, LiteralBytes) {
             featurizer->featurize(cottontail::ngram_marker + "hell"));
   EXPECT_EQ(tokens[1].feature,
             featurizer->featurize(cottontail::ngram_marker + "ello"));
-  for (size_t i = 2; i < tokens.size(); i++) {
-    EXPECT_EQ(tokens[i].feature, cottontail::universal_feature);
-  }
+  EXPECT_EQ(tokens[2].feature,
+            featurizer->featurize(cottontail::ngram_marker + "llo"));
+  EXPECT_EQ(tokens[3].feature,
+            featurizer->featurize(cottontail::ngram_marker + "lo"));
+  EXPECT_EQ(tokens[4].feature,
+            featurizer->featurize(cottontail::ngram_marker + "o"));
 
   std::vector<std::string> split = tokenizer->split("hello");
   ASSERT_EQ(split.size(), size_t{5});
   EXPECT_EQ(split[0], cottontail::ngram_marker + "hell");
   EXPECT_EQ(split[1], cottontail::ngram_marker + "ello");
-  EXPECT_EQ(split[2], cottontail::universal_marker);
+  EXPECT_EQ(split[2], cottontail::ngram_marker + "llo");
+  EXPECT_EQ(split[3], cottontail::ngram_marker + "lo");
+  EXPECT_EQ(split[4], cottontail::ngram_marker + "o");
   EXPECT_EQ(tokenizer->bow("hello"),
             (std::vector<std::string>{cottontail::ngram_marker + "hell",
                                       cottontail::ngram_marker + "ello"}));
-  EXPECT_EQ(tokenizer->phrase("hello"), split);
+  EXPECT_EQ(tokenizer->phrase("hello"),
+            (std::vector<std::string>{cottontail::ngram_marker + "hell",
+                                      cottontail::ngram_marker + "ello",
+                                      cottontail::universal_marker,
+                                      cottontail::universal_marker,
+                                      cottontail::universal_marker}));
   EXPECT_TRUE(tokenizer->phrase("cat").empty());
 
   std::string newline = "a\nbc";
@@ -91,8 +101,10 @@ TEST(NGramTokenizer, StructuralNoncharacterBlockIsAtomic) {
   std::vector<cottontail::Token> tokens =
       tokenizer->tokenize(featurizer, text);
   ASSERT_EQ(tokens.size(), size_t{7});
-  EXPECT_EQ(tokens[0].feature, cottontail::universal_feature);
-  EXPECT_EQ(tokens[1].feature, cottontail::universal_feature);
+  EXPECT_EQ(tokens[0].feature,
+            featurizer->featurize(cottontail::ngram_marker + "ab"));
+  EXPECT_EQ(tokens[1].feature,
+            featurizer->featurize(cottontail::ngram_marker + "b"));
   EXPECT_EQ(tokens[2].feature, cottontail::null_feature);
   EXPECT_EQ(tokens[2].offset, size_t{2});
   EXPECT_EQ(tokens[2].length, structural_token_length);

@@ -501,3 +501,20 @@
   the existing phrase-expansion path, code ingestion across source lines as
   the next implementation step, and exhaustive testing as the gate before
   regexp work. No source code changed in this documentation pass.
+2026-08-29T16:30:29Z
+
+- Replaced virtual universal n-gram tails with reversible short suffix grams at
+  supplied-element and structural boundaries. Addressing and structural nulls
+  are unchanged; `split` mirrors the indexed suffixes, `bow` still selects only
+  complete grams, and `phrase` remains conservative until dictionary-backed
+  Warren expansion is available. Updated focused expectations. All 54 Bazel
+  targets compile successfully; no runtime tests were run.
+2026-08-29T16:31:00Z
+
+- Recorded the preliminary byte-oriented regexp surface: classical grouping,
+  alternation, concatenation, byte classes, dot, and the three common
+  quantifiers, along with initial escapes and explicit deferred or rejected
+  extensions. Clarified that newline is an ordinary byte and structural
+  elements, rather than source lines, bound local matching. No source code
+  changed.
+2026-08-29T16:43:00Z

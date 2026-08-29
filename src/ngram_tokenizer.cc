@@ -44,11 +44,11 @@ inline const char *next_token(const char *p, const char *end) {
   return p + 1;
 }
 
-bool complete_gram(const char *p, const char *end, size_t n) {
-  for (size_t i = 0; i < n; i++, p++)
-    if (p == end || structural(p, end))
-      return false;
-  return true;
+size_t gram_length(const char *p, const char *end, size_t n) {
+  size_t length = 0;
+  while (length < n && p + length != end && !structural(p + length, end))
+    length++;
+  return length;
 }
 
 std::string gram(const char *p, size_t n) {
@@ -90,9 +90,7 @@ NGramTokenizer::tokenize_(std::shared_ptr<Featurizer> featurizer, char *buffer,
                           structural_token_length);
       p += structural_token_length;
     } else {
-      std::string feature = complete_gram(p, end, n_)
-                                ? gram(p, n_)
-                                : universal_marker;
+      std::string feature = gram(p, gram_length(p, end, n_));
       tokens.emplace_back(featurizer->featurize(feature), address++, offset, 1);
       p++;
     }
@@ -117,8 +115,7 @@ std::vector<std::string> NGramTokenizer::split_(const std::string &text) {
       terms.emplace_back();
       p += structural_token_length;
     } else {
-      terms.push_back(complete_gram(p, end, n_) ? gram(p, n_)
-                                                : universal_marker);
+      terms.push_back(gram(p, gram_length(p, end, n_)));
       p++;
     }
   return terms;
@@ -143,7 +140,7 @@ std::vector<std::string> NGramTokenizer::bow_(const std::string &text) {
     if (structural(p, end)) {
       p += structural_token_length;
     } else {
-      if (complete_gram(p, end, n_))
+      if (gram_length(p, end, n_) == n_)
         terms.push_back(gram(p, n_));
       p++;
     }
@@ -154,7 +151,8 @@ std::vector<std::string> NGramTokenizer::phrase_(const std::string &text) {
   std::vector<std::string> terms = split_(text);
   bool evidence = false;
   for (std::string &term : terms)
-    if (term.compare(0, ngram_marker.size(), ngram_marker) == 0) {
+    if (term.size() == ngram_marker.size() + n_ &&
+        term.compare(0, ngram_marker.size(), ngram_marker) == 0) {
       evidence = true;
     } else {
       term = universal_marker;

@@ -312,20 +312,19 @@ stored, including an automatically inserted newline.
 
 ### Index Annotation Generation
 
-An n-gram candidate begins at each ordinary byte position. A proper textual
-feature is emitted only when `n` literal bytes are available before the next
-structural token or the end of the supplied structural element.
+An n-gram candidate begins at each ordinary byte position. It contains up to
+`n` literal bytes, stopping before the next structural token or at the end of
+the supplied structural element. A candidate near either boundary is emitted
+as the literal short suffix that is actually available.
 
 - A gram does not cross the end of the appended structural element.
 - A gram does not include or cross a reserved structural token.
 - Newline is an ordinary byte; grams may include it and cross it when the
   newline occurs inside one supplied element.
-- An ordinary position without a complete local gram receives the universal
-  marker and therefore virtual feature `-1`.
 - A reserved structural position receives the empty string and therefore null
   feature `0`.
-- There is exactly one token record per logical position and at most one stored
-  textual annotation at each ordinary position.
+- There is exactly one token record and one stored textual annotation at each
+  ordinary position.
 
 For example, with `n = 4`, the bytes `hello\n` produce:
 
@@ -333,9 +332,9 @@ For example, with `n = 4`, the bytes `hello\n` produce:
 0  hell
 1  ello
 2  llo\n
-3  UNIVERSAL
-4  UNIVERSAL
-5  UNIVERSAL   newline position
+3  lo\n
+4  o\n
+5  \n            newline position
 ```
 
 Lexical matching is local to a supplied structural element because the
@@ -344,24 +343,25 @@ meaningful. A newline is not a boundary when it occurs inside that element.
 Token positions remain globally composable: phrases and other GCL expressions
 may relate local evidence across boundaries when desired.
 
-The initial textual-matching contract is explicitly limited by the selected
-n-gram representation. A text fragment not covered by any complete local gram
-may still be selected and translated through its structural annotations, but
-it is not independently discoverable through n-gram text matching.
+Short suffix grams preserve the bytes at the end of every supplied element.
+Dictionary-backed phrase and regexp expansion can combine them with complete
+grams to discover expressions shorter than `n`; the initial phrase expander
+does not yet provide that dictionary access.
 
 ### `count`, `bow`, and `phrase`
 
 For `NGramTokenizer`:
 
 - `count` scans and returns the number of logical positions.
-- `split` mirrors tokenization without address metadata: complete marked grams,
-  universal ordinary tails, and empty structural positions remain aligned.
+- `split` mirrors tokenization without address metadata: complete and short
+  marked grams plus empty structural positions remain aligned.
 - `bow` returns only complete marked grams, omitting universal and null
   positions.
-- `phrase` returns the address-aligned marked grams and converts every other
-  position to the universal marker. If the input contains no complete gram, it
-  returns an empty vector so phrase expansion reports a semantic error rather
-  than constructing an evidence-free query.
+- Until phrase expansion has dictionary access, `phrase` retains only complete
+  marked grams and converts short suffix and structural positions to the
+  universal marker. If the input contains no complete gram, it returns an
+  empty vector so phrase expansion reports a semantic error rather than
+  constructing a query that only finds element-ending occurrences.
 
 ## 6. Literal Byte-String Matching
 
@@ -406,16 +406,53 @@ not part of the tokenizer/featurizer implementation. It is the next coding
 step. After it is complete, run the exhaustive literal-matching tests before
 beginning regular-expression work.
 
-## 8. Regular Expressions: Direction Only
+## 8. Regular Expressions: Preliminary Direction
 
-General indexed regular-expression matching is intentionally not planned yet.
-The literal matcher should be implemented and understood first.
+General indexed regular-expression matching is not yet fully planned. The
+following surface is a rough implementation guide, not a compatibility promise.
+
+### Initial Syntax
+
+The initial language should provide the widely used regular-language core:
+
+- literal bytes and literal UTF-8 strings;
+- concatenation and `|` alternation;
+- grouping with `(...)`;
+- the `*`, `+`, and `?` quantifiers;
+- dot as any ordinary byte, including newline; and
+- byte classes such as `[abc]`, `[a-z]`, and `[^a-z]`.
+
+Forms such as `.*`, `.+`, and `.?` are ordinary applications of a quantifier
+to dot, not additional operators. Parentheses group but do not capture. Use
+the usual precedence: quantification, concatenation, then alternation.
+
+Character classes are 256-bit byte sets. Ranges are numeric byte ranges and
+are normally ASCII-shaped, for example `[0-9]`, `[a-z]`, and `[A-Fa-f0-9]`;
+`\xHH` permits arbitrary byte values. A class consumes exactly one byte.
+Multibyte UTF-8 literals are therefore not class members or range endpoints;
+Unicode alternatives can be written with ordinary grouping and alternation.
+A later Unicode-aware surface could compile character predicates into byte
+automata without changing the indexed matcher.
+
+The useful initial escapes are escaped metacharacters, `\\`, `\n`, `\r`,
+`\t`, `\f`, `\v`, and `\xHH`. The common shorthand byte classes `\d`, `\s`,
+and `\w`, together with their complements, may be provided with explicit
+ASCII meanings. Consistent with literal feature strings, an otherwise unknown
+escape quotes the following character; a trailing backslash is an error.
+
+Counted repetition (`{m}`, `{m,n}`, and `{m,}`) is deferred. It adds no
+expressive power and can later be compiled into concatenation, optional paths,
+and closure with an expansion limit. `^` and `$` are also deferred until their
+relationship to structural boundaries is defined. Lazy or possessive
+quantifiers, captures, backreferences, lookaround, conditionals, recursion,
+and embedded code are outside the intended language. In particular,
+shortest-substring semantics removes the need for greediness modifiers.
 
 Known design inputs to revisit later are:
 
 - regular-expression terms expand over the reversible n-gram dictionary;
-- matching is local to lines and structural elements, with GCL handling wider
-  relationships;
+- matching is local to supplied structural elements, with newline treated as
+  an ordinary byte and GCL handling wider relationships;
 - results are shortest, nonnested intervals;
 - when automaton paths collide in one state, retain the largest starting
   address;
