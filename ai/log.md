@@ -518,3 +518,28 @@
   elements, rather than source lines, bound local matching. No source code
   changed.
 2026-08-29T16:43:00Z
+
+- Added the independent byte-regexp machine foundation. `regexp/nfa.h` exports
+  a complete lambda-free transition vector plus a reference shortest-substring
+  matcher; the compiler covers literals, grouping, union, intersection,
+  closure, dot, byte classes, and initial escapes. Added isolated
+  `//test:nfa_test` coverage rather than extending the aggregate test binary.
+  The focused target passes and all 57 Bazel targets compile successfully.
+2026-08-30T11:49:59Z
+
+- Extended `//test:nfa_test` with byte-offset cases for French and Chinese
+  UTF-8 literals, including shortest alternatives and overlapping Chinese
+  matches, plus heart-variation and robot emoji literals. The focused target
+  passes.
+2026-08-30T11:54:58Z
+
+- Added a focused pure-containment intersection case: `\n.*\n` intersected
+  with `.*[Tt]he [Tt]he.*` over longer multiline text returns the two shortest
+  qualifying newline-delimited spans, including their delimiters. The focused
+  NFA target passes.
+2026-08-30T12:02:50Z
+
+- Finalized the regexp-machine checkpoint notes: shortest-substring selection
+  is a locally defined matching semantic, while tokenization and n-gram
+  postings are separate access mechanisms for a future indexed runner.
+2026-08-30T12:50:13Z

@@ -591,8 +591,21 @@
 - Basic interactive checks over `ai/` and `src/` recover exact C++ substrings,
   containing source objects, `//` filenames, and fixed-width context across a
   source newline.
-- Meadowlark code ingestion spanning source lines is the next step. Exhaustive
-  literal-matching tests follow it and precede regexp implementation.
+- Meadowlark code ingestion spanning source lines and exhaustive
+  literal-matching tests remain outstanding.
+
+## Regular Expressions
+
+- `regexp/nfa.h` exports a complete lambda-free byte NFA as a sorted transition
+  vector with public start/final conventions and set-plus-complement labels.
+- The initial compiler supports literal bytes, concatenation, grouping,
+  alternation, intersection, `*`, `+`, `?`, dot, byte classes/ranges, and the
+  documented escapes. Lambda and empty-language results are errors.
+- The reference matcher returns shortest, overlapping, inclusive byte
+  intervals. Its focused coverage is the separate `//test:nfa_test` target.
+- Shortest-substring selection is a local matching semantic and is independent
+  of tokenization; n-grams will only provide indexed evidence for another
+  runner over the same exported machine.
 
 ## Current Local Worktree Notes
 

@@ -1,8 +1,8 @@
 # Preliminary Workplan for Indexed String Matching
 
-This is a preliminary, stepwise engineering plan. The first goal is literal
-byte-string matching over an n-gram index. General regular-expression matching
-comes later and is deliberately not yet planned.
+This is a preliminary, stepwise engineering plan. Literal byte-string matching
+over an n-gram index is operational. Work has begun on the reusable byte-NFA
+foundation for general regular-expression matching.
 
 Work proceeds one approved step at a time. This document does not authorize
 source changes.
@@ -16,7 +16,8 @@ source changes.
 5. Implement `NGramFeaturizer` and `NGramTokenizer` together.
 6. Compile quoted phrases into literal byte-string matches.
 7. Fix Meadowlark code ingestion so literal matching can cross source lines.
-8. Design and implement indexed regular-expression matching later.
+8. Build a reusable byte-NFA compiler and reference matcher.
+9. Design and implement indexed regular-expression matching.
 
 The first two steps were implemented together on 2026-08-27. Steps 3 and 4
 were implemented separately later that day. The `NGramFeaturizer` half of step
@@ -402,18 +403,51 @@ can then see and index grams across embedded newline bytes instead of treating
 each source line as a structural boundary. Preserve line-oriented metadata
 through annotations or later foraging rather than by splitting the indexed
 text into line-sized elements. This is a deferred Meadowlark ingestion change,
-not part of the tokenizer/featurizer implementation. It is the next coding
-step. After it is complete, run the exhaustive literal-matching tests before
-beginning regular-expression work.
+not part of the tokenizer/featurizer implementation. It remains outstanding;
+after it is complete, run the exhaustive literal-matching tests before indexed
+regular-expression integration.
 
 ## 8. Regular Expressions: Preliminary Direction
 
 General indexed regular-expression matching is not yet fully planned. The
 following surface is a rough implementation guide, not a compatibility promise.
 
+### NFA Construction Checkpoint
+
+`regexp/nfa.h` now provides the independent machine-construction layer:
+
+    vector<transition> nfa(const string &regexp, string *error)
+    vector<pair<size_t, size_t>> match(const vector<transition> &nfa,
+                                      const string &text)
+
+The exported transition vector is the complete machine description, so an
+indexed evaluator or another external consumer can reorganize it without using
+the parser. State `0` is the start and `final_state` is the final state. Each
+transition holds a `set<unsigned char>` and a `complement` flag; it accepts the
+listed bytes normally or all unlisted bytes when complemented. The vector is
+sorted by decreasing source state and then decreasing destination state.
+
+Construction internally preserves whether an expression accepts lambda while
+combining union, concatenation, closure, and intersection. A successful public
+machine is nonempty and lambda-free. A regexp accepting lambda or no strings is
+reported as an error rather than represented by an empty vector.
+
+Shortest-substring matching is locally defined: an accepted interval is a
+result exactly when none of its proper subintervals is accepted. This semantic
+contract is independent of tokenization. Byte n-grams and postings are future
+index-access mechanisms for running the same machine, not part of the
+definition of a match.
+
+The reference `match` implementation directly executes the NFA. It retains the
+largest start position when paths collide in one state and removes containing
+solutions, producing shortest, overlapping, inclusive byte intervals. It is
+primarily executable specification and focused test support, but is also
+usable for flat strings. Its coverage is the separate `//test:nfa_test` target
+rather than part of the large aggregate test binary.
+
 ### Initial Syntax
 
-The initial language should provide the widely used regular-language core:
+The initial compiler provides the widely used regular-language core:
 
 - literal bytes and literal UTF-8 strings;
 - concatenation and `|` alternation;
@@ -423,11 +457,12 @@ The initial language should provide the widely used regular-language core:
 - byte classes such as `[abc]`, `[a-z]`, and `[^a-z]`.
 
 Forms such as `.*`, `.+`, and `.?` are ordinary applications of a quantifier
-to dot, not additional operators. Parentheses group but do not capture. Use
-the usual precedence: quantification, concatenation, then alternation.
+to dot, not additional operators. Parentheses group but do not capture. The
+precedence is quantification, concatenation, intersection, then alternation.
 
-Character classes are 256-bit byte sets. Ranges are numeric byte ranges and
-are normally ASCII-shaped, for example `[0-9]`, `[a-z]`, and `[A-Fa-f0-9]`;
+Character-class labels are byte sets, represented in the NFA as an explicit
+set plus a complement flag. Ranges are numeric byte ranges and are normally
+ASCII-shaped, for example `[0-9]`, `[a-z]`, and `[A-Fa-f0-9]`;
 `\xHH` permits arbitrary byte values. A class consumes exactly one byte.
 Multibyte UTF-8 literals are therefore not class members or range endpoints;
 Unicode alternatives can be written with ordinary grouping and alternation.
@@ -436,13 +471,15 @@ automata without changing the indexed matcher.
 
 The useful initial escapes are escaped metacharacters, `\\`, `\n`, `\r`,
 `\t`, `\f`, `\v`, and `\xHH`. The common shorthand byte classes `\d`, `\s`,
-and `\w`, together with their complements, may be provided with explicit
-ASCII meanings. Consistent with literal feature strings, an otherwise unknown
+and `\w`, together with their complements, have explicit ASCII meanings.
+Consistent with literal feature strings, an otherwise unknown
 escape quotes the following character; a trailing backslash is an error.
 
-Counted repetition (`{m}`, `{m,n}`, and `{m,}`) is deferred. It adds no
-expressive power and can later be compiled into concatenation, optional paths,
-and closure with an expansion limit. `^` and `$` are also deferred until their
+Intersection `&` is included in the compiler, with precedence between
+concatenation and alternation. Counted repetition (`{m}`, `{m,n}`, and
+`{m,}`) is deferred. It adds no expressive power and can later be compiled
+into concatenation, optional paths, and closure with an expansion limit. `^`
+and `$` are also deferred until their
 relationship to structural boundaries is defined. Lazy or possessive
 quantifiers, captures, backreferences, lookaround, conditionals, recursion,
 and embedded code are outside the intended language. In particular,

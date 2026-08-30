@@ -4,6 +4,7 @@ cc_test(
     name = "tests",
     srcs = glob(["**/*.cc"], exclude = [
         "hazel.cc",
+        "nfa.cc",
         "optimizer.cc",
     ]) + glob(["**/*.h"]),
     deps = [
@@ -33,6 +34,22 @@ cc_test(
     size = "small",
     srcs = [
         "hazel.cc",
+    ],
+    deps = [
+        "//src:cottontail",
+        "@googletest//:gtest_main",
+    ],
+    linkopts = [
+        "-lz",
+        "-pthread",
+    ],
+)
+
+cc_test(
+    name = "nfa_test",
+    size = "small",
+    srcs = [
+        "nfa.cc",
     ],
     deps = [
         "//src:cottontail",

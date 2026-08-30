@@ -105,8 +105,17 @@ user's initial interactive checks over `ai/` and `src/` find exact
 punctuation-heavy C++ substrings, compose them with structural containment to
 recover source objects and filenames, and add fixed-width context across a
 source newline. These checks are intentionally basic. Step 7, changing code
-ingestion so a structural element can span source lines, is next; exhaustive
-literal-matching testing follows that change and precedes regexp work.
+ingestion so a structural element can span source lines, and exhaustive
+literal-matching testing remain outstanding.
+
+The user then authorized the independent regexp machine foundation before the
+indexed evaluator. `regexp/nfa.h` exports a complete lambda-free byte NFA as a
+sorted vector of set-plus-complement transitions, together with a reference
+matcher returning shortest, overlapping, inclusive byte intervals. The parser
+supports the agreed regular-language core and intersection; lambda and
+empty-language results are errors. Focused coverage is isolated in
+`//test:nfa_test`, which passes, and all 57 Bazel targets compile. Indexed NFA
+execution remains to be designed.
 
 ## Completed Meadowlark Filename And Labeling Step
 
