@@ -119,11 +119,16 @@ empty-language results are errors. Focused coverage is isolated in
 `//test:nfa_test`, which passes, and all 57 Bazel targets compile. Indexed NFA
 execution remains to be designed.
 
-The next flat-search direction is recorded in `ai/cgrep.md`. It specifies a
-line-aware but multiline-capable `Haystack`, an immutable state-by-symbol cgrep
-dispatch machine, a mutable shortest-substring `Cgrep` iterator, and a minimal
-`apps/cgrep` mainline. This is a preliminary workplan only; implementation will
-proceed one separately approved step at a time.
+The first flat-search cut recorded in `ai/cgrep.md` is implemented without
+altering the public NFA or any existing source file. `Haystack` exposes
+arbitrary byte chunks and inclusive-offset translation; `Cgrep` compiles an
+opaque shareable state-by-symbol dispatch machine and iterates shortest,
+overlapping matches; and `apps/cgrep` emits streaming JSONL over files or
+stdin. The focused C++ and end-to-end JSONL tests are registered as
+`//test:cgrep_test` and `//test:cgrep_app_test`; the latter uses `rules_shell`
+as a root-only development dependency. The app defaults to omitting match text
+over 256 bytes while retaining the interval, provides an unlimited override,
+and has command help. Both focused test targets pass.
 
 ## Completed Meadowlark Filename And Labeling Step
 

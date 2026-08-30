@@ -573,3 +573,36 @@
   ordinary strings; Base64 fields are reserved for values whose malformed
   UTF-8 the strict serializer rejects. No source code changed.
 2026-08-30T19:37:59+00:00
+
+- Implemented the first flat-input cgrep cut: abstract arbitrary-chunk
+  Haystacks with whole-input file/stdin factories, an opaque shareable compiled
+  dispatch machine, the preallocated shortest-substring runner, and streaming
+  JSONL application output with strict-JSON-first Base64 fallback. Added a
+  focused differential test target and prepared an end-to-end shell test. The
+  app and focused test targets compile; runtime tests were not run. Registering
+  the shell test awaits authorization for a `rules_shell` dependency. No
+  existing source file was modified. All 59 Bazel targets compile.
+2026-08-30T20:00:55+00:00
+
+- Registered the prepared end-to-end cgrep script as
+  `//test:cgrep_app_test`, using `rules_shell` as a root-only development
+  dependency. The test target analyzes and builds successfully; it has not yet
+  been executed.
+2026-08-30T20:48:11+00:00
+
+- Added `apps/cgrep` help and a default 256-byte inline-match limit; oversized
+  matches remain visible by interval but omit untranslated match text, and
+  `--max-match 0` restores unlimited output. The user ran the focused targets:
+  `//test:cgrep_test` and `//test:cgrep_app_test` both pass.
+2026-08-30T21:58:10+00:00
+
+- Added the repository instruction to dogfood cgrep for suitable local text
+  searches, consult `ai/cgrep.md`, and record reasons for search-tool fallbacks
+  in the new `ai/cgrep-improvements.md` observation log. No source code changed.
+2026-08-30T22:02:13+00:00
+
+- Recorded the first cgrep dogfooding observations: source investigation needs
+  bounded context and line-number output, and the runner should advance its
+  Haystack reclamation limit when no active candidate remains. No source code
+  changed.
+2026-08-30T22:10:41+00:00

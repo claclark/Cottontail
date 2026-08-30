@@ -32,6 +32,11 @@ If it exists, also read:
 `ai/plan.md` records the current planned next coding step. Use it to continue
 planned work instead of restarting the design discussion.
 
+We are dogfooding `apps/cgrep` as a local text-search tool. Read
+`ai/cgrep.md`, and use cgrep for repository text searches when it is suitable.
+Other search tools are still allowed, but when cgrep cannot be used for a
+search, add a concise note to `ai/cgrep-improvements.md` explaining why.
+
 ## Verification Rule
 
 Unless the user explicitly asks for runtime experiments, ranking runs, evals,

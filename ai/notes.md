@@ -607,6 +607,13 @@
 - The reference matcher returns shortest, overlapping, inclusive byte
   intervals after removing the virtual positions outside the supplied string.
   Its focused coverage is the separate `//test:nfa_test` target.
+- `regexp/cgrep.h` exposes an opaque shareable compiled dispatch machine and a
+  mutable runner over the abstract `Haystack` byte source. Chunk boundaries are
+  semantically invisible; translations use inclusive absolute byte offsets.
+- `apps/cgrep` searches files or stdin and emits one JSON object per match.
+  Strict JSON is attempted first; malformed UTF-8 fields use marked Base64
+  fallbacks. Match text over the default 256-byte limit is omitted without
+  translating it; `--max-match 0` disables the limit.
 - Shortest-substring selection is a local matching semantic and is independent
   of tokenization; n-grams will only provide indexed evidence for another
   runner over the same exported machine.

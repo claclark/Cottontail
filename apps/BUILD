@@ -54,6 +54,19 @@ cc_binary(
 )
 
 cc_binary(
+    name = "cgrep",
+    srcs = [
+      "cgrep.cc",
+    ],
+    deps = [
+      "//src:cottontail",
+    ],
+    visibility = [
+      "//test:__pkg__",
+    ],
+)
+
+cc_binary(
     name = "dagstuhl",
     srcs = [
       "dagstuhl.cc",

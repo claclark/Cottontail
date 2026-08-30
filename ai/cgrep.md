@@ -1,24 +1,43 @@
-# Preliminary cgrep Workplan
+# cgrep Design and Workplan
 
-This document is a preliminary implementation plan for flat-input regular-
-expression search. It records the current design discussion; it does not
-authorize source changes beyond separately approved steps.
+This document records the design and implementation checkpoint for flat-input
+regular-expression search. Later optimizations remain a workplan rather than
+authorization for unrelated source changes.
 
 The first objective is a small, usable `apps/cgrep` that exercises the new
 shortest-substring NFA over files and standard input. The implementation should
 establish clean interfaces for fast matching and replaceable input strategies
 before adding command-line features.
 
+## Implementation Checkpoint
+
+The first library and command-line cut is implemented. `regexp/haystack.*`
+defines the replaceable byte-source interface and a whole-input file/stdin
+implementation. `regexp/cgrep.*` compiles the public transition NFA into an
+opaque immutable flattened dispatch table, permits that table to be shared by
+several runners, and executes shortest-substring matching with preallocated
+state vectors. `apps/cgrep.cc` compiles once, searches its inputs in order, and
+streams JSONL records with Base64 fallback only when strict JSON rejects a byte
+string.
+
+`//test:cgrep_test` supplies arbitrary chunk layouts and differential cases
+against the reference matcher. `//test:cgrep_app_test` registers the end-to-end
+JSONL script through the testing-only `rules_shell` module dependency. The
+focused targets pass. No existing production source file was modified.
+
 ## Scope of the First Cut
 
 The first command line is deliberately narrow:
 
-    cgrep regexp [file...]
+    cgrep [--max-match bytes] regexp [file...]
 
-There are no flags. The first argument is always the regexp, even when it
-begins with `-`. With no files, cgrep searches standard input. Every supplied
-file is searched independently and its name is included in every result.
-Standard-input results have no filename prefix.
+`--max-match` controls the largest match included directly in a JSON record.
+The default is 256 bytes. A larger match is still reported with its interval,
+but the `match` member is omitted and its bytes are not translated. Zero means
+unlimited. `--help` prints the command summary, and `--` ends option parsing.
+With no files, cgrep searches standard input. Every supplied file is searched
+independently and its name is included in every result. Standard-input results
+have no filename member.
 
 The regexp is compiled with `regexp/nfa.h`. Consequently the initial syntax,
 errors, buffer anchors, byte semantics, intersection, and shortest-substring
@@ -127,10 +146,10 @@ invalidate the currently handed-out chunk. Any compaction or buffer exchange
 becomes visible through the next pair of chunk pointers.
 
 Chunks are not matching boundaries. The Cgrep state continues unchanged from
-one chunk to the next. A buffered implementation should normally publish
-chunks ending immediately after a real newline and may include many complete
-lines in one chunk. The final chunk may end anywhere, preserving files without
-a trailing newline. A whole mapped or owned file is also a valid single chunk.
+one chunk to the next. A chunk may end after any byte, including within CRLF,
+UTF-8, or a matching expression. A whole mapped or owned file is also a valid
+single chunk. Alignment is an implementation choice and never part of the
+interface contract.
 
 Within a chunk, the runner touches no Haystack operation: it advances a raw
 pointer until `current == end`. The Haystack maintains the relationship
@@ -326,13 +345,13 @@ behind the unchanged Haystack interface:
 
 1. A mapped-file implementation for ordinary files. POSIX uses `mmap`; Windows
    uses its file-mapping API. Unsupported cases fall back to buffered input.
-2. A bounded rolling implementation that publishes newline-aligned chunks,
+2. A bounded rolling implementation that publishes arbitrary nonempty chunks,
    retains bytes needed for future translation, and reclaims through `limit`.
 3. A process/decoder implementation for compressed files and other generated
    streams.
-4. If measurements justify it, a producer thread that fills line-aligned
-   chunks while the matching thread consumes raw pointers. `chunk` becomes the
-   gate: it waits only when the matcher reaches the published frontier.
+4. If measurements justify it, a producer thread that fills chunks while the
+   matching thread consumes raw pointers. `chunk` becomes the gate: it waits
+   only when the matcher reaches the published frontier.
 
 Memory mapping and producer buffering are complementary. Mapping is the direct
 path for an ordinary file; producer buffering overlaps reading or decompression
@@ -357,6 +376,9 @@ output costs independently.
 6. Detect output failure and return status `2`.
 7. Return `0`, `1`, or `2` according to the aggregate outcome above.
 
+Before translating a match, apply the `--max-match` policy to its inclusive
+interval. Oversized matches retain `p` and `q` but omit match text entirely.
+
 The app obtains match bytes with a length-aware operation, never treating them
 as a NUL-terminated C string. It may use the pointer-returning
 `translate(p,q,...)` to construct the ordinary `std::string` given to the JSON
@@ -366,10 +388,10 @@ serialization rejects a filename or match does it Base64-encode the rejected
 member and emit the corresponding fallback field. A completed JSON line is
 written as one record; output failure returns status `2`.
 
-Compiling the immutable dispatch table separately for every input is acceptable
-for the first cut because machines are small. If startup measurements make it
-visible, expose an opaque shared compiled-machine handle without changing the
-public transition NFA or mutable runner semantics.
+The app compiles the regexp once and shares the opaque immutable machine with a
+separate mutable runner for each input. External callers can similarly retain
+and share a `std::shared_ptr<const Cgrep::Machine>` without seeing its internal
+table representation.
 
 ## Focused Verification
 
@@ -392,7 +414,9 @@ two-minute aggregate test binary. It should cover:
 - exact first-cut JSONL records for named input, stdin, multiline matches,
   embedded NULs, no matches, and malformed regexps;
 - ordinary JSON serialization of valid non-ASCII text, plus lossless Base64
-  fallback only for malformed UTF-8 in a filename or match.
+  fallback only for malformed UTF-8 in a filename or match;
+- default, explicit, and unlimited `--max-match` behavior; and
+- command help and malformed option values.
 
 Also add a small Bazel `sh_test` for the actual `apps/cgrep` binary. It should
 run the binary from Bazel runfiles against fixed fixtures, pipe a fixture into

@@ -1,8 +1,10 @@
 load("@rules_cc//cc:defs.bzl", "cc_test")
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
 
 cc_test(
     name = "tests",
     srcs = glob(["**/*.cc"], exclude = [
+        "cgrep.cc",
         "hazel.cc",
         "nfa.cc",
         "optimizer.cc",
@@ -26,6 +28,33 @@ cc_test(
         "test0.txt",
         "tokenless.txt",
         "test.qrels",
+    ],
+)
+
+cc_test(
+    name = "cgrep_test",
+    size = "small",
+    srcs = [
+        "cgrep.cc",
+    ],
+    deps = [
+        "//src:cottontail",
+        "@googletest//:gtest_main",
+    ],
+    linkopts = [
+        "-lz",
+        "-pthread",
+    ],
+)
+
+sh_test(
+    name = "cgrep_app_test",
+    size = "small",
+    srcs = [
+        "cgrep.sh",
+    ],
+    data = [
+        "//apps:cgrep",
     ],
 )
 
