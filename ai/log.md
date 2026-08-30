@@ -552,3 +552,24 @@
   line endings, and boundary exclusion from dot and complemented classes. The
   focused target passes and all 57 Bazel targets compile successfully.
 2026-08-30T16:04:19+00:00
+
+- Added the preliminary `ai/cgrep.md` workplan. It separates the reusable NFA,
+  immutable flattened cgrep dispatch machine, mutable Cgrep runner, and
+  replaceable Haystack input layer; specifies the minimal no-flags application
+  and provisional output format; and records focused differential testing and
+  later mapping, rolling-buffer, process, and producer-thread paths. No source
+  code changed.
+2026-08-30T19:19:08+00:00
+
+- Refined the preliminary cgrep plan so both Haystack and Cgrep expose owning
+  and explicitly short-lived pointer forms of `translate(p,q)`. Replaced the
+  last-match-only text/view sketch, documented reclamation and invalidation,
+  and added an end-to-end Bazel `sh_test` plan for exact binary output, stdin,
+  named inputs, and exit statuses. No source code changed.
+2026-08-30T19:24:50+00:00
+
+- Replaced cgrep's provisional human-oriented output with streaming JSON
+  Lines. The normal path now uses the repository's existing JSON serializer on
+  ordinary strings; Base64 fields are reserved for values whose malformed
+  UTF-8 the strict serializer rejects. No source code changed.
+2026-08-30T19:37:59+00:00

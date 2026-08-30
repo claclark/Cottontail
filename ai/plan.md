@@ -119,6 +119,12 @@ empty-language results are errors. Focused coverage is isolated in
 `//test:nfa_test`, which passes, and all 57 Bazel targets compile. Indexed NFA
 execution remains to be designed.
 
+The next flat-search direction is recorded in `ai/cgrep.md`. It specifies a
+line-aware but multiline-capable `Haystack`, an immutable state-by-symbol cgrep
+dispatch machine, a mutable shortest-substring `Cgrep` iterator, and a minimal
+`apps/cgrep` mainline. This is a preliminary workplan only; implementation will
+proceed one separately approved step at a time.
+
 ## Completed Meadowlark Filename And Labeling Step
 
 1. JSONL filename membership is now chunk-based. JSONL writes one `/.`
