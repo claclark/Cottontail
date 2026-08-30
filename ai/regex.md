@@ -423,8 +423,10 @@ following surface is a rough implementation guide, not a compatibility promise.
 The exported transition vector is the complete machine description, so an
 indexed evaluator or another external consumer can reorganize it without using
 the parser. State `0` is the start and `final_state` is the final state. Each
-transition holds a `set<unsigned char>` and a `complement` flag; it accepts the
-listed bytes normally or all unlisted bytes when complemented. The vector is
+transition holds an explicit `set<symbol>`, where `symbol` is a 16-bit value.
+Values 0 through 255 are ordinary bytes; `START` and `END` are the two current
+special symbols. Dot and complemented byte classes are expanded over only the
+ordinary byte alphabet, so they never accept a buffer boundary. The vector is
 sorted by decreasing source state and then decreasing destination state.
 
 Construction internally preserves whether an expression accepts lambda while
@@ -442,8 +444,11 @@ The reference `match` implementation directly executes the NFA. It retains the
 largest start position when paths collide in one state and removes containing
 solutions, producing shortest, overlapping, inclusive byte intervals. It is
 primarily executable specification and focused test support, but is also
-usable for flat strings. Its coverage is the separate `//test:nfa_test` target
-rather than part of the large aggregate test binary.
+usable for flat strings. `START` is presented immediately before byte zero at
+internal position -1, and `END` immediately after the final byte; those virtual
+positions are removed from returned intervals. In this runner the boundaries
+therefore refer exactly to the supplied string. Its coverage is the separate
+`//test:nfa_test` target rather than part of the large aggregate test binary.
 
 ### Initial Syntax
 
@@ -454,15 +459,17 @@ The initial compiler provides the widely used regular-language core:
 - grouping with `(...)`;
 - the `*`, `+`, and `?` quantifiers;
 - dot as any ordinary byte, including newline; and
-- byte classes such as `[abc]`, `[a-z]`, and `[^a-z]`.
+- byte classes such as `[abc]`, `[a-z]`, and `[^a-z]`;
+- `^` and `$` as the start and end of the complete supplied string; and
+- `\R` as LF, CRLF, U+2028 LINE SEPARATOR, or U+2029 PARAGRAPH SEPARATOR.
 
 Forms such as `.*`, `.+`, and `.?` are ordinary applications of a quantifier
 to dot, not additional operators. Parentheses group but do not capture. The
 precedence is quantification, concatenation, intersection, then alternation.
 
-Character-class labels are byte sets, represented in the NFA as an explicit
-set plus a complement flag. Ranges are numeric byte ranges and are normally
-ASCII-shaped, for example `[0-9]`, `[a-z]`, and `[A-Fa-f0-9]`;
+Character-class labels are explicit byte sets. A complemented class expands
+to the ordinary bytes it accepts. Ranges are numeric byte ranges and are
+normally ASCII-shaped, for example `[0-9]`, `[a-z]`, and `[A-Fa-f0-9]`;
 `\xHH` permits arbitrary byte values. A class consumes exactly one byte.
 Multibyte UTF-8 literals are therefore not class members or range endpoints;
 Unicode alternatives can be written with ordinary grouping and alternation.
@@ -471,18 +478,20 @@ automata without changing the indexed matcher.
 
 The useful initial escapes are escaped metacharacters, `\\`, `\n`, `\r`,
 `\t`, `\f`, `\v`, and `\xHH`. The common shorthand byte classes `\d`, `\s`,
-and `\w`, together with their complements, have explicit ASCII meanings.
-Consistent with literal feature strings, an otherwise unknown
-escape quotes the following character; a trailing backslash is an error.
+and `\w`, together with their complements, have explicit ASCII meanings. `\R`
+is the multi-byte line-ending expression described above and is not valid
+inside a byte class. Consistent with literal feature strings, an otherwise
+unknown escape quotes the following character; a trailing backslash is an
+error.
 
 Intersection `&` is included in the compiler, with precedence between
 concatenation and alternation. Counted repetition (`{m}`, `{m,n}`, and
 `{m,}`) is deferred. It adds no expressive power and can later be compiled
 into concatenation, optional paths, and closure with an expansion limit. `^`
-and `$` are also deferred until their
-relationship to structural boundaries is defined. Lazy or possessive
-quantifiers, captures, backreferences, lookaround, conditionals, recursion,
-and embedded code are outside the intended language. In particular,
+and `$` deliberately mean only the complete matching buffer; line boundaries
+can be expressed from `(^|\R)` and related ordinary expressions. Lazy or
+possessive quantifiers, captures, backreferences, lookaround, conditionals,
+recursion, and embedded code are outside the intended language. In particular,
 shortest-substring semantics removes the need for greediness modifiers.
 
 Known design inputs to revisit later are:

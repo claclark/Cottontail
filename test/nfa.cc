@@ -12,7 +12,9 @@ namespace {
 using cottontail::regexp::final_state;
 using cottontail::regexp::match;
 using cottontail::regexp::nfa;
+using cottontail::regexp::special_symbol;
 using cottontail::regexp::start_state;
+using cottontail::regexp::symbol;
 using cottontail::regexp::transition;
 
 std::vector<std::pair<std::size_t, std::size_t>> matches(
@@ -32,10 +34,10 @@ TEST(NfaTest, BuildsLiteralMachine) {
   ASSERT_EQ(machine.size(), std::size_t{2});
   EXPECT_EQ(machine[0].from, cottontail::regexp::state{1});
   EXPECT_EQ(machine[0].to, final_state);
-  EXPECT_EQ(machine[0].characters, std::set<unsigned char>({'b'}));
+  EXPECT_EQ(machine[0].symbols, std::set<symbol>({'b'}));
   EXPECT_EQ(machine[1].from, start_state);
   EXPECT_EQ(machine[1].to, cottontail::regexp::state{1});
-  EXPECT_EQ(machine[1].characters, std::set<unsigned char>({'a'}));
+  EXPECT_EQ(machine[1].symbols, std::set<symbol>({'a'}));
 }
 
 TEST(NfaTest, CombinesAlternativeLabels) {
@@ -45,9 +47,7 @@ TEST(NfaTest, CombinesAlternativeLabels) {
   ASSERT_EQ(machine.size(), std::size_t{1});
   EXPECT_EQ(machine[0].from, start_state);
   EXPECT_EQ(machine[0].to, final_state);
-  EXPECT_FALSE(machine[0].complement);
-  EXPECT_EQ(machine[0].characters,
-            std::set<unsigned char>({'a', 'b'}));
+  EXPECT_EQ(machine[0].symbols, std::set<symbol>({'a', 'b'}));
 }
 
 TEST(NfaTest, RepresentsDotAndComplementedClass) {
@@ -55,14 +55,32 @@ TEST(NfaTest, RepresentsDotAndComplementedClass) {
   std::vector<transition> dot = nfa(".", &error);
   ASSERT_EQ(error, "");
   ASSERT_EQ(dot.size(), std::size_t{1});
-  EXPECT_TRUE(dot[0].complement);
-  EXPECT_TRUE(dot[0].characters.empty());
+  EXPECT_EQ(dot[0].symbols.size(), std::size_t{256});
+  EXPECT_EQ(dot[0].symbols.count(
+                static_cast<symbol>(special_symbol::START)),
+            std::size_t{0});
+  EXPECT_EQ(dot[0].symbols.count(static_cast<symbol>(special_symbol::END)),
+            std::size_t{0});
 
   std::vector<transition> not_digits = nfa("[^0-9]", &error);
   ASSERT_EQ(error, "");
   ASSERT_EQ(not_digits.size(), std::size_t{1});
-  EXPECT_TRUE(not_digits[0].complement);
-  EXPECT_EQ(not_digits[0].characters.size(), std::size_t{10});
+  EXPECT_EQ(not_digits[0].symbols.size(), std::size_t{246});
+  EXPECT_EQ(not_digits[0].symbols.count(
+                static_cast<symbol>(special_symbol::START)),
+            std::size_t{0});
+}
+
+TEST(NfaTest, RepresentsBufferAnchorsAsSymbols) {
+  std::string error;
+  std::vector<transition> machine = nfa("^a$", &error);
+  ASSERT_EQ(error, "");
+  ASSERT_EQ(machine.size(), std::size_t{3});
+  EXPECT_EQ(machine[2].symbols,
+            std::set<symbol>{static_cast<symbol>(special_symbol::START)});
+  EXPECT_EQ(machine[1].symbols, std::set<symbol>{'a'});
+  EXPECT_EQ(machine[0].symbols,
+            std::set<symbol>{static_cast<symbol>(special_symbol::END)});
 }
 
 TEST(NfaTest, RejectsLambdaAndInvalidExpressions) {
@@ -88,6 +106,34 @@ TEST(NfaTest, MatchesShortestSubstrings) {
   EXPECT_EQ(matches("a+", "aaa"),
             (std::vector<std::pair<std::size_t, std::size_t>>{
                 {0, 0}, {1, 1}, {2, 2}}));
+}
+
+TEST(NfaTest, MatchesAtBufferBoundaries) {
+  EXPECT_EQ(matches("^foo", "foo foo"),
+            (std::vector<std::pair<std::size_t, std::size_t>>{{0, 2}}));
+  EXPECT_EQ(matches("foo$", "foo foo"),
+            (std::vector<std::pair<std::size_t, std::size_t>>{{4, 6}}));
+  EXPECT_EQ(matches("^foo$", "foo"),
+            (std::vector<std::pair<std::size_t, std::size_t>>{{0, 2}}));
+  EXPECT_TRUE(matches("^foo$", "foo\n").empty());
+  EXPECT_EQ(matches("^.*b|a.*b", "xaaaaab"),
+            (std::vector<std::pair<std::size_t, std::size_t>>{{5, 6}}));
+}
+
+TEST(NfaTest, MatchesPracticalLineBreaks) {
+  EXPECT_EQ(matches("a\\Rb", "a\nb a\r\nb"),
+            (std::vector<std::pair<std::size_t, std::size_t>>{{0, 2},
+                                                              {4, 7}}));
+  EXPECT_EQ(matches("\\R", "\r\n\n"),
+            (std::vector<std::pair<std::size_t, std::size_t>>{{1, 1},
+                                                              {2, 2}}));
+  EXPECT_EQ(matches("\\R", "x\u2028y\u2029z"),
+            (std::vector<std::pair<std::size_t, std::size_t>>{{1, 3},
+                                                              {5, 7}}));
+
+  std::string error;
+  EXPECT_TRUE(nfa("[\\R]", &error).empty());
+  EXPECT_NE(error.find("character class"), std::string::npos);
 }
 
 TEST(NfaTest, ReturnsOverlappingInclusiveIntervals) {

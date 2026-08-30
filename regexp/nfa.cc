@@ -15,43 +15,30 @@ namespace cottontail {
 namespace regexp {
 namespace {
 
+constexpr std::size_t number_of_bytes = 256;
+constexpr std::size_t number_of_symbols =
+    static_cast<symbol>(special_symbol::END) + 1;
+
+using label = std::array<bool, number_of_symbols>;
+
 struct expression {
   bool lambda = false;
   std::vector<transition> transitions;
 };
 
-bool accepts(const transition &tr, unsigned char c) {
-  bool contains = tr.characters.find(c) != tr.characters.end();
-  return tr.complement ? !contains : contains;
+bool accepts(const transition &tr, symbol value) {
+  return tr.symbols.find(value) != tr.symbols.end();
 }
 
-std::array<bool, 256> members(const transition &tr) {
-  std::array<bool, 256> answer;
-  answer.fill(tr.complement);
-  for (unsigned char c : tr.characters)
-    answer[c] = !tr.complement;
-  return answer;
-}
-
-transition make_transition(state from, state to,
-                           const std::array<bool, 256> &membership) {
-  transition answer{from, to, false, {}};
-  std::size_t included = 0;
-  for (bool present : membership)
-    if (present)
-      included++;
-  answer.complement = included > 128;
+transition make_transition(state from, state to, const label &membership) {
+  transition answer{from, to, {}};
   for (std::size_t i = 0; i < membership.size(); i++)
-    if (membership[i] != answer.complement)
-      answer.characters.insert(static_cast<unsigned char>(i));
+    if (membership[i])
+      answer.symbols.insert(static_cast<symbol>(i));
   return answer;
 }
 
-bool empty(const transition &tr) {
-  if (!tr.complement)
-    return tr.characters.empty();
-  return tr.characters.size() == 256;
-}
+bool empty(const transition &tr) { return tr.symbols.empty(); }
 
 state maximum_state(const std::vector<transition> &machine) {
   state maximum = start_state;
@@ -63,23 +50,22 @@ state maximum_state(const std::vector<transition> &machine) {
   return maximum;
 }
 
-void add_label(std::array<bool, 256> *label, const transition &tr) {
-  std::array<bool, 256> addition = members(tr);
-  for (std::size_t i = 0; i < label->size(); i++)
-    (*label)[i] = (*label)[i] || addition[i];
+void add_label(label *combined, const transition &tr) {
+  for (symbol value : tr.symbols)
+    (*combined)[value] = true;
 }
 
 std::vector<transition> normalize(std::vector<transition> machine) {
-  std::map<std::pair<state, state>, std::array<bool, 256>> labels;
+  std::map<std::pair<state, state>, label> labels;
   for (const transition &tr : machine) {
     if (empty(tr))
       continue;
     auto key = std::make_pair(tr.from, tr.to);
     auto found = labels.find(key);
     if (found == labels.end()) {
-      std::array<bool, 256> label;
-      label.fill(false);
-      found = labels.emplace(key, label).first;
+      label empty_label;
+      empty_label.fill(false);
+      found = labels.emplace(key, empty_label).first;
     }
     add_label(&found->second, tr);
   }
@@ -146,9 +132,7 @@ std::vector<transition> normalize(std::vector<transition> machine) {
                 return left.from > right.from;
               if (left.to != right.to)
                 return left.to > right.to;
-              if (left.complement != right.complement)
-                return left.complement < right.complement;
-              return left.characters < right.characters;
+              return left.symbols < right.symbols;
             });
   return answer;
 }
@@ -230,14 +214,14 @@ expression closure(expression value, char kind) {
 }
 
 bool intersect_label(const transition &left, const transition &right,
-                     std::array<bool, 256> *label) {
-  std::array<bool, 256> a = members(left);
-  std::array<bool, 256> b = members(right);
+                     label *intersection) {
   bool any = false;
-  for (std::size_t i = 0; i < label->size(); i++) {
-    (*label)[i] = a[i] && b[i];
-    any = any || (*label)[i];
-  }
+  intersection->fill(false);
+  for (symbol value : left.symbols)
+    if (right.symbols.find(value) != right.symbols.end()) {
+      (*intersection)[value] = true;
+      any = true;
+    }
   return any;
 }
 
@@ -264,8 +248,8 @@ expression intersect(expression left, expression right) {
       for (const transition &b : right.transitions) {
         if (b.from != current.second)
           continue;
-        std::array<bool, 256> label;
-        if (!intersect_label(a, b, &label))
+        label common;
+        if (!intersect_label(a, b, &common))
           continue;
         if ((a.to == final_state) != (b.to == final_state))
           continue;
@@ -282,7 +266,7 @@ expression intersect(expression left, expression right) {
           destination = found->second;
         }
         answer.transitions.push_back(
-            make_transition(states[current], destination, label));
+            make_transition(states[current], destination, common));
       }
     }
   }
@@ -290,24 +274,42 @@ expression intersect(expression left, expression right) {
   return answer;
 }
 
-expression symbol(const std::array<bool, 256> &label) {
+expression make_symbol(const label &membership) {
   expression answer;
   answer.transitions.push_back(
-      make_transition(start_state, final_state, label));
+      make_transition(start_state, final_state, membership));
   return answer;
 }
 
-std::array<bool, 256> singleton(unsigned char c) {
-  std::array<bool, 256> label;
-  label.fill(false);
-  label[c] = true;
-  return label;
+label singleton(symbol value) {
+  label answer;
+  answer.fill(false);
+  answer[value] = true;
+  return answer;
 }
 
-void include_range(std::array<bool, 256> *label, unsigned char first,
+void include_range(label *membership, unsigned char first,
                    unsigned char last) {
   for (unsigned int c = first; c <= last; c++)
-    (*label)[c] = true;
+    (*membership)[c] = true;
+}
+
+expression byte_sequence(std::initializer_list<unsigned char> bytes) {
+  expression answer;
+  answer.lambda = true;
+  for (unsigned char byte : bytes)
+    answer = concatenate(std::move(answer), make_symbol(singleton(byte)));
+  return answer;
+}
+
+expression line_break() {
+  expression carriage_return = make_symbol(singleton('\r'));
+  expression lf = concatenate(closure(std::move(carriage_return), '?'),
+                              make_symbol(singleton('\n')));
+  expression line_separator = byte_sequence({0xe2, 0x80, 0xa8});
+  expression paragraph_separator = byte_sequence({0xe2, 0x80, 0xa9});
+  return unite(unite(std::move(lf), std::move(line_separator)),
+               std::move(paragraph_separator));
 }
 
 class parser final {
@@ -379,15 +381,21 @@ private:
     if (c == '[')
       return parse_class();
     if (c == '.') {
-      std::array<bool, 256> label;
-      label.fill(true);
-      return symbol(label);
+      label membership;
+      membership.fill(false);
+      for (std::size_t i = 0; i < number_of_bytes; i++)
+        membership[i] = true;
+      return make_symbol(membership);
     }
     if (c == '\\') {
-      std::array<bool, 256> label;
-      if (!parse_escape(&label))
+      if (where_ < input_.size() && input_[where_] == 'R') {
+        where_++;
+        return line_break();
+      }
+      label membership;
+      if (!parse_escape(&membership))
         return {};
-      return symbol(label);
+      return make_symbol(membership);
     }
     if (c == '*' || c == '+' || c == '?') {
       fail("Quantifier has no expression");
@@ -397,20 +405,21 @@ private:
       fail("Counted repetition is not supported");
       return {};
     }
-    if (c == '^' || c == '$') {
-      fail("Anchors are not supported");
-      return {};
-    }
-    return symbol(singleton(c));
+    if (c == '^')
+      return make_symbol(
+          singleton(static_cast<symbol>(special_symbol::START)));
+    if (c == '$')
+      return make_symbol(singleton(static_cast<symbol>(special_symbol::END)));
+    return make_symbol(singleton(c));
   }
 
   expression parse_class() {
     bool complement = take('^');
-    std::array<bool, 256> label;
-    label.fill(false);
+    label membership;
+    membership.fill(false);
     bool any = false;
     while (!failed_ && where_ < input_.size() && input_[where_] != ']') {
-      std::array<bool, 256> first;
+      label first;
       int first_byte = -1;
       if (!parse_class_item(&first, &first_byte))
         return {};
@@ -418,7 +427,7 @@ private:
       if (where_ < input_.size() && input_[where_] == '-' &&
           where_ + 1 < input_.size() && input_[where_ + 1] != ']') {
         where_++;
-        std::array<bool, 256> last;
+        label last;
         int last_byte = -1;
         if (!parse_class_item(&last, &last_byte))
           return {};
@@ -426,11 +435,11 @@ private:
           fail("Invalid character range");
           return {};
         }
-        include_range(&label, static_cast<unsigned char>(first_byte),
+        include_range(&membership, static_cast<unsigned char>(first_byte),
                       static_cast<unsigned char>(last_byte));
       } else {
-        for (std::size_t i = 0; i < label.size(); i++)
-          label[i] = label[i] || first[i];
+        for (std::size_t i = 0; i < membership.size(); i++)
+          membership[i] = membership[i] || first[i];
       }
     }
     if (!take(']')) {
@@ -442,13 +451,13 @@ private:
       return {};
     }
     if (complement)
-      for (std::size_t i = 0; i < label.size(); i++)
-        label[i] = !label[i];
-    return symbol(label);
+      for (std::size_t i = 0; i < number_of_bytes; i++)
+        membership[i] = !membership[i];
+    return make_symbol(membership);
   }
 
-  bool parse_class_item(std::array<bool, 256> *label, int *single) {
-    label->fill(false);
+  bool parse_class_item(label *membership, int *single) {
+    membership->fill(false);
     *single = -1;
     if (where_ == input_.size()) {
       fail("Expected ']'");
@@ -456,11 +465,11 @@ private:
     }
     unsigned char c = byte(where_++);
     if (c == '\\') {
-      if (!parse_escape(label))
+      if (!parse_escape(membership))
         return false;
       int found = -1;
-      for (std::size_t i = 0; i < label->size(); i++)
-        if ((*label)[i]) {
+      for (std::size_t i = 0; i < membership->size(); i++)
+        if ((*membership)[i]) {
           if (found != -1)
             return true;
           found = static_cast<int>(i);
@@ -468,13 +477,13 @@ private:
       *single = found;
       return true;
     }
-    (*label)[c] = true;
+    (*membership)[c] = true;
     *single = c;
     return true;
   }
 
-  bool parse_escape(std::array<bool, 256> *label) {
-    label->fill(false);
+  bool parse_escape(label *membership) {
+    membership->fill(false);
     if (where_ == input_.size()) {
       fail("Trailing backslash");
       return false;
@@ -482,19 +491,19 @@ private:
     unsigned char c = byte(where_++);
     switch (c) {
     case 'n':
-      (*label)['\n'] = true;
+      (*membership)['\n'] = true;
       break;
     case 'r':
-      (*label)['\r'] = true;
+      (*membership)['\r'] = true;
       break;
     case 't':
-      (*label)['\t'] = true;
+      (*membership)['\t'] = true;
       break;
     case 'f':
-      (*label)['\f'] = true;
+      (*membership)['\f'] = true;
       break;
     case 'v':
-      (*label)['\v'] = true;
+      (*membership)['\v'] = true;
       break;
     case 'x': {
       if (where_ + 2 > input_.size() || hex(input_[where_]) < 0 ||
@@ -505,51 +514,54 @@ private:
       unsigned char value = static_cast<unsigned char>(
           16 * hex(input_[where_]) + hex(input_[where_ + 1]));
       where_ += 2;
-      (*label)[value] = true;
+      (*membership)[value] = true;
       break;
     }
     case 'd':
-      include_range(label, '0', '9');
+      include_range(membership, '0', '9');
       break;
     case 's':
-      (*label)[' '] = true;
-      (*label)['\t'] = true;
-      (*label)['\n'] = true;
-      (*label)['\r'] = true;
-      (*label)['\f'] = true;
-      (*label)['\v'] = true;
+      (*membership)[' '] = true;
+      (*membership)['\t'] = true;
+      (*membership)['\n'] = true;
+      (*membership)['\r'] = true;
+      (*membership)['\f'] = true;
+      (*membership)['\v'] = true;
       break;
     case 'w':
-      include_range(label, '0', '9');
-      include_range(label, 'A', 'Z');
-      include_range(label, 'a', 'z');
-      (*label)['_'] = true;
+      include_range(membership, '0', '9');
+      include_range(membership, 'A', 'Z');
+      include_range(membership, 'a', 'z');
+      (*membership)['_'] = true;
       break;
     case 'D':
     case 'S':
     case 'W': {
       unsigned char lower = static_cast<unsigned char>(c - 'A' + 'a');
       if (lower == 'd')
-        include_range(label, '0', '9');
+        include_range(membership, '0', '9');
       else if (lower == 's') {
-        (*label)[' '] = true;
-        (*label)['\t'] = true;
-        (*label)['\n'] = true;
-        (*label)['\r'] = true;
-        (*label)['\f'] = true;
-        (*label)['\v'] = true;
+        (*membership)[' '] = true;
+        (*membership)['\t'] = true;
+        (*membership)['\n'] = true;
+        (*membership)['\r'] = true;
+        (*membership)['\f'] = true;
+        (*membership)['\v'] = true;
       } else {
-        include_range(label, '0', '9');
-        include_range(label, 'A', 'Z');
-        include_range(label, 'a', 'z');
-        (*label)['_'] = true;
+        include_range(membership, '0', '9');
+        include_range(membership, 'A', 'Z');
+        include_range(membership, 'a', 'z');
+        (*membership)['_'] = true;
       }
-      for (std::size_t i = 0; i < label->size(); i++)
-        (*label)[i] = !(*label)[i];
+      for (std::size_t i = 0; i < number_of_bytes; i++)
+        (*membership)[i] = !(*membership)[i];
       break;
     }
+    case 'R':
+      fail("\\R is not valid in a character class");
+      return false;
     default:
-      (*label)[c] = true;
+      (*membership)[c] = true;
       break;
     }
     return true;
@@ -612,14 +624,15 @@ std::vector<transition> nfa(const std::string &regexp, std::string *error) {
 
 std::vector<std::pair<std::size_t, std::size_t>>
 match(const std::vector<transition> &machine, const std::string &text) {
-  std::unordered_map<state, std::size_t> current;
-  std::vector<std::pair<std::size_t, std::size_t>> candidates;
-  for (std::size_t end = 0; end < text.size(); end++) {
-    unsigned char c = static_cast<unsigned char>(text[end]);
-    std::unordered_map<state, std::size_t> next;
+  using position = std::ptrdiff_t;
+  using interval = std::pair<position, position>;
+  std::unordered_map<state, position> current;
+  std::vector<interval> candidates;
+  auto consume = [&](symbol value, position end) {
+    std::unordered_map<state, position> next;
     bool accepted = false;
-    std::size_t accepted_start = 0;
-    auto advance = [&](const transition &tr, std::size_t start) {
+    position accepted_start = 0;
+    auto advance = [&](const transition &tr, position start) {
       if (tr.to == final_state) {
         if (!accepted || start > accepted_start) {
           accepted = true;
@@ -632,7 +645,7 @@ match(const std::vector<transition> &machine, const std::string &text) {
       }
     };
     for (const transition &tr : machine) {
-      if (!accepts(tr, c))
+      if (!accepts(tr, value))
         continue;
       if (tr.from == start_state)
         advance(tr, end);
@@ -643,16 +656,31 @@ match(const std::vector<transition> &machine, const std::string &text) {
     if (accepted)
       candidates.emplace_back(accepted_start, end);
     current = std::move(next);
-  }
+  };
+
+  consume(static_cast<symbol>(special_symbol::START), -1);
+  for (std::size_t i = 0; i < text.size(); i++)
+    consume(static_cast<unsigned char>(text[i]), static_cast<position>(i));
+  consume(static_cast<symbol>(special_symbol::END),
+          static_cast<position>(text.size()));
 
   std::vector<std::pair<std::size_t, std::size_t>> answer;
   bool have_start = false;
   std::size_t largest_start = 0;
   for (const auto &candidate : candidates) {
-    if (!have_start || candidate.first > largest_start)
-      answer.push_back(candidate);
-    if (!have_start || candidate.first > largest_start) {
-      largest_start = candidate.first;
+    if (text.empty())
+      continue;
+    position clean_start = std::max<position>(candidate.first, 0);
+    position clean_end = std::min<position>(
+        candidate.second, static_cast<position>(text.size()) - 1);
+    if (clean_start > clean_end)
+      continue;
+    std::size_t start = static_cast<std::size_t>(clean_start);
+    std::size_t end = static_cast<std::size_t>(clean_end);
+    if (!have_start || start > largest_start)
+      answer.emplace_back(start, end);
+    if (!have_start || start > largest_start) {
+      largest_start = start;
       have_start = true;
     }
   }

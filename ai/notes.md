@@ -597,12 +597,16 @@
 ## Regular Expressions
 
 - `regexp/nfa.h` exports a complete lambda-free byte NFA as a sorted transition
-  vector with public start/final conventions and set-plus-complement labels.
+  vector with public start/final conventions. Labels are explicit sets of
+  16-bit symbols: ordinary bytes plus virtual `START` and `END` buffer events.
 - The initial compiler supports literal bytes, concatenation, grouping,
   alternation, intersection, `*`, `+`, `?`, dot, byte classes/ranges, and the
-  documented escapes. Lambda and empty-language results are errors.
+  documented escapes. `^` and `$` denote the complete supplied string; `\R`
+  accepts LF, CRLF, U+2028, or U+2029. Lambda and empty-language results are
+  errors.
 - The reference matcher returns shortest, overlapping, inclusive byte
-  intervals. Its focused coverage is the separate `//test:nfa_test` target.
+  intervals after removing the virtual positions outside the supplied string.
+  Its focused coverage is the separate `//test:nfa_test` target.
 - Shortest-substring selection is a local matching semantic and is independent
   of tokenization; n-grams will only provide indexed evidence for another
   runner over the same exported machine.

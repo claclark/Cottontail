@@ -110,9 +110,11 @@ literal-matching testing remain outstanding.
 
 The user then authorized the independent regexp machine foundation before the
 indexed evaluator. `regexp/nfa.h` exports a complete lambda-free byte NFA as a
-sorted vector of set-plus-complement transitions, together with a reference
-matcher returning shortest, overlapping, inclusive byte intervals. The parser
-supports the agreed regular-language core and intersection; lambda and
+sorted vector of transitions with explicit 16-bit symbol sets, together with a
+reference matcher returning shortest, overlapping, inclusive byte intervals. The parser
+supports the agreed regular-language core and intersection. Virtual `START`
+and `END` symbols give `^` and `$` complete-buffer semantics without becoming
+ordinary bytes; `\R` covers LF, CRLF, U+2028, and U+2029. Lambda and
 empty-language results are errors. Focused coverage is isolated in
 `//test:nfa_test`, which passes, and all 57 Bazel targets compile. Indexed NFA
 execution remains to be designed.

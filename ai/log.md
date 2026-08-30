@@ -543,3 +543,12 @@
   is a locally defined matching semantic, while tokenization and n-gram
   postings are separate access mechanisms for a future indexed runner.
 2026-08-30T12:50:13Z
+
+- Widened regexp transition labels to explicit 16-bit symbol sets and added
+  virtual `START` and `END` buffer events. `^` and `$` now denote the complete
+  string supplied to the reference matcher; their internal positions -1 and
+  size are removed from returned intervals. Added `\R` for LF, CRLF, U+2028,
+  and U+2029, with focused coverage for anchors, shortest nested alternatives,
+  line endings, and boundary exclusion from dot and complemented classes. The
+  focused target passes and all 57 Bazel targets compile successfully.
+2026-08-30T16:04:19+00:00
