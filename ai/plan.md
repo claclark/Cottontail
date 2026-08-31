@@ -126,9 +126,12 @@ opaque shareable state-by-symbol dispatch machine and iterates shortest,
 overlapping matches; and `apps/cgrep` emits streaming JSONL over files or
 stdin. The focused C++ and end-to-end JSONL tests are registered as
 `//test:cgrep_test` and `//test:cgrep_app_test`; the latter uses `rules_shell`
-as a root-only development dependency. The app defaults to omitting match text
-over 256 bytes while retaining the interval, provides an unlimited override,
-and has command help. Both focused test targets pass.
+as a root-only development dependency. `LineCgrep` now supplies a separate
+byte-oriented line-reporting engine with queued matches, an LF/EOF flush, a
+bounded line-position list, and coordinated reclamation. The app defaults to
+`--lines 4`; ordered `--lines n` and `--raw n` policies use zero for unlimited
+output. The dedicated C++ binary passes all 15 focused cases, the end-to-end
+script passes directly, and all 60 Bazel targets compile.
 
 ## Completed Meadowlark Filename And Labeling Step
 

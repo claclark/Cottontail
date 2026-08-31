@@ -14,30 +14,34 @@ before adding command-line features.
 The first library and command-line cut is implemented. `regexp/haystack.*`
 defines the replaceable byte-source interface and a whole-input file/stdin
 implementation. `regexp/cgrep.*` compiles the public transition NFA into an
-opaque immutable flattened dispatch table, permits that table to be shared by
-several runners, and executes shortest-substring matching with preallocated
-state vectors. `apps/cgrep.cc` compiles once, searches its inputs in order, and
-streams JSONL records with Base64 fallback only when strict JSON rejects a byte
-string.
+opaque immutable flattened dispatch table and permits that table to be shared
+by several runners. `Cgrep` returns raw shortest-substring intervals
+immediately; `LineCgrep` has its own byte loop and state vectors, queues
+accepted intervals, keeps a bounded GCL-like list of line positions, and
+reports complete enclosing lines on LF or EOF. `apps/cgrep.cc` compiles once,
+selects one runner per input, and streams JSONL records with Base64 fallback
+only when strict JSON rejects a byte string.
 
 `//test:cgrep_test` supplies arbitrary chunk layouts and differential cases
 against the reference matcher. `//test:cgrep_app_test` registers the end-to-end
 JSONL script through the testing-only `rules_shell` module dependency. The
-focused targets pass. No existing production source file was modified.
+focused targets pass, and all Bazel targets compile.
 
 ## Scope of the First Cut
 
 The first command line is deliberately narrow:
 
-    cgrep [--max-match bytes] regexp [file...]
+    cgrep [--lines n | --raw n] regexp [file...]
 
-`--max-match` controls the largest match included directly in a JSON record.
-The default is 256 bytes. A larger match is still reported with its interval,
-but the `match` member is omitted and its bytes are not translated. Zero means
-unlimited. `--help` prints the command summary, and `--` ends option parsing.
-With no files, cgrep searches standard input. Every supplied file is searched
-independently and its name is included in every result. Standard-input results
-have no filename member.
+The default policy is `--lines 4`. Line mode returns the exact byte interval
+and, when the match touches at most `n` lines, their complete text plus one-based
+line and byte-within-line positions. `--raw n` instead includes the exact match
+text when it is at most `n` bytes. Zero means unlimited in either mode. Policy
+options replace one another from left to right, so the last `--lines` or
+`--raw` wins and only one limit is active. `--help` prints the command summary,
+and `--` ends option parsing. With no files, cgrep searches standard input.
+Every supplied file is searched independently and its name is included in
+every result. Standard-input results have no filename member.
 
 The regexp is compiled with `regexp/nfa.h`. Consequently the initial syntax,
 errors, buffer anchors, byte semantics, intersection, and shortest-substring
@@ -45,10 +49,17 @@ semantics are exactly those documented in `ai/regex.md`.
 
 Matches are reported in discovery order as zero-based, inclusive byte
 intervals. They may overlap but may not contain another accepted match. Output
-is JSON Lines, with one complete object per match. A named-input result normally
-has this form:
+is JSON Lines, with one complete object per match. A named-input result in the
+default line mode normally has this form:
 
-    {"file":"src/foo.cc","p":120,"q":137,"match":"first\nsecond"}
+    {"end":{"line":12,"position":35},"file":"src/foo.cc","lines":"first\nsecond\n","p":120,"q":137,"start":{"line":11,"position":16}}
+
+`p` and `q` remain the authoritative zero-based inclusive byte range. Line and
+position values are one-based; positions count bytes rather than visual or
+Unicode columns. `lines` contains exactly the complete lines touched by the
+match, including a terminating LF when present. If a match exceeds the active
+limit, its text and derived coordinates are omitted but `p` and `q` remain.
+Raw mode names its included text `match`.
 
 The `file` member is omitted for standard input. The existing
 `nlohmann::json` serializer should be given the filename and match as ordinary
@@ -56,8 +67,8 @@ The `file` member is omitted for standard input. The existing
 escaping. Do not pre-encode valid UTF-8 or introduce a separate JSON-string
 renderer.
 
-If strict serialization rejects malformed UTF-8 in either byte string, retry
-with only that member represented losslessly as `file_base64` or
+If strict serialization rejects malformed UTF-8 in a byte string, retry with
+only that member represented losslessly as `file_base64`, `lines_base64`, or
 `match_base64`. Exactly one of the plain and Base64 forms is present for each
 value. Base64 is a fallback for bytes that standard JSON cannot carry, not the
 normal output representation.
@@ -67,11 +78,10 @@ newlines or NULs. This makes records self-delimiting and suitable for immediate
 streaming, later parallel production, or machine consumption without a second
 human-oriented presentation convention.
 
-The first cut has no headings, line numbers, context, highlighting, filename
-filtering, recursive traversal, encoding conversion, decompression options, or
-alternate output modes. A supplied filename is literal; the conventional `-`
-alias for standard input is deferred rather than hidden inside the no-flags
-interface.
+The first cut has no headings, surrounding lines, highlighting, filename
+filtering, recursive traversal, encoding conversion, or decompression options.
+A supplied filename is literal; the conventional `-` alias for standard input
+remains deferred.
 
 Use conventional grep exit status:
 
@@ -182,8 +192,9 @@ After returning an accepted match beginning at `p`, the runner retains the
 bytes until the caller has had an opportunity to request its text or view. At
 the beginning of the next `match()` call, it may call `limit(p)` after the NFA
 has discarded all paths beginning at or before `p`. Whenever the active-state
-set becomes empty without a pending match, it may advance the limit through
-the current offset.
+set becomes empty without a pending match, raw Cgrep advances the limit through
+the current offset. LineCgrep instead retains the current line prefix and any
+queued or ready reports, and advances through the preceding completed line.
 
 ### Reset
 
@@ -251,6 +262,15 @@ The class is not initially thread-safe. Separate runners may be used in
 separate threads. The immutable machine is deliberately shareable in design,
 although exposing machine reuse between Cgrep instances is not required for
 the first API.
+
+`LineCgrep` is a second matching engine rather than a reporting branch inside
+`Cgrep`. It deliberately repeats the preallocated state arrays and hot
+transition loop for speed while sharing the immutable compiled machine. Each
+accepted `[p,q]` is queued. The line machine advances one byte at a time,
+retains the positions of the configured number of lines, and flushes the queue
+when it sees LF or reaches EOF. A retained start line is the bounded analogue
+of applying `rho(q)` over a GCL line list. Chunk transitions occur only after
+both computations have consumed the old chunk.
 
 ## Immutable Dispatch Machine
 
@@ -376,8 +396,8 @@ output costs independently.
 6. Detect output failure and return status `2`.
 7. Return `0`, `1`, or `2` according to the aggregate outcome above.
 
-Before translating a match, apply the `--max-match` policy to its inclusive
-interval. Oversized matches retain `p` and `q` but omit match text entirely.
+Before translating a result, apply the selected `--lines` or `--raw` policy.
+Oversized results retain `p` and `q` but omit presentation text entirely.
 
 The app obtains match bytes with a length-aware operation, never treating them
 as a NUL-terminated C string. It may use the pointer-returning
@@ -415,7 +435,7 @@ two-minute aggregate test binary. It should cover:
   embedded NULs, no matches, and malformed regexps;
 - ordinary JSON serialization of valid non-ASCII text, plus lossless Base64
   fallback only for malformed UTF-8 in a filename or match;
-- default, explicit, and unlimited `--max-match` behavior; and
+- default, explicit, unlimited, and last-option-wins line/raw behavior; and
 - command help and malformed option values.
 
 Also add a small Bazel `sh_test` for the actual `apps/cgrep` binary. It should

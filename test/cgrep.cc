@@ -131,6 +131,34 @@ void expect_reference(const std::string &expression, const std::string &text,
             cottontail::regexp::match(machine, text));
 }
 
+struct LineAnswer {
+  cottontail::regexp::LineCgrep::Match match;
+  std::string lines;
+};
+
+std::vector<LineAnswer>
+line_matches(const std::string &expression, const std::string &text,
+             std::size_t limit, const std::vector<std::size_t> &ends = {}) {
+  std::shared_ptr<StringHaystack> haystack =
+      std::make_shared<StringHaystack>(text, ends);
+  std::string error;
+  std::shared_ptr<cottontail::regexp::LineCgrep> matcher =
+      cottontail::regexp::LineCgrep::make(expression, haystack, limit, &error);
+  EXPECT_NE(matcher, nullptr) << error;
+  if (matcher == nullptr)
+    return {};
+  std::vector<LineAnswer> answer;
+  cottontail::regexp::LineCgrep::Match match;
+  while (matcher->match(&match)) {
+    std::string lines;
+    if (match.has_lines)
+      lines = matcher->translate(match);
+    answer.push_back(LineAnswer{match, lines});
+  }
+  EXPECT_TRUE(matcher->success(&error)) << error;
+  return answer;
+}
+
 } // namespace
 
 TEST(CgrepTest, MatchesReferenceMachine) {
@@ -209,11 +237,96 @@ TEST(CgrepTest, TranslatesAndResets) {
   ASSERT_TRUE(matcher->translate(p, q, &start, &end));
   EXPECT_EQ(std::string(start, end), "cat");
   EXPECT_FALSE(matcher->match(&p, &q));
-  EXPECT_EQ(haystack->limit(), 2);
+  EXPECT_EQ(haystack->limit(), 6);
   ASSERT_TRUE(matcher->reset(&error)) << error;
   EXPECT_TRUE(matcher->match(&p, &q));
   EXPECT_EQ(std::make_pair(p, q),
             (std::pair<cottontail::addr, cottontail::addr>{2, 4}));
+}
+
+TEST(CgrepTest, AdvancesRawLimitWithoutActiveStates) {
+  std::shared_ptr<StringHaystack> haystack = std::make_shared<StringHaystack>(
+      "abcdef", std::vector<std::size_t>{2, 6});
+  std::string error;
+  std::shared_ptr<cottontail::regexp::Cgrep> matcher =
+      cottontail::regexp::Cgrep::make("z", haystack, &error);
+  ASSERT_NE(matcher, nullptr) << error;
+  cottontail::addr p;
+  cottontail::addr q;
+  EXPECT_FALSE(matcher->match(&p, &q));
+  EXPECT_TRUE(matcher->success(&error)) << error;
+  EXPECT_EQ(haystack->limit(), 5);
+}
+
+TEST(CgrepTest, ReportsCompleteLinesAndQueuesSameLineMatches) {
+  std::string text = "zero\ncat cat\nwrap\nped\n";
+  std::vector<LineAnswer> cats = line_matches("cat", text, 4);
+  ASSERT_EQ(cats.size(), 2u);
+  EXPECT_EQ(cats[0].lines, "cat cat\n");
+  EXPECT_EQ(cats[1].lines, "cat cat\n");
+  EXPECT_EQ(std::make_pair(cats[0].match.p, cats[0].match.q),
+            (std::pair<cottontail::addr, cottontail::addr>{5, 7}));
+  EXPECT_EQ(cats[0].match.lines_p, 5);
+  EXPECT_EQ(cats[0].match.lines_q, 12);
+  EXPECT_EQ(cats[0].match.start_line, 2u);
+  EXPECT_EQ(cats[0].match.start_position, 1u);
+  EXPECT_EQ(cats[0].match.end_line, 2u);
+  EXPECT_EQ(cats[0].match.end_position, 3u);
+  EXPECT_EQ(cats[1].match.start_position, 5u);
+  EXPECT_EQ(cats[1].match.end_position, 7u);
+
+  std::vector<LineAnswer> wrapped = line_matches("wrap\\nped", text, 2);
+  ASSERT_EQ(wrapped.size(), 1u);
+  EXPECT_TRUE(wrapped[0].match.has_lines);
+  EXPECT_EQ(wrapped[0].lines, "wrap\nped\n");
+  EXPECT_EQ(wrapped[0].match.start_line, 3u);
+  EXPECT_EQ(wrapped[0].match.start_position, 1u);
+  EXPECT_EQ(wrapped[0].match.end_line, 4u);
+  EXPECT_EQ(wrapped[0].match.end_position, 3u);
+}
+
+TEST(CgrepTest, AppliesLineLimitAndUnlimitedMode) {
+  std::string text = "one\ntwo\nthree\n";
+  std::vector<LineAnswer> limited = line_matches("one\\ntwo", text, 1);
+  ASSERT_EQ(limited.size(), 1u);
+  EXPECT_FALSE(limited[0].match.has_lines);
+  EXPECT_EQ(limited[0].lines, "");
+
+  std::vector<LineAnswer> unlimited = line_matches("^.*$", text, 0);
+  ASSERT_EQ(unlimited.size(), 1u);
+  EXPECT_TRUE(unlimited[0].match.has_lines);
+  EXPECT_EQ(unlimited[0].lines, text);
+  EXPECT_EQ(unlimited[0].match.start_line, 1u);
+  EXPECT_EQ(unlimited[0].match.end_line, 3u);
+}
+
+TEST(CgrepTest, HandlesLineChunkBoundariesAndEof) {
+  std::string text = "café\n中国 🤖";
+  std::vector<std::size_t> one_byte;
+  for (std::size_t i = 1; i <= text.size(); i++)
+    one_byte.push_back(i);
+  std::vector<LineAnswer> answer =
+      line_matches("中国 🤖$", text, 4, one_byte);
+  ASSERT_EQ(answer.size(), 1u);
+  EXPECT_TRUE(answer[0].match.has_lines);
+  EXPECT_EQ(answer[0].lines, "中国 🤖");
+  EXPECT_EQ(answer[0].match.start_line, 2u);
+  EXPECT_EQ(answer[0].match.start_position, 1u);
+  EXPECT_EQ(answer[0].match.end_line, 2u);
+  EXPECT_EQ(answer[0].match.end_position, 11u);
+}
+
+TEST(CgrepTest, AdvancesLineLimitWithoutActiveStates) {
+  std::shared_ptr<StringHaystack> haystack = std::make_shared<StringHaystack>(
+      "first\nsecond", std::vector<std::size_t>{3, 8, 12});
+  std::string error;
+  std::shared_ptr<cottontail::regexp::LineCgrep> matcher =
+      cottontail::regexp::LineCgrep::make("z", haystack, 4, &error);
+  ASSERT_NE(matcher, nullptr) << error;
+  cottontail::regexp::LineCgrep::Match match;
+  EXPECT_FALSE(matcher->match(&match));
+  EXPECT_TRUE(matcher->success(&error)) << error;
+  EXPECT_EQ(haystack->limit(), 5);
 }
 
 TEST(CgrepTest, RejectsResetOfConsumedOneShotInput) {

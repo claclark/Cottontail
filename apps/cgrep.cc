@@ -10,6 +10,13 @@
 
 namespace {
 
+enum class OutputMode { LINES, RAW };
+
+struct OutputPolicy {
+  OutputMode mode = OutputMode::LINES;
+  std::size_t limit = 4;
+};
+
 std::string base64(const std::string &input) {
   static const char alphabet[] =
       "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -38,15 +45,27 @@ bool json_string(const std::string &value) {
   }
 }
 
+void coordinates(const cottontail::regexp::LineCgrep::Match &match,
+                 nlohmann::json *record) {
+  (*record)["start"] = {{"line", match.start_line},
+                        {"position", match.start_position}};
+  (*record)["end"] = {{"line", match.end_line},
+                      {"position", match.end_position}};
+}
+
 bool record(const std::string *filename, cottontail::addr p, cottontail::addr q,
-            const std::string *match, std::string *output, std::string *error) {
+            const std::string *text, const char *text_field,
+            const cottontail::regexp::LineCgrep::Match *line_match,
+            std::string *output, std::string *error) {
   nlohmann::json ordinary;
   if (filename != nullptr)
     ordinary["file"] = *filename;
   ordinary["p"] = p;
   ordinary["q"] = q;
-  if (match != nullptr)
-    ordinary["match"] = *match;
+  if (line_match != nullptr && line_match->has_lines)
+    coordinates(*line_match, &ordinary);
+  if (text != nullptr)
+    ordinary[text_field] = *text;
   try {
     *output = ordinary.dump();
     return true;
@@ -64,11 +83,13 @@ bool record(const std::string *filename, cottontail::addr p, cottontail::addr q,
     else
       fallback["file_base64"] = base64(*filename);
   }
-  if (match != nullptr) {
-    if (json_string(*match))
-      fallback["match"] = *match;
+  if (line_match != nullptr && line_match->has_lines)
+    coordinates(*line_match, &fallback);
+  if (text != nullptr) {
+    if (json_string(*text))
+      fallback[text_field] = *text;
     else
-      fallback["match_base64"] = base64(*match);
+      fallback[std::string(text_field) + "_base64"] = base64(*text);
   }
   try {
     *output = fallback.dump();
@@ -90,15 +111,18 @@ void report(const char *program, const std::string *filename,
 
 void help(const char *program, std::ostream &output) {
   output << "Usage: " << program
-         << " [--max-match bytes] regexp [file...]\n"
+         << " [--lines n | --raw n] regexp [file...]\n"
             "Search files, or standard input when no files are given.\n"
             "Matches use shortest-substring byte-regexp semantics and are "
             "written as JSON Lines.\n\n"
-            "  --max-match bytes  Include matching bytes only when their "
-            "length is at most bytes\n"
-            "                     (default: 256; 0 means unlimited)\n"
-            "  --help             Show this help\n"
-            "  --                 End options; the next argument is the "
+            "  --lines n  Line mode; report matches with their enclosing "
+            "lines, up to n lines\n"
+            "             (default: 4; 0 means unlimited)\n"
+            "  --raw n    Raw mode; report matches from the byte stream, up "
+            "to n bytes\n"
+            "             (0 means unlimited)\n"
+            "  --help     Show this help\n"
+            "  --         End options; the next argument is the "
             "regexp\n";
 }
 
@@ -118,10 +142,28 @@ bool size(const std::string &value, std::size_t *answer) {
   return true;
 }
 
-bool search(const char *program,
-            std::shared_ptr<const cottontail::regexp::Cgrep::Machine> machine,
-            std::shared_ptr<cottontail::regexp::Haystack> haystack,
-            const std::string *filename, std::size_t max_match, bool *found) {
+bool write(const std::string *filename, cottontail::addr p, cottontail::addr q,
+           const std::string *text, const char *text_field,
+           const cottontail::regexp::LineCgrep::Match *line_match, bool *found,
+           std::string *error) {
+  std::string line;
+  if (!record(filename, p, q, text, text_field, line_match, &line, error))
+    return false;
+  std::cout.write(line.data(), static_cast<std::streamsize>(line.size()));
+  std::cout.put('\n');
+  if (!std::cout) {
+    *error = "Cannot write match record";
+    return false;
+  }
+  *found = true;
+  return true;
+}
+
+bool search_raw(
+    const char *program,
+    std::shared_ptr<const cottontail::regexp::Cgrep::Machine> machine,
+    std::shared_ptr<cottontail::regexp::Haystack> haystack,
+    const std::string *filename, std::size_t limit, bool *found) {
   std::string error;
   std::shared_ptr<cottontail::regexp::Cgrep> matcher =
       cottontail::regexp::Cgrep::make(std::move(machine), std::move(haystack),
@@ -137,22 +179,14 @@ bool search(const char *program,
     std::string match;
     const std::string *included = nullptr;
     std::size_t match_size = static_cast<std::size_t>(q - p) + 1;
-    if (max_match == 0 || match_size <= max_match) {
+    if (limit == 0 || match_size <= limit) {
       match = matcher->translate(p, q);
       if (!matcher->success(&error))
         break;
       included = &match;
     }
-    std::string line;
-    if (!record(filename, p, q, included, &line, &error))
+    if (!write(filename, p, q, included, "match", nullptr, found, &error))
       break;
-    std::cout.write(line.data(), static_cast<std::streamsize>(line.size()));
-    std::cout.put('\n');
-    if (!std::cout) {
-      error = "Cannot write match record";
-      break;
-    }
-    *found = true;
   }
   if (!error.empty() || !matcher->success(&error)) {
     report(program, filename, error);
@@ -161,10 +195,57 @@ bool search(const char *program,
   return true;
 }
 
+bool search_lines(
+    const char *program,
+    std::shared_ptr<const cottontail::regexp::Cgrep::Machine> machine,
+    std::shared_ptr<cottontail::regexp::Haystack> haystack,
+    const std::string *filename, std::size_t limit, bool *found) {
+  std::string error;
+  std::shared_ptr<cottontail::regexp::LineCgrep> matcher =
+      cottontail::regexp::LineCgrep::make(std::move(machine),
+                                          std::move(haystack), limit, &error);
+  if (matcher == nullptr) {
+    report(program, filename, error);
+    return false;
+  }
+
+  cottontail::regexp::LineCgrep::Match match;
+  while (matcher->match(&match)) {
+    std::string lines;
+    const std::string *included = nullptr;
+    if (match.has_lines) {
+      lines = matcher->translate(match);
+      if (!matcher->success(&error))
+        break;
+      included = &lines;
+    }
+    if (!write(filename, match.p, match.q, included, "lines", &match, found,
+               &error))
+      break;
+  }
+  if (!error.empty() || !matcher->success(&error)) {
+    report(program, filename, error);
+    return false;
+  }
+  return true;
+}
+
+bool search(const char *program,
+            std::shared_ptr<const cottontail::regexp::Cgrep::Machine> machine,
+            std::shared_ptr<cottontail::regexp::Haystack> haystack,
+            const std::string *filename, const OutputPolicy &policy,
+            bool *found) {
+  if (policy.mode == OutputMode::RAW)
+    return search_raw(program, std::move(machine), std::move(haystack),
+                      filename, policy.limit, found);
+  return search_lines(program, std::move(machine), std::move(haystack),
+                      filename, policy.limit, found);
+}
+
 } // namespace
 
 int main(int argc, char **argv) {
-  std::size_t max_match = 256;
+  OutputPolicy policy;
   int argument = 1;
   while (argument < argc) {
     std::string option = argv[argument];
@@ -176,22 +257,33 @@ int main(int argc, char **argv) {
       argument++;
       break;
     }
-    if (option == "--max-match") {
-      if (++argument >= argc || !size(argv[argument], &max_match)) {
-        std::cerr << argv[0] << ": --max-match needs a byte count\n";
+    if (option == "--lines" || option == "--raw") {
+      std::size_t limit;
+      if (++argument >= argc || !size(argv[argument], &limit)) {
+        std::cerr << argv[0] << ": " << option << " needs a count\n";
         help(argv[0], std::cerr);
         return 2;
       }
+      policy.mode = option == "--lines" ? OutputMode::LINES : OutputMode::RAW;
+      policy.limit = limit;
       argument++;
       continue;
     }
-    const std::string prefix = "--max-match=";
-    if (option.compare(0, prefix.size(), prefix) == 0) {
-      if (!size(option.substr(prefix.size()), &max_match)) {
-        std::cerr << argv[0] << ": --max-match needs a byte count\n";
+    const std::string lines_prefix = "--lines=";
+    const std::string raw_prefix = "--raw=";
+    bool lines = option.compare(0, lines_prefix.size(), lines_prefix) == 0;
+    bool raw = option.compare(0, raw_prefix.size(), raw_prefix) == 0;
+    if (lines || raw) {
+      const std::string &prefix = lines ? lines_prefix : raw_prefix;
+      std::size_t limit;
+      if (!size(option.substr(prefix.size()), &limit)) {
+        std::cerr << argv[0] << ": " << prefix.substr(0, prefix.size() - 1)
+                  << " needs a count\n";
         help(argv[0], std::cerr);
         return 2;
       }
+      policy.mode = lines ? OutputMode::LINES : OutputMode::RAW;
+      policy.limit = limit;
       argument++;
       continue;
     }
@@ -218,8 +310,8 @@ int main(int argc, char **argv) {
     if (haystack == nullptr) {
       report(argv[0], nullptr, error);
       failed = true;
-    } else if (!search(argv[0], machine, std::move(haystack), nullptr,
-                       max_match, &found)) {
+    } else if (!search(argv[0], machine, std::move(haystack), nullptr, policy,
+                       &found)) {
       failed = true;
     }
   } else {
@@ -232,7 +324,7 @@ int main(int argc, char **argv) {
         failed = true;
         continue;
       }
-      if (!search(argv[0], machine, std::move(haystack), &filename, max_match,
+      if (!search(argv[0], machine, std::move(haystack), &filename, policy,
                   &found))
         failed = true;
     }

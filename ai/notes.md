@@ -610,10 +610,13 @@
 - `regexp/cgrep.h` exposes an opaque shareable compiled dispatch machine and a
   mutable runner over the abstract `Haystack` byte source. Chunk boundaries are
   semantically invisible; translations use inclusive absolute byte offsets.
+- `LineCgrep` is a separate byte loop over the same immutable machine. It queues
+  accepted intervals, retains a bounded GCL-like list of LF-delimited line
+  positions, and flushes reports at LF or EOF.
 - `apps/cgrep` searches files or stdin and emits one JSON object per match.
   Strict JSON is attempted first; malformed UTF-8 fields use marked Base64
-  fallbacks. Match text over the default 256-byte limit is omitted without
-  translating it; `--max-match 0` disables the limit.
+  fallbacks. It defaults to `--lines 4`; `--lines n` and `--raw n` replace one
+  another in command order, and zero means unlimited.
 - Shortest-substring selection is a local matching semantic and is independent
   of tokenization; n-grams will only provide indexed evidence for another
   runner over the same exported machine.

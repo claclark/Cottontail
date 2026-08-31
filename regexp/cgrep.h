@@ -12,6 +12,8 @@
 namespace cottontail {
 namespace regexp {
 
+class LineCgrep;
+
 // Stateful shortest-substring matching over a Haystack.
 class Cgrep {
 public:
@@ -74,6 +76,59 @@ private:
   bool ended_ = false;
   bool have_largest_start_ = false;
   bool have_pending_limit_ = false;
+};
+
+// Shortest-substring matching reported as complete lines. The raw match is
+// always present; line coordinates and text are available when the match fits
+// in the configured line window.
+class LineCgrep {
+public:
+  struct Match {
+    addr p;
+    addr q;
+    addr lines_p;
+    addr lines_q;
+    std::size_t start_line;
+    std::size_t start_position;
+    std::size_t end_line;
+    std::size_t end_position;
+    bool has_lines;
+  };
+
+  static std::shared_ptr<LineCgrep>
+  make(std::shared_ptr<const Cgrep::Machine> machine,
+       std::shared_ptr<Haystack> haystack, std::size_t lines,
+       std::string *error = nullptr);
+  static std::shared_ptr<LineCgrep> make(const std::string &expression,
+                                         std::shared_ptr<Haystack> haystack,
+                                         std::size_t lines,
+                                         std::string *error = nullptr);
+  static std::shared_ptr<LineCgrep> make(const std::vector<transition> &nfa,
+                                         std::shared_ptr<Haystack> haystack,
+                                         std::size_t lines,
+                                         std::string *error = nullptr);
+
+  ~LineCgrep();
+
+  bool match(Match *match);
+
+  std::string translate(const Match &match);
+  bool translate(const Match &match, const char **start, const char **end);
+
+  bool reset(std::string *error = nullptr);
+  bool success(std::string *error = nullptr);
+
+  LineCgrep(const LineCgrep &) = delete;
+  LineCgrep &operator=(const LineCgrep &) = delete;
+  LineCgrep(LineCgrep &&) = delete;
+  LineCgrep &operator=(LineCgrep &&) = delete;
+
+private:
+  struct Impl;
+
+  explicit LineCgrep(std::unique_ptr<Impl> impl);
+
+  std::unique_ptr<Impl> impl_;
 };
 
 } // namespace regexp

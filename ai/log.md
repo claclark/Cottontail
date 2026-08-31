@@ -606,3 +606,12 @@
   Haystack reclamation limit when no active candidate remains. No source code
   changed.
 2026-08-30T22:10:41+00:00
+
+- Added the independent `LineCgrep` engine over the shared compiled regexp
+  machine. It runs its own byte loop, queues accepted intervals, retains a
+  bounded LF-delimited line list, flushes at LF/EOF, and coordinates Haystack
+  reclamation; raw Cgrep now also advances its limit whenever no active state
+  remains. Changed the app to ordered `--lines n`/`--raw n` policies with
+  `--lines 4` as the default and zero as unlimited. All 60 targets compile; the
+  15-case focused C++ binary and end-to-end application script pass.
+2026-08-31T16:04:15+00:00
