@@ -10,7 +10,8 @@ implementation work.
   Default `--lines 4` output now reports the lines touched by each match and its
   one-based line-relative byte positions.
 
-- Resolved: raw `Cgrep` now advances the Haystack limit through the current
-  offset whenever no active candidate remains. `LineCgrep` applies the
+- Resolved: raw `Cgrep` advances the Haystack limit when active candidates
+  disappear and at inactive chunk boundaries. `LineCgrep` applies the
   corresponding rule while retaining the current line prefix and queued
-  reports.
+  reports. Both suppress repeated watermarks instead of making a virtual
+  `limit()` call for every inactive byte.

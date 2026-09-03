@@ -153,7 +153,11 @@ and copies the stored diagnostic through `safe_error(error)`.
 Pointers from `chunk` remain valid until the next call to `chunk`, `reset`, or
 destruction. `limit` may advance reclamation in the background but must not
 invalidate the currently handed-out chunk. Any compaction or buffer exchange
-becomes visible through the next pair of chunk pointers.
+becomes visible through the next pair of chunk pointers. After a successful
+`chunk` call, unreclaimed history remains contiguous immediately behind
+`start`, back to the current reclamation boundary. A runner may therefore save
+live pointers as absolute positions before requesting another chunk and rebase
+them directly from the new `start` and its absolute offset afterward.
 
 Chunks are not matching boundaries. The Cgrep state continues unchanged from
 one chunk to the next. A chunk may end after any byte, including within CRLF,
@@ -191,10 +195,13 @@ mapped implementation may treat it as a no-op.
 After returning an accepted match beginning at `p`, the runner retains the
 bytes until the caller has had an opportunity to request its text or view. At
 the beginning of the next `match()` call, it may call `limit(p)` after the NFA
-has discarded all paths beginning at or before `p`. Whenever the active-state
-set becomes empty without a pending match, raw Cgrep advances the limit through
-the current offset. LineCgrep instead retains the current line prefix and any
-queued or ready reports, and advances through the preceding completed line.
+has discarded all paths beginning at or before `p`. When the active-state set
+transitions to empty without a pending match, raw Cgrep advances the limit
+through the current offset. It also advances at chunk boundaries while
+inactive, rather than notifying the Haystack for every byte. LineCgrep applies
+the same edge- and chunk-driven rule, also checking at LF boundaries, while
+retaining the current line prefix and any queued or ready reports. It advances
+through the preceding completed line. Repeated limit values are suppressed.
 
 ### Reset
 

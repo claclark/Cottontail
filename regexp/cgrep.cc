@@ -143,6 +143,7 @@ void Cgrep::initialize() {
   offset_ = 0;
   largest_start_ = 0;
   pending_limit_ = 0;
+  limited_through_ = -1;
   started_ = false;
   ended_ = false;
   have_largest_start_ = false;
@@ -198,6 +199,13 @@ void Cgrep::prune(addr p) {
   active_.resize(kept);
 }
 
+void Cgrep::advance_limit(addr x) {
+  if (x > limited_through_) {
+    haystack_->limit(x);
+    limited_through_ = x;
+  }
+}
+
 bool Cgrep::candidate(addr start, addr end, addr *p, addr *q) {
   addr clean_start = std::max<addr>(start, 0);
   addr clean_end = end;
@@ -240,7 +248,7 @@ bool Cgrep::match(addr *p, addr *q) {
   if (!error_.empty())
     return false;
   if (have_pending_limit_) {
-    haystack_->limit(pending_limit_);
+    advance_limit(pending_limit_);
     have_pending_limit_ = false;
   }
   if (ended_)
@@ -259,14 +267,17 @@ bool Cgrep::match(addr *p, addr *q) {
     if (current_ != end_) {
       addr here = offset_++;
       symbol value = static_cast<unsigned char>(*current_++);
+      bool was_active = !active_.empty();
       if (consume(value, here, &accepted_start) &&
           candidate(accepted_start, here, p, q))
         return true;
-      if (active_.empty())
-        haystack_->limit(here);
+      if (was_active && active_.empty())
+        advance_limit(here);
       continue;
     }
 
+    if (active_.empty() && offset_ > 0)
+      advance_limit(offset_ - 1);
     if (next_chunk())
       continue;
     if (!error_.empty())
@@ -282,6 +293,8 @@ bool Cgrep::match(addr *p, addr *q) {
                 &accepted_start) &&
         candidate(accepted_start, offset_, p, q))
       return true;
+    if (offset_ > 0)
+      advance_limit(offset_ - 1);
     return false;
   }
 }
@@ -361,6 +374,7 @@ struct LineCgrep::Impl final {
     line_p = 0;
     line_number = 1;
     largest_start = 0;
+    limited_through = -1;
     started = false;
     ended = false;
     have_largest_start = false;
@@ -481,7 +495,11 @@ struct LineCgrep::Impl final {
     if (!active.empty() || !pending.empty() || !ready.empty())
       return;
     lines.clear();
-    haystack->limit(line_p - 1);
+    addr limit = line_p - 1;
+    if (limit > limited_through) {
+      haystack->limit(limit);
+      limited_through = limit;
+    }
   }
 
   bool next(LineCgrep::Match *answer) {
@@ -512,8 +530,10 @@ struct LineCgrep::Impl final {
       if (current != end) {
         addr here = offset++;
         symbol value = static_cast<unsigned char>(*current++);
+        bool was_active = !active.empty();
         if (consume(value, here, &accepted_start))
           candidate(accepted_start, here);
+        bool became_inactive = was_active && active.empty();
         if (value == '\n') {
           close_line(here);
           line_p = here + 1;
@@ -525,10 +545,12 @@ struct LineCgrep::Impl final {
           ready.pop_front();
           return true;
         }
-        reclaim();
+        if (became_inactive || value == '\n')
+          reclaim();
         continue;
       }
 
+      reclaim();
       if (next_chunk())
         continue;
       if (!error.empty())
@@ -610,6 +632,7 @@ struct LineCgrep::Impl final {
   addr offset = 0;
   addr line_p = 0;
   addr largest_start = 0;
+  addr limited_through = -1;
   std::size_t line_number = 1;
   std::string error;
   bool started = false;

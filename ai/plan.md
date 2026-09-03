@@ -130,7 +130,7 @@ as a root-only development dependency. `LineCgrep` now supplies a separate
 byte-oriented line-reporting engine with queued matches, an LF/EOF flush, a
 bounded line-position list, and coordinated reclamation. The app defaults to
 `--lines 4`; ordered `--lines n` and `--raw n` policies use zero for unlimited
-output. The dedicated C++ binary passes all 15 focused cases, the end-to-end
+output. The dedicated C++ binary has 16 focused cases, the end-to-end
 script passes directly, and all 60 Bazel targets compile.
 
 ## Completed Meadowlark Filename And Labeling Step

@@ -56,6 +56,7 @@ private:
   bool consume(symbol value, addr end, addr *accepted_start);
   bool candidate(addr start, addr end, addr *p, addr *q);
   bool next_chunk();
+  void advance_limit(addr x);
   void fail(const std::string &message);
   void initialize();
   void prune(addr p);
@@ -71,6 +72,7 @@ private:
   addr offset_ = 0;
   addr largest_start_ = 0;
   addr pending_limit_ = 0;
+  addr limited_through_ = -1;
   std::string error_;
   bool started_ = false;
   bool ended_ = false;

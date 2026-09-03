@@ -60,7 +60,10 @@ public:
     return true;
   }
 
-  void limit(cottontail::addr x) final { limit_ = std::max(limit_, x); }
+  void limit(cottontail::addr x) final {
+    limit_ = std::max(limit_, x);
+    limits_.push_back(x);
+  }
 
   bool reset(std::string *error) final {
     if (touched_ && !replayable_) {
@@ -71,6 +74,7 @@ public:
     offset_ = 0;
     chunk_ = 0;
     limit_ = -1;
+    limits_.clear();
     touched_ = false;
     error_.clear();
     return true;
@@ -84,6 +88,7 @@ public:
   }
 
   cottontail::addr limit() const { return limit_; }
+  const std::vector<cottontail::addr> &limits() const { return limits_; }
 
   static constexpr std::size_t no_failure =
       std::numeric_limits<std::size_t>::max();
@@ -95,6 +100,7 @@ private:
   std::size_t offset_ = 0;
   std::size_t chunk_ = 0;
   cottontail::addr limit_ = -1;
+  std::vector<cottontail::addr> limits_;
   bool touched_ = false;
   bool replayable_;
   std::size_t fail_at_;
@@ -256,6 +262,23 @@ TEST(CgrepTest, AdvancesRawLimitWithoutActiveStates) {
   EXPECT_FALSE(matcher->match(&p, &q));
   EXPECT_TRUE(matcher->success(&error)) << error;
   EXPECT_EQ(haystack->limit(), 5);
+  EXPECT_EQ(haystack->limits(),
+            (std::vector<cottontail::addr>{1, 5}));
+}
+
+TEST(CgrepTest, AdvancesLimitWhenActiveStatesDisappear) {
+  std::shared_ptr<StringHaystack> haystack =
+      std::make_shared<StringHaystack>("abbbbb");
+  std::string error;
+  std::shared_ptr<cottontail::regexp::Cgrep> matcher =
+      cottontail::regexp::Cgrep::make("az", haystack, &error);
+  ASSERT_NE(matcher, nullptr) << error;
+  cottontail::addr p;
+  cottontail::addr q;
+  EXPECT_FALSE(matcher->match(&p, &q));
+  EXPECT_TRUE(matcher->success(&error)) << error;
+  EXPECT_EQ(haystack->limits(),
+            (std::vector<cottontail::addr>{1, 5}));
 }
 
 TEST(CgrepTest, ReportsCompleteLinesAndQueuesSameLineMatches) {
@@ -327,6 +350,8 @@ TEST(CgrepTest, AdvancesLineLimitWithoutActiveStates) {
   EXPECT_FALSE(matcher->match(&match));
   EXPECT_TRUE(matcher->success(&error)) << error;
   EXPECT_EQ(haystack->limit(), 5);
+  EXPECT_EQ(haystack->limits(),
+            (std::vector<cottontail::addr>{5}));
 }
 
 TEST(CgrepTest, RejectsResetOfConsumedOneShotInput) {

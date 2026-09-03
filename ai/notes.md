@@ -610,9 +610,15 @@
 - `regexp/cgrep.h` exposes an opaque shareable compiled dispatch machine and a
   mutable runner over the abstract `Haystack` byte source. Chunk boundaries are
   semantically invisible; translations use inclusive absolute byte offsets.
+  Each published chunk retains unreclaimed history contiguously behind its
+  start pointer, allowing live pointers to be saved as positions and rebased
+  after the next chunk publication.
 - `LineCgrep` is a separate byte loop over the same immutable machine. It queues
   accepted intervals, retains a bounded GCL-like list of LF-delimited line
-  positions, and flushes reports at LF or EOF.
+  positions, and flushes reports at LF or EOF. Raw and line runners advance
+  Haystack reclamation on active-to-empty transitions and chunk boundaries;
+  the line runner also checks at LF boundaries. Repeated watermarks are
+  suppressed.
 - `apps/cgrep` searches files or stdin and emits one JSON object per match.
   Strict JSON is attempted first; malformed UTF-8 fields use marked Base64
   fallbacks. It defaults to `--lines 4`; `--lines n` and `--raw n` replace one

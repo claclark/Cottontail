@@ -615,3 +615,12 @@
   `--lines 4` as the default and zero as unlimited. All 60 targets compile; the
   15-case focused C++ binary and end-to-end application script pass.
 2026-08-31T16:04:15+00:00
+- Revised the cgrep command help to describe the default line-reporting and
+  explicit raw-byte-stream modes directly; compile-checked `//apps:cgrep`.
+
+2026-09-02T19:09:31+00:00
+- Changed raw and line cgrep reclamation to notify Haystacks on
+  active-to-empty transitions and chunk boundaries, suppressing repeated
+  watermarks instead of making a virtual `limit()` call for every inactive
+  byte. Added focused call-sequence coverage and compile-checked
+  `//apps:cgrep` and `//test:cgrep_test` without running tests.
