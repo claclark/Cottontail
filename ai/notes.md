@@ -613,6 +613,19 @@
   Each published chunk retains unreclaimed history contiguously behind its
   start pointer, allowing live pointers to be saved as positions and rebased
   after the next chunk publication.
+  The current concrete Haystack sizes seekable files, allocates an
+  uninitialized buffer once, and reads directly into it. The filename factory
+  opens and loads once, returning open/read errors directly. Stdin and unsized
+  sources grow a string using bulk reads. Both publish one whole-input chunk;
+  `limit()` remains a watermark only.
+- Raw `Cgrep` reduces literal-chain NFAs to a string and uses forward
+  `memchr` seeks plus backward tightening through retained history. An
+  interval is exact when its length equals the literal length. Failed
+  candidates resume at `p + 1`; exact matches use a precomputed self-overlap
+  shift. Both immediately release history before `p`, retaining a returned
+  match for translation. General NFAs retain the dispatch runner.
+  `Cgrep::compile(..., error, false)` disables specialization; the app exposes
+  `--springy` (default) and `--no-springy` for comparing raw runners.
 - `LineCgrep` is a separate byte loop over the same immutable machine. It queues
   accepted intervals, retains a bounded GCL-like list of LF-delimited line
   positions, and flushes reports at LF or EOF. Raw and line runners advance

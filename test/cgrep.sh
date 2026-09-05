@@ -44,6 +44,13 @@ printf '%s\n' \
   > expected.jsonl
 cmp actual.jsonl expected.jsonl || fail "NUL JSONL differs"
 
+printf '%65534s' '' > bulk.txt
+printf 'needle' >> bulk.txt
+expect_status 0 "${cgrep}" --raw 0 needle bulk.txt > actual.jsonl
+printf '%s\n' '{"file":"bulk.txt","match":"needle","p":65534,"q":65539}' \
+  > expected.jsonl
+cmp actual.jsonl expected.jsonl || fail "bulk-read boundary output differs"
+
 printf '\377' > invalid.dat
 expect_status 0 "${cgrep}" '\xff' invalid.dat > actual.jsonl
 printf '%s\n' \
@@ -83,9 +90,61 @@ printf '%s\n' \
   '{"end":{"line":2,"position":3},"file":"named.txt","lines":"cat","p":4,"q":6,"start":{"line":2,"position":1}}' > expected.jsonl
 cmp actual.jsonl expected.jsonl || fail "last output policy did not win"
 
+printf 'ab_ababa' > springy.txt
+printf '%s\n' \
+  '{"file":"springy.txt","match":"aba","p":3,"q":5}' \
+  '{"file":"springy.txt","match":"aba","p":5,"q":7}' > expected.jsonl
+expect_status 0 "${cgrep}" --raw 0 aba springy.txt > actual.jsonl
+cmp actual.jsonl expected.jsonl || fail "literal raw output differs"
+
+# File buffers, delegated expressions, and streams must report the same bytes.
+printf '%s\n' \
+  '{"file":"springy.txt","match":"aba","p":3,"q":5}' \
+  '{"file":"springy.txt","match":"aba","p":5,"q":7}' > expected.jsonl
+expect_status 0 "${cgrep}" --raw 0 'a[b]a' springy.txt > actual.jsonl
+cmp actual.jsonl expected.jsonl || fail "singleton-class literal output differs"
+expect_status 0 "${cgrep}" --raw 0 'a.a' springy.txt > actual.jsonl
+cmp actual.jsonl expected.jsonl || fail "buffer fallback output differs"
+printf 'ab_ababa' | "${cgrep}" --raw 0 aba > actual.jsonl
+[[ "$?" == 0 ]] || fail "raw stream search failed"
+printf '%s\n' \
+  '{"match":"aba","p":3,"q":5}' \
+  '{"match":"aba","p":5,"q":7}' > expected.jsonl
+cmp actual.jsonl expected.jsonl || fail "raw stream output differs"
+
+expect_status 0 "${cgrep}" --raw 2 aba springy.txt > actual.jsonl
+printf '%s\n' \
+  '{"file":"springy.txt","p":3,"q":5}' \
+  '{"file":"springy.txt","p":5,"q":7}' > expected.jsonl
+cmp actual.jsonl expected.jsonl || fail "oversized buffer matches were lost"
+
+printf '' > empty.txt
+expect_status 1 "${cgrep}" --raw 0 cat empty.txt > actual.jsonl
+[[ ! -s actual.jsonl ]] || fail "empty file produced a match"
+printf '' | "${cgrep}" --raw 0 cat > actual.jsonl
+[[ "$?" == 1 ]] || fail "empty stream status differs"
+
+expect_status 0 "${cgrep}" --raw 0 'a\x00b' binary.dat > actual.jsonl
+printf '%s\n' '{"file":"binary.dat","match":"a\u0000b","p":0,"q":2}' \
+  > expected.jsonl
+cmp actual.jsonl expected.jsonl || fail "buffer NUL output differs"
+expect_status 0 "${cgrep}" --raw 0 '\xff' invalid.dat > actual.jsonl
+printf '%s\n' '{"file":"invalid.dat","match_base64":"/w==","p":0,"q":0}' \
+  > expected.jsonl
+cmp actual.jsonl expected.jsonl || fail "buffer Base64 output differs"
+
+expect_status 2 "${cgrep}" --raw 0 cat missing named.txt > actual.jsonl 2> error.txt
+printf '%s\n' \
+  '{"file":"named.txt","match":"cat","p":0,"q":2}' \
+  '{"file":"named.txt","match":"cat","p":4,"q":6}' > expected.jsonl
+cmp actual.jsonl expected.jsonl || fail "raw search did not continue after error"
+[[ -s error.txt ]] || fail "raw input error omitted diagnostic"
+
 expect_status 0 "${cgrep}" --help > help.txt
 grep -q -- '--lines' help.txt || fail "help omits line mode"
 grep -q -- '--raw' help.txt || fail "help omits raw mode"
+grep -qE -- '--(springy|no-springy|no-match)' help.txt &&
+  fail "help includes retired options"
 expect_status 2 "${cgrep}" --raw nope cat > actual.jsonl 2> error.txt
 
 expect_status 1 "${cgrep}" dog named.txt > actual.jsonl

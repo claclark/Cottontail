@@ -161,17 +161,9 @@ bool write(const std::string *filename, cottontail::addr p, cottontail::addr q,
 
 bool search_raw(
     const char *program,
-    std::shared_ptr<const cottontail::regexp::Cgrep::Machine> machine,
-    std::shared_ptr<cottontail::regexp::Haystack> haystack,
+    std::shared_ptr<cottontail::regexp::Cgrep> matcher,
     const std::string *filename, std::size_t limit, bool *found) {
   std::string error;
-  std::shared_ptr<cottontail::regexp::Cgrep> matcher =
-      cottontail::regexp::Cgrep::make(std::move(machine), std::move(haystack),
-                                      &error);
-  if (matcher == nullptr) {
-    report(program, filename, error);
-    return false;
-  }
 
   cottontail::addr p;
   cottontail::addr q;
@@ -232,12 +224,31 @@ bool search_lines(
 
 bool search(const char *program,
             std::shared_ptr<const cottontail::regexp::Cgrep::Machine> machine,
-            std::shared_ptr<cottontail::regexp::Haystack> haystack,
             const std::string *filename, const OutputPolicy &policy,
             bool *found) {
-  if (policy.mode == OutputMode::RAW)
-    return search_raw(program, std::move(machine), std::move(haystack),
-                      filename, policy.limit, found);
+  std::string error;
+  if (policy.mode == OutputMode::RAW) {
+    std::shared_ptr<cottontail::regexp::Cgrep> matcher;
+    if (filename != nullptr)
+      matcher = cottontail::regexp::Cgrep::make(machine, *filename, &error);
+    else
+      matcher = cottontail::regexp::Cgrep::make(
+          machine,
+          std::shared_ptr<std::istream>(&std::cin, [](std::istream *) {}),
+          &error);
+    if (matcher == nullptr) {
+      report(program, filename, error);
+      return false;
+    }
+    return search_raw(program, std::move(matcher), filename, policy.limit, found);
+  }
+  auto haystack = filename != nullptr
+                      ? cottontail::regexp::Haystack::make(*filename, &error)
+                      : cottontail::regexp::Haystack::make_stdin(&error);
+  if (haystack == nullptr) {
+    report(program, filename, error);
+    return false;
+  }
   return search_lines(program, std::move(machine), std::move(haystack),
                       filename, policy.limit, found);
 }
@@ -305,27 +316,12 @@ int main(int argc, char **argv) {
   bool found = false;
   bool failed = false;
   if (argument == argc) {
-    std::shared_ptr<cottontail::regexp::Haystack> haystack =
-        cottontail::regexp::Haystack::make_stdin(&error);
-    if (haystack == nullptr) {
-      report(argv[0], nullptr, error);
+    if (!search(argv[0], machine, nullptr, policy, &found))
       failed = true;
-    } else if (!search(argv[0], machine, std::move(haystack), nullptr, policy,
-                       &found)) {
-      failed = true;
-    }
   } else {
     for (int i = argument; i < argc; i++) {
       std::string filename = argv[i];
-      std::shared_ptr<cottontail::regexp::Haystack> haystack =
-          cottontail::regexp::Haystack::make(filename, &error);
-      if (haystack == nullptr) {
-        report(argv[0], &filename, error);
-        failed = true;
-        continue;
-      }
-      if (!search(argv[0], machine, std::move(haystack), &filename, policy,
-                  &found))
+      if (!search(argv[0], machine, &filename, policy, &found))
         failed = true;
     }
   }

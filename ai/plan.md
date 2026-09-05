@@ -130,8 +130,19 @@ as a root-only development dependency. `LineCgrep` now supplies a separate
 byte-oriented line-reporting engine with queued matches, an LF/EOF flush, a
 bounded line-position list, and coordinated reclamation. The app defaults to
 `--lines 4`; ordered `--lines n` and `--raw n` policies use zero for unlimited
-output. The dedicated C++ binary has 16 focused cases, the end-to-end
-script passes directly, and all 60 Bazel targets compile.
+output. At that checkpoint, the end-to-end script passed directly and all 60
+Bazel targets compiled.
+
+Raw `Cgrep` now specializes literal-chain NFAs by reducing them to a string.
+Forward `memchr` seeks cross chunks, a backward pass tightens each candidate,
+and interval length determines whether it is an exact match. Failed candidates
+resume at `p + 1`; exact matches use a precomputed self-overlap shift. Both
+release history before `p` immediately. The focused C++ target now
+has 18 cases, including relocation and trimming of retained history. The app
+and focused C++ target compile; the agent has not run the new tests or timing
+experiments. General springy matching remains under discussion.
+`--springy` (default) and `--no-springy` now select whether raw searches use
+literal specialization, independently of the output policy.
 
 ## Completed Meadowlark Filename And Labeling Step
 

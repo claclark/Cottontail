@@ -624,3 +624,59 @@
   watermarks instead of making a virtual `limit()` call for every inactive
   byte. Added focused call-sequence coverage and compile-checked
   `//apps:cgrep` and `//test:cgrep_test` without running tests.
+
+2026-09-04T20:43:30Z
+- Added a raw Cgrep literal specialization: reduce byte-chain NFAs to strings,
+  seek forward across chunks, tighten backward through retained history, and
+  accept intervals with the literal's exact length. Failed candidates resume
+  at the next byte; exact matches use a simple precomputed self-overlap shift.
+  Release history before each tightened start while preserving returned text.
+  Added focused coverage with relocating/trimming Haystacks and updated the
+  workplan. The app and focused C++ target compile; tests and timings were not
+  run.
+
+2026-09-04T20:51:22Z
+- Added `--springy` and `--no-springy` to compare raw literal matching with
+  the general dispatch runner, keeping springy enabled by default. The option
+  is passed to machine compilation and is independent of output policy.
+  Added comparison coverage and help text; the app and both focused test
+  targets compile. Tests were not run.
+
+2026-09-04T20:55:34Z
+- For the requested output experiment, raw `--springy` now prints filename,
+  inclusive offsets, and permitted match text directly with `std::cout`.
+  Raw `--no-springy` and line mode retain JSONL. Updated the application
+  expectations and documented the temporary format; `//apps:cgrep` compiles.
+  Runtime tests were not run.
+
+2026-09-04T20:57:33Z
+- Restored shared JSONL output for both raw runners after the user reported
+  that the direct stream output experiment did not explain the slowdown.
+  Kept the springy selection flags and restored the JSONL test expectations.
+  The app and application test target compile; runtime tests were not run.
+
+2026-09-04T21:09:29Z
+- Added `--no-match` for timing Haystack loading without matching or output.
+  It keeps the regexp argument and compilation, consumes all chunks from
+  each file or stdin, and returns zero on success or two on error. Updated
+  help, documentation, and application expectations; the app and application
+  test target compile. Runtime tests and timings were not run.
+
+2026-09-04T21:25:38Z
+- Replaced Haystack's character-iterator loading with bulk 64 KiB stream
+  reads into the existing owned string. Files and stdin still load completely
+  and publish one chunk; no rolling-buffer management was added. Prepared an
+  application case crossing a bulk-read boundary. The app and focused targets
+  compile; runtime tests and timings were not run.
+
+2026-09-04T21:37:08Z
+- Changed seekable-file Haystack loading to obtain the size, allocate one
+  uninitialized character buffer, and read directly into it in one call.
+  Stdin and unsized sources retain the bulk-read fallback. Whole-input
+  publication and reset behavior remain. The app and focused targets compile;
+  runtime tests and timings were not run.
+
+2026-09-04T21:40:36Z
+- Removed the redundant file-open check from `Haystack::make`. The filename
+  factory now opens and loads once and returns open/read errors immediately.
+  The app and focused targets compile; runtime tests were not run.

@@ -1,6 +1,7 @@
 #ifndef COTTONTAIL_REGEXP_HAYSTACK_H_
 #define COTTONTAIL_REGEXP_HAYSTACK_H_
 
+#include <istream>
 #include <memory>
 #include <string>
 
@@ -16,6 +17,14 @@ public:
   static std::shared_ptr<Haystack> make(const std::string &filename,
                                         std::string *error = nullptr);
   static std::shared_ptr<Haystack> make_stdin(std::string *error = nullptr);
+
+  // Streams are one-shot. Their lifetime is retained by the Haystack.
+  static std::shared_ptr<Haystack>
+  make(std::shared_ptr<std::istream> input, std::string *error = nullptr);
+  // A replayable, zero-copy view retaining immutable shared storage.
+  static std::shared_ptr<Haystack>
+  make(std::shared_ptr<const char> buffer, std::size_t size,
+       std::string *error = nullptr);
 
   virtual ~Haystack() = default;
 

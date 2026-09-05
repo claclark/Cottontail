@@ -13,7 +13,13 @@ before adding command-line features.
 
 The first library and command-line cut is implemented. `regexp/haystack.*`
 defines the replaceable byte-source interface and a whole-input file/stdin
-implementation. `regexp/cgrep.*` compiles the public transition NFA into an
+implementation. Seekable files are sized first, allocated once as an
+uninitialized `char[]`, and read directly into that buffer in one stream read.
+The filename factory opens and loads the input once, reporting open or read
+errors immediately; it does not do a preliminary open check.
+Stdin and unsized inputs use 64 KiB bulk reads into a growing string. Both
+expose the complete input as one chunk; there is no rolling-buffer management
+yet. `regexp/cgrep.*` compiles the public transition NFA into an
 opaque immutable flattened dispatch table and permits that table to be shared
 by several runners. `Cgrep` returns raw shortest-substring intervals
 immediately; `LineCgrep` has its own byte loop and state vectors, queues
@@ -25,13 +31,16 @@ only when strict JSON rejects a byte string.
 `//test:cgrep_test` supplies arbitrary chunk layouts and differential cases
 against the reference matcher. `//test:cgrep_app_test` registers the end-to-end
 JSONL script through the testing-only `rules_shell` module dependency. The
-focused targets pass, and all Bazel targets compile.
+focused targets passed at the preceding checkpoint, and all Bazel targets
+compiled. The raw literal specialization described below has been
+compile-checked with the app and focused C++ target; its new tests have not
+been run by the agent.
 
 ## Scope of the First Cut
 
 The first command line is deliberately narrow:
 
-    cgrep [--lines n | --raw n] regexp [file...]
+    cgrep [--lines n | --raw n] [--springy | --no-springy] [--no-match] regexp [file...]
 
 The default policy is `--lines 4`. Line mode returns the exact byte interval
 and, when the match touches at most `n` lines, their complete text plus one-based
@@ -60,6 +69,22 @@ Unicode columns. `lines` contains exactly the complete lines touched by the
 match, including a terminating LF when present. If a match exceeds the active
 limit, its text and derived coordinates are omitted but `p` and `q` remain.
 Raw mode names its included text `match`.
+
+`--springy` enables the raw literal specialization and is the default.
+`--no-springy` forces raw searches through the general bytewise dispatch
+runner for comparison. The last of these switches wins; they do not change
+the output mode or limit. Use `--raw n` to select raw mode. Line mode and
+nonliteral regexps continue to use the general runner in either case.
+
+Both raw runners use the same JSONL output path. A temporary direct C++ stream
+output experiment was reverted after the user reported that JSON generation
+was not the performance problem.
+
+`--no-match` measures the input path: it retains normal regexp compilation,
+opens each input, and consumes all Haystack chunks without constructing a
+matcher, translating text, or producing output. The regexp argument is still
+required, so the flag can be added to an existing command. Successful loading
+returns zero; compilation or input errors return two. It also works on stdin.
 
 The `file` member is omitted for standard input. The existing
 `nlohmann::json` serializer should be given the filename and match as ordinary
@@ -312,7 +337,42 @@ The compiler must validate source states, destination states, and symbol
 bounds defensively. Public NFAs are compactly numbered already, so a dense row
 index is appropriate.
 
-## Fast Runner
+## Raw Literal Runner
+
+Compilation recognizes an NFA consisting entirely of a single chain of
+singleton ordinary-byte transitions and reduces it to a `std::string` in the
+immutable machine. Raw `Cgrep` selects the literal runner for that string.
+Other NFAs and `LineCgrep` use the existing dispatch runner.
+The optional `springy` argument to `Cgrep::compile` defaults to true; false
+skips literal specialization while retaining the same dispatch machine.
+
+The literal runner seeks each byte in order with `memchr`, consuming further
+Haystack chunks as needed. It keeps the first byte's absolute position while
+seeking, then rebases that position into the retained contiguous history when
+the final byte is found. A backward pass through the preceding literal bytes
+uses `memrchr` on glibc, with a reverse byte loop elsewhere, to find the latest
+start `p` for that endpoint `q`. The interval is an exact match if and only if
+`q - p + 1` equals the literal length: all required bytes are already known to
+occur in order, so equality excludes gaps.
+
+After an unsuccessful backward check, search resumes at `p + 1`, including
+within retained history before the current chunk. An exact match instead
+advances by the literal's smallest self-overlap shift, computed once during
+compilation: `aaa` shifts by one, `aba` by two, and `abc` by three. The runner
+calls `limit(p - 1)` immediately. A successful match retains its first byte for
+translation until the next `match()` call, which may advance the limit through
+the byte preceding the next search position. Forward seeking retains partial
+candidates across chunks; when no first byte has been found, completed chunks
+can be released. Clean EOF releases the remaining history.
+
+Focused coverage checks tightening and reclamation, failed candidates,
+overlaps, UTF-8 and NUL literals, and one-byte and split chunks. The test
+Haystack can relocate and trim its retained buffer on every publication and
+reject translations outside the retained range. This is the first springy
+matching experiment; general springy NFA execution and timings remain future
+work.
+
+## General Dispatch Runner
 
 For each active NFA state, the runner records the greatest start offset of a
 path reaching that state. It uses preallocated arrays indexed by compact state

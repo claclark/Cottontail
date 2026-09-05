@@ -1,8 +1,10 @@
 #ifndef COTTONTAIL_REGEXP_CGREP_H_
 #define COTTONTAIL_REGEXP_CGREP_H_
 
+#include <istream>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "regexp/haystack.h"
@@ -12,22 +14,39 @@
 namespace cottontail {
 namespace regexp {
 
-class LineCgrep;
-
-// Stateful shortest-substring matching over a Haystack.
+// Source-independent shortest-substring matching.
 class Cgrep {
 public:
   struct Machine;
 
-  // Compile once and share the immutable machine between runners.
+  // Validate the NFA once. Runners lazily compile their immutable machines.
   static std::shared_ptr<const Machine> compile(const std::string &expression,
-                                                std::string *error = nullptr);
+                                                std::string *error = nullptr,
+                                                bool springy = true);
   static std::shared_ptr<const Machine>
-  compile(const std::vector<transition> &nfa, std::string *error = nullptr);
+  compile(const std::vector<transition> &nfa, std::string *error = nullptr,
+          bool springy = true);
 
   static std::shared_ptr<Cgrep> make(std::shared_ptr<const Machine> machine,
                                      std::shared_ptr<Haystack> haystack,
                                      std::string *error = nullptr);
+  static std::shared_ptr<Cgrep> make(std::shared_ptr<const Machine> machine,
+                                     const std::string &filename,
+                                     std::string *error = nullptr);
+  static std::shared_ptr<Cgrep> make(std::shared_ptr<const Machine> machine,
+                                     std::shared_ptr<std::istream> input,
+                                     std::string *error = nullptr);
+
+  // Shared storage is retained for the matcher's lifetime and must not change.
+  static std::shared_ptr<Cgrep> make(std::shared_ptr<const Machine> machine,
+                                     std::shared_ptr<const char> buffer,
+                                     std::size_t size,
+                                     std::string *error = nullptr);
+  // An unowned byte range is copied into storage owned by the matcher.
+  static std::shared_ptr<Cgrep> make(std::shared_ptr<const Machine> machine,
+                                     const char *buffer, std::size_t size,
+                                     std::string *error = nullptr);
+
   static std::shared_ptr<Cgrep> make(const std::string &expression,
                                      std::shared_ptr<Haystack> haystack,
                                      std::string *error = nullptr);
@@ -36,48 +55,38 @@ public:
                                      std::string *error = nullptr);
 
   // Return the next zero-based inclusive byte interval.
-  bool match(addr *p, addr *q);
-
+  bool match(addr *p, addr *q) { return match_(p, q); }
   std::string translate(addr p, addr q);
-  bool translate(addr p, addr q, const char **start, const char **end);
+  // A half-open view, valid until the next match, pointer translation, or
+  // reset.
+  bool translate(addr p, addr q, const char **start, const char **end) {
+    return translate_(p, q, start, end);
+  }
+  bool reset(std::string *error = nullptr) { return reset_(error); }
+  bool success(std::string *error = nullptr) { return success_(error); }
 
-  bool reset(std::string *error = nullptr);
-  bool success(std::string *error = nullptr);
-
+  virtual ~Cgrep() {}
   Cgrep(const Cgrep &) = delete;
   Cgrep &operator=(const Cgrep &) = delete;
   Cgrep(Cgrep &&) = delete;
   Cgrep &operator=(Cgrep &&) = delete;
 
-private:
-  Cgrep(std::shared_ptr<const Machine> machine,
-        std::shared_ptr<Haystack> haystack);
+protected:
+  explicit Cgrep(std::shared_ptr<Haystack> haystack)
+      : haystack_(std::move(haystack)) {}
+  Cgrep(std::shared_ptr<const char> buffer, std::size_t size)
+      : buffer_(std::move(buffer)), size_(size) {}
 
-  bool consume(symbol value, addr end, addr *accepted_start);
-  bool candidate(addr start, addr end, addr *p, addr *q);
-  bool next_chunk();
-  void advance_limit(addr x);
-  void fail(const std::string &message);
-  void initialize();
-  void prune(addr p);
-
-  std::shared_ptr<const Machine> machine_;
   std::shared_ptr<Haystack> haystack_;
-  std::vector<addr> starts_;
-  std::vector<addr> next_starts_;
-  std::vector<state> active_;
-  std::vector<state> next_active_;
-  const char *current_ = nullptr;
-  const char *end_ = nullptr;
-  addr offset_ = 0;
-  addr largest_start_ = 0;
-  addr pending_limit_ = 0;
-  addr limited_through_ = -1;
-  std::string error_;
-  bool started_ = false;
-  bool ended_ = false;
-  bool have_largest_start_ = false;
-  bool have_pending_limit_ = false;
+  std::shared_ptr<const char> buffer_;
+  std::size_t size_ = 0;
+
+private:
+  virtual bool match_(addr *p, addr *q) = 0;
+  virtual bool translate_(addr p, addr q, const char **start,
+                          const char **end) = 0;
+  virtual bool reset_(std::string *error) = 0;
+  virtual bool success_(std::string *error) = 0;
 };
 
 // Shortest-substring matching reported as complete lines. The raw match is

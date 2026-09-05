@@ -1,14 +1,19 @@
 #include <algorithm>
 #include <limits>
 #include <memory>
+#include <sstream>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
 
 #include "gtest/gtest.h"
 
+#include "regexp/buffer_cgrep.h"
 #include "regexp/cgrep.h"
+#include "regexp/cgrep_internal.h"
 #include "regexp/haystack.h"
+#include "regexp/haystack_cgrep.h"
 #include "regexp/nfa.h"
 
 namespace {
@@ -16,9 +21,10 @@ namespace {
 class StringHaystack final : public cottontail::regexp::Haystack {
 public:
   StringHaystack(std::string text, std::vector<std::size_t> ends = {},
-                 bool replayable = true, std::size_t fail_at = no_failure)
+                 bool replayable = true, std::size_t fail_at = no_failure,
+                 bool relocate = false)
       : text_(std::move(text)), ends_(std::move(ends)), replayable_(replayable),
-        fail_at_(fail_at) {
+        fail_at_(fail_at), relocate_(relocate) {
     if (ends_.empty() || ends_.back() < text_.size())
       ends_.push_back(text_.size());
   }
@@ -33,8 +39,16 @@ public:
       std::size_t next = std::min(ends_[chunk_++], text_.size());
       if (next <= offset_)
         continue;
-      *start = text_.data() + offset_;
-      *end = text_.data() + next;
+      if (relocate_) {
+        base_ = static_cast<std::size_t>(limit_ + 1);
+        std::vector<char> window(text_.begin() + base_, text_.begin() + next);
+        window_.swap(window);
+        *start = window_.data() + (offset_ - base_);
+        *end = window_.data() + window_.size();
+      } else {
+        *start = text_.data() + offset_;
+        *end = text_.data() + next;
+      }
       offset_ = next;
       return true;
     }
@@ -55,8 +69,17 @@ public:
       error_ = "Translation outside StringHaystack";
       return false;
     }
-    *start = text_.data() + p;
-    *end = text_.data() + q + 1;
+    if (relocate_) {
+      if (p <= limit_ || static_cast<std::size_t>(q) >= offset_) {
+        error_ = "Translation outside retained StringHaystack";
+        return false;
+      }
+      *start = window_.data() + (p - static_cast<cottontail::addr>(base_));
+      *end = window_.data() + (q - static_cast<cottontail::addr>(base_)) + 1;
+    } else {
+      *start = text_.data() + p;
+      *end = text_.data() + q + 1;
+    }
     return true;
   }
 
@@ -75,6 +98,8 @@ public:
     chunk_ = 0;
     limit_ = -1;
     limits_.clear();
+    window_.clear();
+    base_ = 0;
     touched_ = false;
     error_.clear();
     return true;
@@ -104,25 +129,35 @@ private:
   bool touched_ = false;
   bool replayable_;
   std::size_t fail_at_;
+  bool relocate_;
+  std::vector<char> window_;
+  std::size_t base_ = 0;
 };
 
 std::vector<std::pair<std::size_t, std::size_t>>
 matches(const std::string &expression, const std::string &text,
-        const std::vector<std::size_t> &ends = {}) {
-  std::shared_ptr<StringHaystack> haystack =
-      std::make_shared<StringHaystack>(text, ends);
+        const std::vector<std::size_t> &ends = {}, bool relocate = false,
+        bool springy = true) {
+  std::shared_ptr<StringHaystack> haystack = std::make_shared<StringHaystack>(
+      text, ends, true, StringHaystack::no_failure, relocate);
   std::string error;
+  auto machine =
+      cottontail::regexp::Cgrep::compile(expression, &error, springy);
   std::shared_ptr<cottontail::regexp::Cgrep> matcher =
-      cottontail::regexp::Cgrep::make(expression, haystack, &error);
+      cottontail::regexp::Cgrep::make(machine, haystack, &error);
   EXPECT_NE(matcher, nullptr) << error;
   if (matcher == nullptr)
     return {};
   std::vector<std::pair<std::size_t, std::size_t>> answer;
   cottontail::addr p;
   cottontail::addr q;
-  while (matcher->match(&p, &q))
+  while (matcher->match(&p, &q)) {
     answer.emplace_back(static_cast<std::size_t>(p),
                         static_cast<std::size_t>(q));
+    if (relocate) {
+      EXPECT_EQ(matcher->translate(p, q), text.substr(p, q - p + 1));
+    }
+  }
   EXPECT_TRUE(matcher->success(&error)) << error;
   return answer;
 }
@@ -135,6 +170,28 @@ void expect_reference(const std::string &expression, const std::string &text,
   ASSERT_FALSE(machine.empty()) << error;
   EXPECT_EQ(matches(expression, text, ends),
             cottontail::regexp::match(machine, text));
+}
+
+std::vector<std::pair<std::size_t, std::size_t>>
+buffer_matches(const std::string &expression, const std::string &text,
+               bool springy = true) {
+  std::string error;
+  auto machine =
+      cottontail::regexp::Cgrep::compile(expression, &error, springy);
+  auto matcher = cottontail::regexp::Cgrep::make(machine, text.data(),
+                                                 text.size(), &error);
+  EXPECT_NE(matcher, nullptr) << error;
+  if (matcher == nullptr)
+    return {};
+  std::vector<std::pair<std::size_t, std::size_t>> answer;
+  cottontail::addr p;
+  cottontail::addr q;
+  while (matcher->match(&p, &q)) {
+    answer.emplace_back(p, q);
+    EXPECT_EQ(matcher->translate(p, q), text.substr(p, q - p + 1));
+  }
+  EXPECT_TRUE(matcher->success(&error)) << error;
+  return answer;
 }
 
 struct LineAnswer {
@@ -229,7 +286,8 @@ TEST(CgrepTest, SharesImmutableMachine) {
 
 TEST(CgrepTest, TranslatesAndResets) {
   std::shared_ptr<StringHaystack> haystack = std::make_shared<StringHaystack>(
-      "a cat b", std::vector<std::size_t>{3, 7});
+      "a cat b", std::vector<std::size_t>{3, 7}, true,
+      StringHaystack::no_failure, true);
   std::string error;
   std::shared_ptr<cottontail::regexp::Cgrep> matcher =
       cottontail::regexp::Cgrep::make("cat", haystack, &error);
@@ -262,8 +320,7 @@ TEST(CgrepTest, AdvancesRawLimitWithoutActiveStates) {
   EXPECT_FALSE(matcher->match(&p, &q));
   EXPECT_TRUE(matcher->success(&error)) << error;
   EXPECT_EQ(haystack->limit(), 5);
-  EXPECT_EQ(haystack->limits(),
-            (std::vector<cottontail::addr>{1, 5}));
+  EXPECT_EQ(haystack->limits(), (std::vector<cottontail::addr>{1, 5}));
 }
 
 TEST(CgrepTest, AdvancesLimitWhenActiveStatesDisappear) {
@@ -271,14 +328,67 @@ TEST(CgrepTest, AdvancesLimitWhenActiveStatesDisappear) {
       std::make_shared<StringHaystack>("abbbbb");
   std::string error;
   std::shared_ptr<cottontail::regexp::Cgrep> matcher =
-      cottontail::regexp::Cgrep::make("az", haystack, &error);
+      cottontail::regexp::Cgrep::make("a[yz]", haystack, &error);
   ASSERT_NE(matcher, nullptr) << error;
   cottontail::addr p;
   cottontail::addr q;
   EXPECT_FALSE(matcher->match(&p, &q));
   EXPECT_TRUE(matcher->success(&error)) << error;
-  EXPECT_EQ(haystack->limits(),
-            (std::vector<cottontail::addr>{1, 5}));
+  EXPECT_EQ(haystack->limits(), (std::vector<cottontail::addr>{1, 5}));
+}
+
+TEST(CgrepTest, TightensBufferLiteralCandidates) {
+  std::string text = "a__ab_c__abcabc";
+  std::string error;
+  auto machine = cottontail::regexp::Cgrep::compile("abc", &error);
+  auto matcher = cottontail::regexp::Cgrep::make(machine, text.data(),
+                                                 text.size(), &error);
+  ASSERT_NE(matcher, nullptr) << error;
+  cottontail::addr p;
+  cottontail::addr q;
+  ASSERT_TRUE(matcher->match(&p, &q));
+  EXPECT_EQ(p, 9);
+  EXPECT_EQ(q, 11);
+  EXPECT_EQ(matcher->translate(p, q), "abc");
+  ASSERT_TRUE(matcher->match(&p, &q));
+  EXPECT_EQ(p, 12);
+  EXPECT_EQ(q, 14);
+  EXPECT_EQ(matcher->translate(p, q), "abc");
+  EXPECT_FALSE(matcher->match(&p, &q));
+  EXPECT_TRUE(matcher->success(&error)) << error;
+}
+
+TEST(CgrepTest, MatchesLiteralsAcrossRelocatedAndTrimmedChunks) {
+  std::vector<std::pair<std::string, std::string>> cases = {
+      {"abc", "a__ab_c__abcabc"},
+      {"abc", "a_b_ca_b_c"},
+      {"abc", "ab"},
+      {"abc", "zzz"},
+      {"abc", ""},
+      {"aba", "ababababa"},
+      {"aaa", "aaaaaaa"},
+      {"a", "aaaa"},
+      {"a\\x00b", std::string("a\0_ba\0b", 7)},
+      {"café", "c___afé café café"},
+      {"中国🤖", "中__国🤖中国🤖中国🤖"}};
+  for (const auto &[expression, text] : cases) {
+    SCOPED_TRACE(expression);
+    std::string error;
+    auto machine = cottontail::regexp::nfa(expression, &error);
+    ASSERT_FALSE(machine.empty()) << error;
+    auto expected = cottontail::regexp::match(machine, text);
+    EXPECT_EQ(buffer_matches(expression, text), expected);
+    EXPECT_EQ(buffer_matches(expression, text, false), expected);
+    EXPECT_EQ(matches(expression, text, {}, true), expected);
+    std::vector<std::size_t> one_byte;
+    for (std::size_t i = 1; i <= text.size(); i++)
+      one_byte.push_back(i);
+    EXPECT_EQ(matches(expression, text, one_byte, true), expected);
+    EXPECT_EQ(matches(expression, text, one_byte, true, false), expected);
+    for (std::size_t split = 1; split < text.size(); split++)
+      EXPECT_EQ(matches(expression, text, {split, text.size()}, true),
+                expected);
+  }
 }
 
 TEST(CgrepTest, ReportsCompleteLinesAndQueuesSameLineMatches) {
@@ -350,8 +460,7 @@ TEST(CgrepTest, AdvancesLineLimitWithoutActiveStates) {
   EXPECT_FALSE(matcher->match(&match));
   EXPECT_TRUE(matcher->success(&error)) << error;
   EXPECT_EQ(haystack->limit(), 5);
-  EXPECT_EQ(haystack->limits(),
-            (std::vector<cottontail::addr>{5}));
+  EXPECT_EQ(haystack->limits(), (std::vector<cottontail::addr>{5}));
 }
 
 TEST(CgrepTest, RejectsResetOfConsumedOneShotInput) {
@@ -396,6 +505,253 @@ TEST(CgrepTest, RejectsInvalidTranslation) {
   EXPECT_EQ(matcher->translate(0, 1), "");
   EXPECT_FALSE(matcher->success(&error));
   EXPECT_NE(error.find("Translation outside"), std::string::npos);
+}
+
+TEST(CgrepTest, BufferMatchesEveryByteValue) {
+  std::string text;
+  for (unsigned int byte = 0; byte < 256; byte++)
+    text.push_back(static_cast<char>(byte));
+  text += text;
+  for (unsigned int byte = 0; byte < 256; byte++) {
+    SCOPED_TRACE(byte);
+    std::vector<cottontail::regexp::transition> transitions = {
+        {cottontail::regexp::start_state,
+         cottontail::regexp::final_state,
+         {static_cast<cottontail::regexp::symbol>(byte)}}};
+    std::string error;
+    auto bundle = cottontail::regexp::Cgrep::compile(transitions, &error);
+    ASSERT_NE(bundle, nullptr) << error;
+    auto matcher = cottontail::regexp::Cgrep::make(bundle, text.data(),
+                                                   text.size(), &error);
+    ASSERT_NE(matcher, nullptr) << error;
+    cottontail::addr p;
+    cottontail::addr q;
+    ASSERT_TRUE(matcher->match(&p, &q));
+    EXPECT_EQ(p, byte);
+    EXPECT_EQ(q, byte);
+    ASSERT_TRUE(matcher->match(&p, &q));
+    EXPECT_EQ(p, byte + 256);
+    EXPECT_EQ(q, byte + 256);
+    EXPECT_EQ(matcher->translate(p, q),
+              std::string(1, static_cast<char>(byte)));
+    EXPECT_FALSE(matcher->match(&p, &q));
+    EXPECT_TRUE(matcher->success(&error));
+  }
+}
+
+TEST(CgrepTest, BufferFallbackMatchesReference) {
+  std::vector<std::pair<std::string, std::string>> cases = {
+      {"a.*b", "a_a_b a_b"},
+      {"ab|bc", "abcabc"},
+      {"[a-c]+d", "abcd abd bcd"},
+      {"^a.*b$", "a\nb"},
+      {"^$", ""},
+      {"^", "abc"},
+      {"$", "abc"},
+      {"\\n.*\\n&.*[Tt]he [Tt]he.*", "\nThe The\nthe the\n"}};
+  for (const auto &[expression, text] : cases) {
+    SCOPED_TRACE(expression);
+    std::string error;
+    auto nfa = cottontail::regexp::nfa(expression, &error);
+    ASSERT_FALSE(nfa.empty()) << error;
+    EXPECT_EQ(buffer_matches(expression, text),
+              cottontail::regexp::match(nfa, text));
+  }
+}
+
+TEST(CgrepTest, OwnsBufferThroughSpecializationAndFallback) {
+  for (const std::string expression : {"cat", "c.t"}) {
+    SCOPED_TRACE(expression);
+    std::string error = "untouched";
+    auto machine = cottontail::regexp::Cgrep::compile(expression, &error);
+    auto storage = std::make_shared<const std::string>("a cat b");
+    std::weak_ptr<const std::string> owner = storage;
+    const char *data = storage->data();
+    std::shared_ptr<const char> buffer(storage, data);
+    auto matcher = cottontail::regexp::Cgrep::make(machine, buffer, 7, &error);
+    ASSERT_NE(matcher, nullptr) << error;
+    storage.reset();
+    buffer.reset();
+    EXPECT_FALSE(owner.expired());
+    cottontail::addr p;
+    cottontail::addr q;
+    ASSERT_TRUE(matcher->match(&p, &q));
+    EXPECT_EQ(p, 2);
+    EXPECT_EQ(q, 4);
+    const char *start;
+    const char *end;
+    ASSERT_TRUE(matcher->translate(p, q, &start, &end));
+    EXPECT_EQ(start, data + 2);
+    EXPECT_EQ(end, data + 5);
+    std::string copy = matcher->translate(p, q);
+    EXPECT_FALSE(matcher->match(&p, &q));
+    ASSERT_TRUE(matcher->reset(&error)) << error;
+    EXPECT_TRUE(matcher->match(&p, &q));
+    EXPECT_TRUE(matcher->success(&error));
+    EXPECT_EQ(error, "untouched");
+    matcher.reset();
+    EXPECT_TRUE(owner.expired());
+    EXPECT_EQ(copy, "cat");
+  }
+}
+
+TEST(CgrepTest, CopiesUnownedBuffersAndHandlesEmptyInput) {
+  std::string error;
+  auto machine = cottontail::regexp::Cgrep::compile("cat", &error);
+  char text[] = "cat";
+  auto matcher = cottontail::regexp::Cgrep::make(machine, text, 3, &error);
+  ASSERT_NE(matcher, nullptr);
+  text[0] = 'b';
+  cottontail::addr p;
+  cottontail::addr q;
+  ASSERT_TRUE(matcher->match(&p, &q));
+  EXPECT_EQ(matcher->translate(p, q), "cat");
+  auto empty = cottontail::regexp::Cgrep::make(
+      machine, static_cast<const char *>(nullptr), 0, &error);
+  ASSERT_NE(empty, nullptr) << error;
+  EXPECT_FALSE(empty->match(&p, &q));
+  EXPECT_TRUE(empty->success(&error));
+  EXPECT_TRUE(empty->reset(&error));
+  EXPECT_FALSE(empty->match(&p, &q));
+  EXPECT_EQ(cottontail::regexp::Cgrep::make(
+                machine, static_cast<const char *>(nullptr), 1, &error),
+            nullptr);
+}
+
+TEST(CgrepTest, BufferErrorsAreStickyAndResettable) {
+  for (const std::string expression : {"cat", "c.t"}) {
+    SCOPED_TRACE(expression);
+    std::string error;
+    auto machine = cottontail::regexp::Cgrep::compile(expression, &error);
+    auto matcher = cottontail::regexp::Cgrep::make(machine, "cat", 3, &error);
+    ASSERT_NE(matcher, nullptr);
+    cottontail::addr p;
+    cottontail::addr q;
+    ASSERT_TRUE(matcher->match(&p, &q));
+    EXPECT_EQ(matcher->translate(-1, 2), "");
+    EXPECT_FALSE(matcher->success(&error));
+    EXPECT_FALSE(matcher->match(&p, &q));
+    ASSERT_TRUE(matcher->reset());
+    EXPECT_TRUE(matcher->match(&p, &q));
+    const char *start;
+    EXPECT_FALSE(matcher->translate(0, 2, &start, nullptr));
+    EXPECT_FALSE(matcher->success());
+    ASSERT_TRUE(matcher->reset());
+    EXPECT_FALSE(matcher->match(nullptr, &q));
+    EXPECT_FALSE(matcher->success());
+    ASSERT_TRUE(matcher->reset());
+    EXPECT_TRUE(matcher->match(&p, &q));
+  }
+}
+
+TEST(CgrepTest, StreamFactoryRetainsOneShotSource) {
+  std::string error = "untouched";
+  auto machine = cottontail::regexp::Cgrep::compile("cat", &error);
+  auto input = std::make_shared<std::istringstream>("cat cat");
+  std::weak_ptr<std::istream> owner = input;
+  auto matcher = cottontail::regexp::Cgrep::make(machine, input, &error);
+  ASSERT_NE(matcher, nullptr) << error;
+  EXPECT_NE(dynamic_cast<cottontail::regexp::HaystackCgrep *>(matcher.get()),
+            nullptr);
+  input.reset();
+  EXPECT_FALSE(owner.expired());
+  EXPECT_TRUE(matcher->reset(&error));
+  EXPECT_EQ(error, "untouched");
+  cottontail::addr p;
+  cottontail::addr q;
+  ASSERT_TRUE(matcher->match(&p, &q));
+  EXPECT_EQ(matcher->translate(p, q), "cat");
+  EXPECT_FALSE(matcher->reset(&error));
+  EXPECT_NE(error.find("one-shot"), std::string::npos);
+  ASSERT_TRUE(matcher->match(&p, &q));
+  EXPECT_EQ(p, 4);
+  EXPECT_EQ(q, 6);
+  EXPECT_FALSE(matcher->match(&p, &q));
+  EXPECT_TRUE(matcher->success());
+  matcher.reset();
+  EXPECT_TRUE(owner.expired());
+}
+
+TEST(CgrepTest, CompilesOnlyRequiredMachinesAndReusesThem) {
+  std::string error;
+  auto bundle = cottontail::regexp::Cgrep::compile("cat", &error);
+  ASSERT_NE(bundle, nullptr);
+  EXPECT_EQ(bundle->buffer, nullptr);
+  EXPECT_EQ(bundle->haystack, nullptr);
+  auto first = cottontail::regexp::Cgrep::make(bundle, "cat", 3, &error);
+  ASSERT_NE(first, nullptr) << error;
+  EXPECT_NE(dynamic_cast<cottontail::regexp::BufferCgrep *>(first.get()),
+            nullptr);
+  EXPECT_NE(bundle->buffer, nullptr);
+  EXPECT_EQ(bundle->haystack, nullptr);
+  auto compiled_buffer = bundle->buffer;
+  auto second = cottontail::regexp::Cgrep::make(bundle, "cat", 3, &error);
+  EXPECT_EQ(bundle->buffer, compiled_buffer);
+  auto raw = cottontail::regexp::Cgrep::make(
+      bundle, std::make_shared<StringHaystack>("cat"), &error);
+  ASSERT_NE(raw, nullptr);
+  auto compiled_haystack = bundle->haystack;
+  EXPECT_NE(compiled_haystack, nullptr);
+  auto lines = cottontail::regexp::LineCgrep::make(
+      bundle, std::make_shared<StringHaystack>("cat"), 4, &error);
+  ASSERT_NE(lines, nullptr);
+  EXPECT_EQ(bundle->haystack, compiled_haystack);
+  EXPECT_EQ(bundle->buffer, compiled_buffer);
+
+  auto disabled = cottontail::regexp::Cgrep::compile("cat", &error, false);
+  auto fallback = cottontail::regexp::Cgrep::make(disabled, "cat", 3, &error);
+  ASSERT_NE(fallback, nullptr);
+  EXPECT_NE(dynamic_cast<cottontail::regexp::HaystackCgrep *>(fallback.get()),
+            nullptr);
+  EXPECT_NE(disabled->buffer, nullptr);
+  EXPECT_NE(disabled->haystack, nullptr);
+}
+
+TEST(CgrepTest, ConcurrentLazyCompilationAndIndependentRunners) {
+  for (const std::string expression : {"cat", "c.t"}) {
+    SCOPED_TRACE(expression);
+    std::string error;
+    auto bundle = cottontail::regexp::Cgrep::compile(expression, &error);
+    ASSERT_NE(bundle, nullptr);
+    std::vector<std::thread> workers;
+    for (int i = 0; i < 12; i++)
+      workers.emplace_back([bundle, i]() {
+        std::string error = "untouched";
+        if (i % 3 == 2) {
+          auto matcher = cottontail::regexp::LineCgrep::make(
+              bundle, std::make_shared<StringHaystack>("a cat\n"), 4, &error);
+          ASSERT_NE(matcher, nullptr) << error;
+          cottontail::regexp::LineCgrep::Match result;
+          ASSERT_TRUE(matcher->match(&result));
+          EXPECT_EQ(result.p, 2);
+          EXPECT_EQ(result.q, 4);
+          EXPECT_EQ(matcher->translate(result), "a cat\n");
+          EXPECT_FALSE(matcher->match(&result));
+          EXPECT_TRUE(matcher->success(&error));
+        } else {
+          auto matcher =
+              i % 3 == 0
+                  ? cottontail::regexp::Cgrep::make(bundle, "a cat", 5, &error)
+                  : cottontail::regexp::Cgrep::make(
+                        bundle, std::make_shared<StringHaystack>("a cat"),
+                        &error);
+          ASSERT_NE(matcher, nullptr) << error;
+          cottontail::addr p;
+          cottontail::addr q;
+          ASSERT_TRUE(matcher->match(&p, &q));
+          EXPECT_EQ(p, 2);
+          EXPECT_EQ(q, 4);
+          EXPECT_EQ(matcher->translate(p, q), "cat");
+          EXPECT_FALSE(matcher->match(&p, &q));
+          EXPECT_TRUE(matcher->success(&error));
+        }
+        EXPECT_EQ(error, "untouched");
+      });
+    for (auto &worker : workers)
+      worker.join();
+    EXPECT_NE(bundle->buffer, nullptr);
+    EXPECT_NE(bundle->haystack, nullptr);
+  }
 }
 
 TEST(CgrepTest, RejectsInvalidPublicMachine) {
