@@ -82,6 +82,7 @@ protected:
   std::size_t size_ = 0;
 
 private:
+  friend class LineCgrep;
   virtual bool match_(addr *p, addr *q) = 0;
   virtual bool translate_(addr p, addr q, const char **start,
                           const char **end) = 0;
@@ -110,6 +111,18 @@ public:
   make(std::shared_ptr<const Cgrep::Machine> machine,
        std::shared_ptr<Haystack> haystack, std::size_t lines,
        std::string *error = nullptr);
+  static std::shared_ptr<LineCgrep>
+  make(std::shared_ptr<const Cgrep::Machine> machine,
+       const std::string &filename, std::size_t lines,
+       std::string *error = nullptr);
+  static std::shared_ptr<LineCgrep>
+  make(std::shared_ptr<const Cgrep::Machine> machine,
+       std::shared_ptr<std::istream> input, std::size_t lines,
+       std::string *error = nullptr);
+  static std::shared_ptr<LineCgrep>
+  make(std::shared_ptr<const Cgrep::Machine> machine,
+       std::shared_ptr<const char> buffer, std::size_t size, std::size_t lines,
+       std::string *error = nullptr);
   static std::shared_ptr<LineCgrep> make(const std::string &expression,
                                          std::shared_ptr<Haystack> haystack,
                                          std::size_t lines,
@@ -136,6 +149,14 @@ public:
 
 private:
   struct Impl;
+  struct HaystackImpl;
+  struct BufferImpl;
+
+  static std::shared_ptr<LineCgrep>
+  from_raw(std::shared_ptr<const Cgrep::Machine> machine,
+           std::shared_ptr<Cgrep> raw, std::size_t lines, std::string *error);
+  static std::shared_ptr<LineCgrep> from_buffer(std::shared_ptr<Cgrep> raw,
+                                                std::size_t lines);
 
   explicit LineCgrep(std::unique_ptr<Impl> impl);
 

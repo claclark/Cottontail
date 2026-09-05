@@ -181,5 +181,40 @@ std::string Cgrep::translate(addr p, addr q) {
   return std::string(start, end);
 }
 
+std::shared_ptr<LineCgrep>
+LineCgrep::from_raw(std::shared_ptr<const Cgrep::Machine> machine,
+                    std::shared_ptr<Cgrep> raw, std::size_t lines,
+                    std::string *error) {
+  if (raw == nullptr)
+    return nullptr;
+  if (raw->buffer_ != nullptr)
+    return from_buffer(std::move(raw), lines);
+  return make(std::move(machine), raw->haystack_, lines, error);
+}
+
+std::shared_ptr<LineCgrep>
+LineCgrep::make(std::shared_ptr<const Cgrep::Machine> machine,
+                const std::string &filename, std::size_t lines,
+                std::string *error) {
+  auto raw = Cgrep::make(machine, filename, error);
+  return from_raw(std::move(machine), std::move(raw), lines, error);
+}
+
+std::shared_ptr<LineCgrep>
+LineCgrep::make(std::shared_ptr<const Cgrep::Machine> machine,
+                std::shared_ptr<std::istream> input, std::size_t lines,
+                std::string *error) {
+  auto raw = Cgrep::make(machine, std::move(input), error);
+  return from_raw(std::move(machine), std::move(raw), lines, error);
+}
+
+std::shared_ptr<LineCgrep>
+LineCgrep::make(std::shared_ptr<const Cgrep::Machine> machine,
+                std::shared_ptr<const char> buffer, std::size_t size,
+                std::size_t lines, std::string *error) {
+  auto raw = Cgrep::make(machine, std::move(buffer), size, error);
+  return from_raw(std::move(machine), std::move(raw), lines, error);
+}
+
 } // namespace regexp
 } // namespace cottontail

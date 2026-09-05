@@ -271,7 +271,7 @@ void HaystackCgrep::fail(const std::string &message) {
     error_ = message;
 }
 
-struct LineCgrep::Impl final {
+struct LineCgrep::HaystackImpl final : LineCgrep::Impl {
   struct Line {
     addr p;
     addr q;
@@ -283,8 +283,8 @@ struct LineCgrep::Impl final {
     addr q;
   };
 
-  Impl(std::shared_ptr<const HaystackCgrep::Machine> machine,
-       std::shared_ptr<Haystack> haystack, std::size_t limit)
+  HaystackImpl(std::shared_ptr<const HaystackCgrep::Machine> machine,
+               std::shared_ptr<Haystack> haystack, std::size_t limit)
       : machine(std::move(machine)), haystack(std::move(haystack)),
         line_limit(limit) {
     initialize();
@@ -582,8 +582,9 @@ LineCgrep::make(std::shared_ptr<const Cgrep::Machine> machine,
     safe_error(error) = "LineCgrep needs a Haystack";
     return nullptr;
   }
-  return std::shared_ptr<LineCgrep>(new LineCgrep(std::make_unique<Impl>(
-      HaystackCgrep::machine(std::move(machine)), std::move(haystack), lines)));
+  return std::shared_ptr<LineCgrep>(new LineCgrep(
+      std::make_unique<HaystackImpl>(HaystackCgrep::machine(std::move(machine)),
+                                     std::move(haystack), lines)));
 }
 
 std::shared_ptr<LineCgrep> LineCgrep::make(const std::string &expression,

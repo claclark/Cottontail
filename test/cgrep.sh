@@ -54,9 +54,9 @@ cmp actual.jsonl expected.jsonl || fail "bulk-read boundary output differs"
 printf '\377' > invalid.dat
 expect_status 0 "${cgrep}" '\xff' invalid.dat > actual.jsonl
 printf '%s\n' \
-  '{"end":{"line":1,"position":1},"file":"invalid.dat","lines_base64":"/w==","p":0,"q":0,"start":{"line":1,"position":1}}' \
+  '{"binary":true,"end":{"line":1,"position":1},"file":"invalid.dat","p":0,"q":0,"start":{"line":1,"position":1}}' \
   > expected.jsonl
-cmp actual.jsonl expected.jsonl || fail "Base64 JSONL differs"
+cmp actual.jsonl expected.jsonl || fail "invalid line text was not omitted"
 
 printf 'café 中国 🤖\n' > utf8.txt
 expect_status 0 "${cgrep}" '中国' utf8.txt > actual.jsonl
@@ -129,9 +129,9 @@ printf '%s\n' '{"file":"binary.dat","match":"a\u0000b","p":0,"q":2}' \
   > expected.jsonl
 cmp actual.jsonl expected.jsonl || fail "buffer NUL output differs"
 expect_status 0 "${cgrep}" --raw 0 '\xff' invalid.dat > actual.jsonl
-printf '%s\n' '{"file":"invalid.dat","match_base64":"/w==","p":0,"q":0}' \
+printf '%s\n' '{"binary":true,"file":"invalid.dat","p":0,"q":0}' \
   > expected.jsonl
-cmp actual.jsonl expected.jsonl || fail "buffer Base64 output differs"
+cmp actual.jsonl expected.jsonl || fail "invalid raw text was not omitted"
 
 expect_status 2 "${cgrep}" --raw 0 cat missing named.txt > actual.jsonl 2> error.txt
 printf '%s\n' \
@@ -139,6 +139,57 @@ printf '%s\n' \
   '{"file":"named.txt","match":"cat","p":4,"q":6}' > expected.jsonl
 cmp actual.jsonl expected.jsonl || fail "raw search did not continue after error"
 [[ -s error.txt ]] || fail "raw input error omitted diagnostic"
+
+expect_status 0 "${cgrep}" 'b\nc' limit.txt > actual.jsonl
+printf '%s\n' \
+  '{"end":{"line":3,"position":1},"file":"limit.txt","lines":"b\nc\n","p":2,"q":4,"start":{"line":2,"position":1}}' \
+  > expected.jsonl
+cmp actual.jsonl expected.jsonl || fail "fixed multiline coordinates differ"
+
+# Invalid context suppresses only that report's text, not the whole source.
+printf 'cat\ncat\377\ncat\n' > mixed.dat
+expect_status 0 "${cgrep}" cat mixed.dat > actual.jsonl
+printf '%s\n' \
+  '{"end":{"line":1,"position":3},"file":"mixed.dat","lines":"cat\n","p":0,"q":2,"start":{"line":1,"position":1}}' \
+  '{"binary":true,"end":{"line":2,"position":3},"file":"mixed.dat","p":4,"q":6,"start":{"line":2,"position":1}}' \
+  '{"end":{"line":3,"position":3},"file":"mixed.dat","lines":"cat\n","p":9,"q":11,"start":{"line":3,"position":1}}' \
+  > expected.jsonl
+cmp actual.jsonl expected.jsonl || fail "invalid context affected other matches"
+# A nonliteral machine follows the same reporting policy.
+expect_status 0 "${cgrep}" 'c.t' mixed.dat > actual.jsonl
+cmp actual.jsonl expected.jsonl || fail "fallback binary policy differs"
+printf 'cat\ncat\377\ncat\n' | "${cgrep}" cat > actual.jsonl
+[[ "$?" == 0 ]] || fail "mixed UTF-8 stream search failed"
+printf '%s\n' \
+  '{"end":{"line":1,"position":3},"lines":"cat\n","p":0,"q":2,"start":{"line":1,"position":1}}' \
+  '{"binary":true,"end":{"line":2,"position":3},"p":4,"q":6,"start":{"line":2,"position":1}}' \
+  '{"end":{"line":3,"position":3},"lines":"cat\n","p":9,"q":11,"start":{"line":3,"position":1}}' \
+  > expected.jsonl
+cmp actual.jsonl expected.jsonl || fail "stream binary policy differs"
+
+expect_status 0 "${cgrep}" --raw 0 'cat|\xff' mixed.dat > actual.jsonl
+printf '%s\n' \
+  '{"file":"mixed.dat","match":"cat","p":0,"q":2}' \
+  '{"file":"mixed.dat","match":"cat","p":4,"q":6}' \
+  '{"binary":true,"file":"mixed.dat","p":7,"q":7}' \
+  '{"file":"mixed.dat","match":"cat","p":9,"q":11}' > expected.jsonl
+cmp actual.jsonl expected.jsonl || fail "raw invalid bytes affected other matches"
+
+# A raw match can split a valid UTF-8 character; its complete line is valid.
+expect_status 0 "${cgrep}" --raw 0 '\xa9' utf8.txt > actual.jsonl
+printf '%s\n' '{"binary":true,"file":"utf8.txt","p":4,"q":4}' > expected.jsonl
+cmp actual.jsonl expected.jsonl || fail "partial UTF-8 raw match was printed"
+expect_status 0 "${cgrep}" '\xa9' utf8.txt > actual.jsonl
+printf '%s\n' \
+  '{"end":{"line":1,"position":5},"file":"utf8.txt","lines":"café 中国 🤖\n","p":4,"q":4,"start":{"line":1,"position":5}}' \
+  > expected.jsonl
+cmp actual.jsonl expected.jsonl || fail "valid UTF-8 context was suppressed"
+
+printf 'cat' > $'bad-\xff.txt'
+expect_status 0 "${cgrep}" --raw 0 cat $'bad-\xff.txt' > actual.jsonl
+printf '%s\n' '{"file_base64":"YmFkLf8udHh0","match":"cat","p":0,"q":2}' \
+  > expected.jsonl
+cmp actual.jsonl expected.jsonl || fail "filename Base64 fallback changed"
 
 expect_status 0 "${cgrep}" --help > help.txt
 grep -q -- '--lines' help.txt || fail "help omits line mode"

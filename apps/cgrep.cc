@@ -70,8 +70,7 @@ bool record(const std::string *filename, cottontail::addr p, cottontail::addr q,
     *output = ordinary.dump();
     return true;
   } catch (const nlohmann::json::exception &) {
-    // JSON strings must be UTF-8. Preserve only rejected byte strings through
-    // the explicitly marked Base64 fallback.
+    // Omit invalid result text, but preserve an invalid filename losslessly.
   }
 
   nlohmann::json fallback;
@@ -89,7 +88,7 @@ bool record(const std::string *filename, cottontail::addr p, cottontail::addr q,
     if (json_string(*text))
       fallback[text_field] = *text;
     else
-      fallback[std::string(text_field) + "_base64"] = base64(*text);
+      fallback["binary"] = true;
   }
   try {
     *output = fallback.dump();
@@ -115,6 +114,7 @@ void help(const char *program, std::ostream &output) {
             "Search files, or standard input when no files are given.\n"
             "Matches use shortest-substring byte-regexp semantics and are "
             "written as JSON Lines.\n\n"
+            "Invalid UTF-8 result text is omitted and marked binary.\n\n"
             "  --lines n  Line mode; report matches with their enclosing "
             "lines, up to n lines\n"
             "             (default: 4; 0 means unlimited)\n"
@@ -189,17 +189,9 @@ bool search_raw(
 
 bool search_lines(
     const char *program,
-    std::shared_ptr<const cottontail::regexp::Cgrep::Machine> machine,
-    std::shared_ptr<cottontail::regexp::Haystack> haystack,
-    const std::string *filename, std::size_t limit, bool *found) {
+    std::shared_ptr<cottontail::regexp::LineCgrep> matcher,
+    const std::string *filename, bool *found) {
   std::string error;
-  std::shared_ptr<cottontail::regexp::LineCgrep> matcher =
-      cottontail::regexp::LineCgrep::make(std::move(machine),
-                                          std::move(haystack), limit, &error);
-  if (matcher == nullptr) {
-    report(program, filename, error);
-    return false;
-  }
 
   cottontail::regexp::LineCgrep::Match match;
   while (matcher->match(&match)) {
@@ -242,15 +234,21 @@ bool search(const char *program,
     }
     return search_raw(program, std::move(matcher), filename, policy.limit, found);
   }
-  auto haystack = filename != nullptr
-                      ? cottontail::regexp::Haystack::make(*filename, &error)
-                      : cottontail::regexp::Haystack::make_stdin(&error);
-  if (haystack == nullptr) {
+  std::shared_ptr<cottontail::regexp::LineCgrep> matcher;
+  if (filename != nullptr)
+    matcher = cottontail::regexp::LineCgrep::make(
+        machine, *filename, policy.limit, &error);
+  else
+    matcher = cottontail::regexp::LineCgrep::make(
+        machine,
+        std::shared_ptr<std::istream>(&std::cin, [](std::istream *) {}),
+        policy.limit, &error);
+  if (matcher == nullptr) {
     report(program, filename, error);
     return false;
   }
-  return search_lines(program, std::move(machine), std::move(haystack),
-                      filename, policy.limit, found);
+  return search_lines(program, std::move(matcher),
+                      filename, found);
 }
 
 } // namespace

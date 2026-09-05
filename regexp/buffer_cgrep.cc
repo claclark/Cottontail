@@ -163,5 +163,102 @@ void BufferCgrep::fail(const std::string &message) {
     error_ = message;
 }
 
+struct LineCgrep::BufferImpl final : LineCgrep::Impl {
+  struct Line {
+    addr p = 0;
+    addr q = -1;
+    std::size_t number = 1;
+  };
+
+  BufferImpl(std::shared_ptr<Cgrep> raw, std::size_t limit)
+      : raw(std::move(raw)), line_limit(limit) {}
+
+  // Both endpoints advance monotonically. Cache each enclosing line so that
+  // repeated and overlapping matches do not rescan a long line.
+  void advance(Line *line, addr position) {
+    const char *buffer = raw->buffer_.get();
+    while (position > line->q) {
+      if (line->q >= 0) {
+        line->p = line->q + 1;
+        line->number++;
+      }
+      const char *lf = static_cast<const char *>(
+          std::memchr(buffer + line->p, '\n', raw->size_ - line->p));
+      line->q = lf == nullptr ? static_cast<addr>(raw->size_) - 1 : lf - buffer;
+    }
+  }
+
+  bool next(LineCgrep::Match *answer) final {
+    if (answer == nullptr) {
+      fail("LineCgrep::match got a null pointer");
+      return false;
+    }
+    if (!error.empty())
+      return false;
+    addr p;
+    addr q;
+    if (!raw->match(&p, &q))
+      return false;
+    advance(&first, p);
+    advance(&last, q);
+    *answer = LineCgrep::Match{p, q, 0, 0, 0, 0, 0, 0, false};
+    if (line_limit == 0 || last.number - first.number + 1 <= line_limit) {
+      answer->lines_p = first.p;
+      answer->lines_q = last.q;
+      answer->start_line = first.number;
+      answer->start_position = static_cast<std::size_t>(p - first.p) + 1;
+      answer->end_line = last.number;
+      answer->end_position = static_cast<std::size_t>(q - last.p) + 1;
+      answer->has_lines = true;
+    }
+    return true;
+  }
+
+  bool translate(const LineCgrep::Match &match, const char **start,
+                 const char **end) final {
+    if (!error.empty())
+      return false;
+    if (!match.has_lines) {
+      fail("LineCgrep match has no retained line text");
+      return false;
+    }
+    return raw->translate(match.lines_p, match.lines_q, start, end);
+  }
+
+  bool reset(std::string *message) final {
+    if (!raw->reset(message))
+      return false;
+    first = Line{};
+    last = Line{};
+    error.clear();
+    return true;
+  }
+
+  bool success(std::string *message) final {
+    if (!error.empty()) {
+      safe_error(message) = error;
+      return false;
+    }
+    return raw->success(message);
+  }
+
+  void fail(const std::string &message) {
+    if (error.empty())
+      error = message;
+  }
+
+  std::shared_ptr<Cgrep> raw;
+  std::size_t line_limit;
+  Line first;
+  Line last;
+  std::string error;
+};
+
+std::shared_ptr<LineCgrep> LineCgrep::from_buffer(std::shared_ptr<Cgrep> raw,
+                                                  std::size_t lines) {
+  return std::shared_ptr<LineCgrep>(
+      new LineCgrep(std::make_unique<BufferImpl>(std::move(raw), lines)));
+}
+
 } // namespace regexp
 } // namespace cottontail

@@ -19,6 +19,15 @@ struct Cgrep::Machine final {
   mutable std::shared_ptr<const void> buffer;
 };
 
+struct LineCgrep::Impl {
+  virtual ~Impl() {}
+  virtual bool next(LineCgrep::Match *answer) = 0;
+  virtual bool translate(const LineCgrep::Match &match, const char **start,
+                         const char **end) = 0;
+  virtual bool reset(std::string *error) = 0;
+  virtual bool success(std::string *error) = 0;
+};
+
 } // namespace regexp
 } // namespace cottontail
 

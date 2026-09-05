@@ -222,6 +222,50 @@ line_matches(const std::string &expression, const std::string &text,
   return answer;
 }
 
+std::vector<LineAnswer> buffer_line_matches(const std::string &expression,
+                                            const std::string &text,
+                                            std::size_t limit) {
+  auto storage = std::make_shared<const std::string>(text);
+  std::shared_ptr<const char> buffer(storage, storage->data());
+  std::string error;
+  auto machine = cottontail::regexp::Cgrep::compile(expression, &error);
+  auto matcher = cottontail::regexp::LineCgrep::make(
+      machine, buffer, text.size(), limit, &error);
+  EXPECT_NE(matcher, nullptr) << error;
+  if (matcher == nullptr)
+    return {};
+  std::vector<LineAnswer> answer;
+  cottontail::regexp::LineCgrep::Match match;
+  while (matcher->match(&match)) {
+    std::string lines;
+    if (match.has_lines)
+      lines = matcher->translate(match);
+    answer.push_back(LineAnswer{match, lines});
+  }
+  EXPECT_TRUE(matcher->success(&error)) << error;
+  return answer;
+}
+
+void expect_same_lines(const std::vector<LineAnswer> &actual,
+                       const std::vector<LineAnswer> &expected) {
+  ASSERT_EQ(actual.size(), expected.size());
+  for (std::size_t i = 0; i < actual.size(); i++) {
+    SCOPED_TRACE(i);
+    EXPECT_EQ(actual[i].lines, expected[i].lines);
+    const auto &a = actual[i].match;
+    const auto &e = expected[i].match;
+    EXPECT_EQ(a.p, e.p);
+    EXPECT_EQ(a.q, e.q);
+    EXPECT_EQ(a.lines_p, e.lines_p);
+    EXPECT_EQ(a.lines_q, e.lines_q);
+    EXPECT_EQ(a.start_line, e.start_line);
+    EXPECT_EQ(a.start_position, e.start_position);
+    EXPECT_EQ(a.end_line, e.end_line);
+    EXPECT_EQ(a.end_position, e.end_position);
+    EXPECT_EQ(a.has_lines, e.has_lines);
+  }
+}
+
 } // namespace
 
 TEST(CgrepTest, MatchesReferenceMachine) {
@@ -752,6 +796,104 @@ TEST(CgrepTest, ConcurrentLazyCompilationAndIndependentRunners) {
     EXPECT_NE(bundle->buffer, nullptr);
     EXPECT_NE(bundle->haystack, nullptr);
   }
+}
+
+TEST(CgrepTest, BufferLinesAgreeWithStreamingLines) {
+  std::vector<std::pair<std::string, std::string>> cases = {
+      {"cat", ""},
+      {"cat", "cat"},
+      {"cat", "cat\ncat"},
+      {"cat", "zero\ncat cat\n\ncat\n"},
+      {"aba", "abababa\nabababa"},
+      {"\\n", "\n\n\n"},
+      {"\\n\\n", "\n\n\n\n"},
+      {"cat\\n", "cat\ncat\n"},
+      {"\\ncat", "\ncat\ncat"},
+      {"a\\r\\nb", "a\r\nb a\r\nb\r\n"},
+      {"aba\\naba", "aba\naba\naba\naba"},
+      {"café\\n中国🤖", "zero\ncafé\n中国🤖 café\n中国🤖"},
+      {"a\\x00b", std::string("a\0b\na\0b", 7)},
+      {"cat", std::string(8192, 'x') + "cat cat\ncat"},
+      {"a\\nb\\nc", "a\nb\nc\na\nb\nc"},
+      {"c.t", "cat\ncot"},
+      {"^.*$", "one\ntwo\nthree"}};
+  for (const auto &[expression, text] : cases)
+    for (std::size_t limit : {0u, 1u, 2u, 4u}) {
+      SCOPED_TRACE(expression);
+      SCOPED_TRACE(limit);
+      auto expected = line_matches(expression, text, limit);
+      expect_same_lines(buffer_line_matches(expression, text, limit), expected);
+      std::vector<std::size_t> one_byte;
+      for (std::size_t i = 1; i <= text.size(); i++)
+        one_byte.push_back(i);
+      expect_same_lines(line_matches(expression, text, limit, one_byte),
+                        expected);
+    }
+}
+
+TEST(CgrepTest, BufferLineResetOwnershipAndLazyMachine) {
+  std::string error = "untouched";
+  auto bundle = cottontail::regexp::Cgrep::compile("cat", &error);
+  auto storage = std::make_shared<const std::string>("first\ncat\ncat");
+  std::weak_ptr<const std::string> owner = storage;
+  std::shared_ptr<const char> buffer(storage, storage->data());
+  const char *data = storage->data();
+  auto matcher = cottontail::regexp::LineCgrep::make(
+      bundle, buffer, storage->size(), 4, &error);
+  ASSERT_NE(matcher, nullptr) << error;
+  EXPECT_NE(bundle->buffer, nullptr);
+  EXPECT_EQ(bundle->haystack, nullptr);
+  storage.reset();
+  buffer.reset();
+  EXPECT_FALSE(owner.expired());
+  cottontail::regexp::LineCgrep::Match match;
+  for (int pass = 0; pass < 2; pass++) {
+    ASSERT_TRUE(matcher->match(&match));
+    EXPECT_EQ(match.p, 6);
+    EXPECT_EQ(match.q, 8);
+    EXPECT_EQ(match.start_line, 2u);
+    EXPECT_EQ(match.end_line, 2u);
+    const char *start;
+    const char *end;
+    ASSERT_TRUE(matcher->translate(match, &start, &end));
+    EXPECT_EQ(start, data + 6);
+    EXPECT_EQ(end, data + 10);
+    ASSERT_TRUE(matcher->match(&match));
+    EXPECT_EQ(match.start_line, 3u);
+    EXPECT_EQ(matcher->translate(match), "cat");
+    EXPECT_FALSE(matcher->match(&match));
+    EXPECT_TRUE(matcher->success(&error));
+    ASSERT_TRUE(matcher->reset(&error));
+  }
+  EXPECT_EQ(error, "untouched");
+  matcher.reset();
+  EXPECT_TRUE(owner.expired());
+}
+
+TEST(CgrepTest, BufferLinesRejectMissingTextAndRecover) {
+  std::string error;
+  auto bundle = cottontail::regexp::Cgrep::compile("a\\nb", &error);
+  auto storage = std::make_shared<const std::string>("a\nb");
+  std::shared_ptr<const char> buffer(storage, storage->data());
+  auto matcher = cottontail::regexp::LineCgrep::make(
+      bundle, buffer, storage->size(), 1, &error);
+  ASSERT_NE(matcher, nullptr);
+  cottontail::regexp::LineCgrep::Match match;
+  ASSERT_TRUE(matcher->match(&match));
+  EXPECT_FALSE(match.has_lines);
+  EXPECT_EQ(match.p, 0);
+  EXPECT_EQ(match.q, 2);
+  EXPECT_EQ(matcher->translate(match), "");
+  EXPECT_FALSE(matcher->success(&error));
+  EXPECT_NE(error.find("no retained line text"), std::string::npos);
+  EXPECT_FALSE(matcher->match(&match));
+  ASSERT_TRUE(matcher->reset());
+  EXPECT_TRUE(matcher->match(&match));
+  ASSERT_TRUE(matcher->reset());
+  EXPECT_FALSE(matcher->match(nullptr));
+  EXPECT_FALSE(matcher->success());
+  ASSERT_TRUE(matcher->reset());
+  EXPECT_TRUE(matcher->match(&match));
 }
 
 TEST(CgrepTest, RejectsInvalidPublicMachine) {
