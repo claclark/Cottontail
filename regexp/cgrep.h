@@ -8,7 +8,7 @@
 #include <vector>
 
 #include "regexp/haystack.h"
-#include "regexp/nfa.h"
+#include "regexp/machine.h"
 #include "src/core.h"
 
 namespace cottontail {
@@ -17,15 +17,13 @@ namespace regexp {
 // Source-independent shortest-substring matching.
 class Cgrep {
 public:
-  struct Machine;
+  using Machine = cottontail::regexp::Machine;
 
   // Validate the NFA once. Runners lazily compile their immutable machines.
   static std::shared_ptr<const Machine> compile(const std::string &expression,
-                                                std::string *error = nullptr,
-                                                bool springy = true);
+                                                std::string *error = nullptr);
   static std::shared_ptr<const Machine>
-  compile(const std::vector<transition> &nfa, std::string *error = nullptr,
-          bool springy = true);
+  compile(const std::vector<transition> &nfa, std::string *error = nullptr);
 
   static std::shared_ptr<Cgrep> make(std::shared_ptr<const Machine> machine,
                                      std::shared_ptr<Haystack> haystack,
@@ -83,6 +81,7 @@ protected:
 
 private:
   friend class LineCgrep;
+  friend class BufferLineCgrep;
   virtual bool match_(addr *p, addr *q) = 0;
   virtual bool translate_(addr p, addr q, const char **start,
                           const char **end) = 0;
@@ -132,35 +131,36 @@ public:
                                          std::size_t lines,
                                          std::string *error = nullptr);
 
-  ~LineCgrep();
+  virtual ~LineCgrep() {}
 
-  bool match(Match *match);
+  bool match(Match *match) { return match_(match); }
 
   std::string translate(const Match &match);
-  bool translate(const Match &match, const char **start, const char **end);
+  bool translate(const Match &match, const char **start, const char **end) {
+    return translate_(match, start, end);
+  }
 
-  bool reset(std::string *error = nullptr);
-  bool success(std::string *error = nullptr);
+  bool reset(std::string *error = nullptr) { return reset_(error); }
+  bool success(std::string *error = nullptr) { return success_(error); }
 
   LineCgrep(const LineCgrep &) = delete;
   LineCgrep &operator=(const LineCgrep &) = delete;
   LineCgrep(LineCgrep &&) = delete;
   LineCgrep &operator=(LineCgrep &&) = delete;
 
+protected:
+  LineCgrep() {}
+
 private:
-  struct Impl;
-  struct HaystackImpl;
-  struct BufferImpl;
+  virtual bool match_(Match *match) = 0;
+  virtual bool translate_(const Match &match, const char **start,
+                          const char **end) = 0;
+  virtual bool reset_(std::string *error) = 0;
+  virtual bool success_(std::string *error) = 0;
 
   static std::shared_ptr<LineCgrep>
   from_raw(std::shared_ptr<const Cgrep::Machine> machine,
            std::shared_ptr<Cgrep> raw, std::size_t lines, std::string *error);
-  static std::shared_ptr<LineCgrep> from_buffer(std::shared_ptr<Cgrep> raw,
-                                                std::size_t lines);
-
-  explicit LineCgrep(std::unique_ptr<Impl> impl);
-
-  std::unique_ptr<Impl> impl_;
 };
 
 } // namespace regexp

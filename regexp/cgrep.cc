@@ -7,7 +7,6 @@
 #include <limits>
 
 #include "regexp/buffer_cgrep.h"
-#include "regexp/cgrep_internal.h"
 #include "regexp/haystack_cgrep.h"
 
 namespace cottontail {
@@ -20,20 +19,18 @@ constexpr std::size_t buffer_file_limit = 64 * 1024 * 1024;
 } // namespace
 
 std::shared_ptr<const Cgrep::Machine>
-Cgrep::compile(const std::string &expression, std::string *error,
-               bool springy) {
+Cgrep::compile(const std::string &expression, std::string *error) {
   std::string cause;
   std::vector<transition> transitions = regexp::nfa(expression, &cause);
   if (transitions.empty()) {
     safe_error(error) = cause.empty() ? "Cannot compile empty NFA" : cause;
     return nullptr;
   }
-  return compile(transitions, error, springy);
+  return compile(transitions, error);
 }
 
 std::shared_ptr<const Cgrep::Machine>
-Cgrep::compile(const std::vector<transition> &transitions, std::string *error,
-               bool springy) {
+Cgrep::compile(const std::vector<transition> &transitions, std::string *error) {
   if (transitions.empty()) {
     safe_error(error) = "Cannot compile empty NFA";
     return nullptr;
@@ -66,7 +63,6 @@ Cgrep::compile(const std::vector<transition> &transitions, std::string *error,
   auto machine = std::make_shared<Machine>();
   machine->transitions = transitions;
   machine->state_count = maximum + 1;
-  machine->springy = springy;
   return machine;
 }
 
@@ -188,7 +184,7 @@ LineCgrep::from_raw(std::shared_ptr<const Cgrep::Machine> machine,
   if (raw == nullptr)
     return nullptr;
   if (raw->buffer_ != nullptr)
-    return from_buffer(std::move(raw), lines);
+    return BufferLineCgrep::make(std::move(raw), lines, error);
   return make(std::move(machine), raw->haystack_, lines, error);
 }
 
@@ -214,6 +210,44 @@ LineCgrep::make(std::shared_ptr<const Cgrep::Machine> machine,
                 std::size_t lines, std::string *error) {
   auto raw = Cgrep::make(machine, std::move(buffer), size, error);
   return from_raw(std::move(machine), std::move(raw), lines, error);
+}
+
+std::shared_ptr<LineCgrep>
+LineCgrep::make(std::shared_ptr<const Cgrep::Machine> machine,
+                std::shared_ptr<Haystack> haystack, std::size_t lines,
+                std::string *error) {
+  return HaystackLineCgrep::make(std::move(machine), std::move(haystack), lines,
+                                 error);
+}
+
+std::shared_ptr<LineCgrep> LineCgrep::make(const std::string &expression,
+                                           std::shared_ptr<Haystack> haystack,
+                                           std::size_t lines,
+                                           std::string *error) {
+  std::shared_ptr<const Cgrep::Machine> machine =
+      Cgrep::compile(expression, error);
+  if (machine == nullptr)
+    return nullptr;
+  return make(std::move(machine), std::move(haystack), lines, error);
+}
+
+std::shared_ptr<LineCgrep>
+LineCgrep::make(const std::vector<transition> &transitions,
+                std::shared_ptr<Haystack> haystack, std::size_t lines,
+                std::string *error) {
+  std::shared_ptr<const Cgrep::Machine> machine =
+      Cgrep::compile(transitions, error);
+  if (machine == nullptr)
+    return nullptr;
+  return make(std::move(machine), std::move(haystack), lines, error);
+}
+
+std::string LineCgrep::translate(const Match &match) {
+  const char *start;
+  const char *end;
+  if (!translate(match, &start, &end))
+    return "";
+  return std::string(start, end);
 }
 
 } // namespace regexp
