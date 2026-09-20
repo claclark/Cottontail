@@ -680,3 +680,21 @@
 - Removed the redundant file-open check from `Haystack::make`. The filename
   factory now opens and loads once and returns open/read errors immediately.
   The app and focused targets compile; runtime tests were not run.
+
+2026-09-20T20:21:15Z
+- Added opt-in `CGREP_LOG` startup logging to `apps/cgrep`: append replayable
+  shell-quoted arguments without the executable name, silently ignoring logging
+  failures. Added focused app regression cases for quoting, append behavior,
+  invalid invocations, and logging failures. Matching engines are unchanged.
+  The app and app-test target build with the fast flags; shell syntax and diff
+  checks pass. Runtime tests were not run.
+
+2026-09-20T20:38:11Z
+- Reconciled the regexp and cgrep agent documentation with the current typed
+  machine caches, buffer/Haystack runners, reporting, and indexed foundations.
+  Removed obsolete implementation plans and flags, preserved the preliminary
+  frontier discussion and its correctness questions, and documented private
+  search collection through `CGREP_LOG`. Made shipping Meadowlark the active
+  direction in `ai/plan.md`, with indexed regexp work and workload-driven
+  optimizations parked for later. This cleanup changed only agent notes;
+  source/test files were untouched, and no builds or runtime tests were run.

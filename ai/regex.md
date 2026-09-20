@@ -1,517 +1,377 @@
-# Preliminary Workplan for Indexed String Matching
-
-This is a preliminary, stepwise engineering plan. Literal byte-string matching
-over an n-gram index is operational. Work has begun on the reusable byte-NFA
-foundation for general regular-expression matching.
-
-Work proceeds one approved step at a time. This document does not authorize
-source changes.
-
-## Current Sequence
-
-1. Fix the `HashingFeaturizer` boundary case and define features `0` and `-1`.
-2. Move append separator normalization into the public append operations.
-3. Add `count`, `bow`, and `phrase` to the `Tokenizer` interface.
-4. Add general literal feature strings to GCL with `|...|`.
-5. Implement `NGramFeaturizer` and `NGramTokenizer` together.
-6. Compile quoted phrases into literal byte-string matches.
-7. Fix Meadowlark code ingestion so literal matching can cross source lines.
-8. Build a reusable byte-NFA compiler and reference matcher.
-9. Design and implement indexed regular-expression matching.
-
-The first two steps were implemented together on 2026-08-27. Steps 3 and 4
-were implemented separately later that day. The `NGramFeaturizer` half of step
-5 was implemented on 2026-08-28. The GCL semantic-error prerequisite for the
-tokenizer was then added, followed by the reviewed `NGramTokenizer`. Step 5 is
-complete; all targets compile and the user's basic testing works. The existing
-phrase-expansion path then supplied step 6 without further source changes:
-quoted strings compile through `NGramTokenizer::phrase` into exact positional
-GCL and work against an n-gram Meadowlark in basic interactive testing.
-
-Meadowlark can create an n-gram collection with `--create ngram` or
-`--create ngram:n`. The latter accepts the tokenizer's numeric and word forms,
-validates before creating the burrow, and writes the canonical word recipe.
-Creation appends standard Bigwig option overrides, replacing both the UTF-8
-tokenizer and JSON-wrapped hashing featurizer with their n-gram counterparts.
-Bare `--create` retains the existing configuration. Step 7, revising code
-ingestion so one structural element spans source lines, is next. Exhaustive
-testing is deliberately deferred until that change is complete.
-
-### Implementation Checkpoint: Steps 1 Through 4
-
-- `HashingFeaturizer` maps the `INT64_MIN` hash boundary to one stable positive
-  hashed feature without changing any other hash value.
-- Feature `-1` is named `universal_feature`. The public `Idx` operations return
-  a `UniversalHopper`, equivalent to `FixedWidthHopper(1)`, and count zero, so
-  the contract automatically applies to every concrete index and wrapper.
-- Indexing paths continue to ignore non-positive features; in particular,
-  direct `SimpleBuilder` use cannot store the virtual universal feature.
-- Public `Appender::append(...)` and `Builder::add_text(...)` add a newline to
-  nonempty input only when its final byte is not space, tab, carriage return,
-  or newline.
-- Concrete Fiver and Simple append/build paths now store and tokenize exactly
-  the normalized input they receive. Redundant Fiver newline mutations during
-  readiness and Hazel serialization were removed as part of that contract.
-- `Tokenizer` now exposes `count`, `bow`, and `phrase`, with inherited defaults
-  based on `split`. Phrase expansion, token accounting, and bag-of-words
-  consumers use the corresponding operation. Address-aligned consumers retain
-  `split`.
-- GCL now parses quoted forms as semantic `QUOTE` nodes while `|...|` decodes
-  to an ordinary `TERM`. Ordinary terms serialize raw when safe and otherwise
-  through canonical literal syntax. Phrase expansion retains its current
-  generated-GCL implementation but safely serializes generated feature terms.
-- `bazel build //...` succeeds. The user reports that basic tests pass and
-  considers deeper testing unnecessary for this narrow parser change.
-
-## 1. Feature Foundations
-
-### `HashingFeaturizer` Boundary
-
-`HashingFeaturizer` intends to return non-negative features, but negating the
-one hash value equal to `INT64_MIN` cannot produce a positive value. Correct
-that case without changing any other existing feature:
-
-- Detect `INT64_MIN` before negation.
-- Map it to one fixed positive value chosen from the hashed-feature namespace.
-- Exclude `0`, `-1`, other reserved values, and the reversible short-string
-  namespace.
-- Select the replacement once and store it as a constant; indexing must not
-  involve runtime randomness.
-
-The branch should have negligible indexing cost. Existing indices and every
-non-boundary hash value must remain unchanged. Big-endian index portability is
-deferred.
-
-### Reserved Features
-
-Feature `0` remains the null feature. A tokenizer may emit a token position
-whose feature input is a designated internal noncharacter that the featurizer
-maps to `0`. The position participates in address and text accounting, but no
-posting is stored.
-
-Feature `-1` is the universal positional feature:
-
-- `Idx::hopper(-1)` returns a `UniversalHopper` equivalent to `(# 1)`.
-- `Idx::count(-1)` returns `0`.
-- Feature `-1` has no stored posting list.
-- Index construction continues to store ordinary non-negative features.
-- Bag-of-words and ranking consumers ignore `-1`.
-
-The `-1` contract belongs to every index implementation and wrapper, not to
-one concrete index.
-
-## 2. Append Normalization
-
-An append operation may add a newline to prevent a token splice. This is an
-append contract, not a storage-implementation detail.
-
-Move normalization into the public entry points:
-
-- `Appender::append(...)` normalizes its nonempty input before calling
-  `append_(...)`.
-- `Builder::add_text(...)` applies the same rule before calling
-  `add_text_(...)`, because builders are also used directly.
-- A concrete appender stores and tokenizes exactly the bytes it receives.
-- Remove duplicate newline insertion from `FiverAppender`, `SimpleAppender`,
-  and `SimpleBuilder`.
-- Empty appends remain empty.
-
-Use exactly four append separators: space, tab, carriage return, and newline.
-All four prevent token splices for the existing word tokenizers. Do not include
-other controls such as vertical tab or form feed. The n-gram tokenizer treats
-the stored separator byte literally; this append rule only establishes the
-stored boundary byte when one must be added.
-
-This makes Fiver consistent with Simple. Currently Fiver adds the newline to
-stored text but tokenizes the original input, while Simple tokenizes the
-extended stored buffer. The existing tokenizers do not make these separator
-bytes tokens, so the change should not alter their ordinary term postings. An
-append ending in carriage return will retain that carriage return rather than
-acquiring an additional newline.
-
-## 3. Tokenizer Interface
-
-The current `split` operation is used for several unrelated purposes. Add
-operations named for their consumers:
-
-```text
-count(text)  -> number of token positions
-bow(text)    -> vector<string> for bag-of-words and ranking use
-phrase(text) -> vector<string> for literal phrase expansion
-```
-
-Defaults preserve the current tokenizers:
-
-```text
-count(text)  = split(text).size()
-bow(text)    = split(text)
-phrase(text) = split(text)
-```
-
-`split` remains the lightweight form of tokenization: it returns one canonical
-feature string per token position, preserving token order and address
-alignment, without featurization or annotation metadata.
-
-ASCII and UTF-8 tokenization therefore remain unchanged. `NGramTokenizer`
-will override the operations.
-
-`phrase` returns raw feature strings to be handed to the active featurizer.
-It does not return GCL. The current phrase expander already consumes a
-`vector<string>` from `split` and featurizes its terms later, so it can call
-`phrase` instead.
-
-The expander currently concatenates generated terms into GCL text and reparses
-it. Arbitrary feature strings make that fragile. It should construct the
-S-expression directly, or serialize each term through the literal feature
-syntax described below.
-
-Text token accounting and recovery use `count`, rather than constructing a
-vector solely to inspect its size. Traditional ranking, feedback, and
-foraging consumers use `bow`. Phrase expansion uses `phrase`. Ranking code
-that relies on vector position for token addresses, and diagnostic code that
-expects the canonical token at an address, continue to use `split`.
-
-## 4. Literal Feature Strings in GCL
-
-Add a general GCL term form:
-
-```text
-|literal feature string|
-```
-
-The contents denote exactly one feature string. The GCL parser unescapes the
-contents and later passes the resulting bytes to the active featurizer. The
-parser does not decide whether the string is hashed, reversibly encoded, or
-otherwise interpreted.
-
-Support a conservative C/C++-like escape set:
-
-- `\\` for backslash and `\|` for the delimiter;
-- named ASCII controls `\a`, `\b`, `\f`, `\n`, `\r`, `\t`, and `\v`;
-- the exact-width byte escape `\xHH`;
-- the exact-width Unicode escapes `\uHHHH` and `\UHHHHHHHH`, encoded as
-  UTF-8;
-- an unknown escape drops the backslash, so `\q` denotes `q`;
-- an incomplete byte or Unicode escape follows the same unknown-escape rule;
-- a trailing unpaired backslash is an error.
-
-A physical newline cannot occur inside a GCL term, but `\n` may represent a
-newline byte. NUL support remains deferred. Serialization should choose a
-canonical visible form and round-trip all supported byte strings. Unicode
-escapes must reject surrogates and out-of-range values.
-
-Quoted forms are represented separately from literal features. The parser
-stores the complete quoted spelling, including its delimiter, in a `QUOTE`
-node without assigning semantics to the delimiter. Thus `"foo bar"` is a
-`QUOTE`, while `|"foo bar"|` is a `TERM` containing the same bytes. Phrase
-expansion interprets `QUOTE` nodes marked with `"`; a later stage may interpret
-single quotes as regular expressions. Backticks remain reserved.
-
-`term_to_gcl(...)` is the canonical inverse of literal parsing. It emits a raw
-term exactly when that spelling reparses as the same ordinary `TERM`, and uses
-escaped `|...|` otherwise. Consequently `|foo|` serializes as `foo`, while
-`|foo bar|` remains literal syntax. The existing phrase expander uses this
-function when inserting tokenizer-produced features into generated GCL.
-
-This syntax is independent of n-grams. It is useful whenever a feature string
-contains whitespace, controls, delimiters, or other bytes awkward to express
-as an ordinary GCL term.
-
-### Semantic Expansion Errors
-
-GCL has an internal `ERROR` expression for failures discovered after parsing.
-It is not surface syntax and cannot be parsed from user input. An error stores
-an explanatory message, propagates through parent expressions during phrase
-expansion, and is reported before optimization or hopper construction.
-`Optimizer::estimate_memory(...)` returns zero for such an uncompilable
-expression.
-
-In particular, a quoted phrase for which `Tokenizer::phrase(...)` returns no
-terms becomes an `ERROR`. This provides the clean failure path needed for
-n-gram queries shorter than the selected gram size and can later carry regexp
-compilation errors without overloading `term_`.
-
-## 5. N-Gram Featurizer and Tokenizer
-
-`NGramTokenizer` and `NGramFeaturizer` implement one shared feature-string
-protocol and must be designed and tested together.
-
-### Shared Typed-String Protocol
-
-Reserve internal Unicode noncharacters for protocol strings:
-
-- U+FDDA is the n-gram marker. A payload shorter than eight bytes is packed as
-  a reversible, NUL-terminated feature string; a longer payload maps to `0`.
-- U+FDDB is the universal marker. Any token beginning with it maps to `-1`,
-  with any remaining payload ignored.
-- U+FDDC is the translation marker. Its payload is the hexadecimal value of a
-  hashed feature; malformed encodings map to `0`.
-- The empty string remains the null feature `0`.
-- The ten JSON structural tokens U+FDD0--U+FDD9 also map to `0`, replacing the
-  behavior supplied by `JsonFeaturizer` in an n-gram configuration.
-
-`NGramTokenizer` will produce these marked strings. `NGramFeaturizer`
-recognizes and converts them. An unmarked nonempty string is always hashed,
-preserving a namespace distinct from reversible textual n-grams. Whenever
-`HashingFeaturizer` and `NGramFeaturizer` hash the same bytes, they use the same
-MurmurHash routine, seed, sign normalization, overflow replacement, and hashed
-feature marker bit, and therefore produce the same feature value.
-
-The marker is a type/dispatch prefix and is not part of the n-gram payload.
-The same marked feature string can be written explicitly in GCL by escaping it
-inside `|...|`.
-
-`NGramFeaturizer::translate` returns the universal marker for a negative
-feature, the n-gram marker plus literal bytes for a reversible feature, or the
-translation marker plus lowercase hexadecimal for a hashed feature. Thus
-`featurize(translate(feature))` preserves every supported feature class; null
-translates as an n-gram marker with an empty payload. The featurizer has no
-recipe and does not know the configured gram size.
-
-### Gram Size and Encoding
-
-Support exactly one configured gram size per index:
-
-```text
-1 <= n <= 7
-```
-
-Record `n` in the tokenizer DNA. The empty recipe defaults to `five`. Input
-recipes accept `1` through `7` and
-the words `one` through `seven`; `recipe()` always returns the word. Four makes
-short code fragments such as `skip`, `case`, `bool`, and `addr` independently
-searchable, while five should provide shorter posting lists on very large
-collections. Smaller grams remain valid for experiments and specialized
-collections, but their posting lists are likely to be long; one-grams in
-particular are unlikely to be an efficient general-purpose configuration.
-
-The reversible representation packs up to seven payload bytes into an `addr`.
-Input bytes are preserved literally, including space, tab, carriage return,
-newline, and malformed UTF-8. The existing encoding is machine-local;
-big-endian index portability remains deferred.
-
-### Token Positions and Translation
-
-Every ordinary stored byte is a token position, including newline and malformed
-UTF-8. The tokenizer performs no character decoding or classification. Each
-complete UTF-8 encoding in the reserved U+FDD0--U+FDEF noncharacter block is
-instead one atomic structural position. This covers the ten assigned JSON
-tokens and leaves the rest of the block available for future structure.
-
-For every returned token:
-
-- `address` is the token's relative position;
-- `offset` is the byte offset in the supplied buffer;
-- `length` is `1` for an ordinary byte and `3` for a reserved structural token.
-
-`skip(buffer, length, n)` scans token boundaries because structural tokens
-consume three bytes while advancing one address. Translation can still return
-the exact inclusive byte interval selected by the addresses.
-
-This relies on append normalization giving the tokenizer exactly the bytes
-stored, including an automatically inserted newline.
-
-### Index Annotation Generation
-
-An n-gram candidate begins at each ordinary byte position. It contains up to
-`n` literal bytes, stopping before the next structural token or at the end of
-the supplied structural element. A candidate near either boundary is emitted
-as the literal short suffix that is actually available.
-
-- A gram does not cross the end of the appended structural element.
-- A gram does not include or cross a reserved structural token.
-- Newline is an ordinary byte; grams may include it and cross it when the
-  newline occurs inside one supplied element.
-- A reserved structural position receives the empty string and therefore null
-  feature `0`.
-- There is exactly one token record and one stored textual annotation at each
-  ordinary position.
-
-For example, with `n = 4`, the bytes `hello\n` produce:
-
-```text
-0  hell
-1  ello
-2  llo\n
-3  lo\n
-4  o\n
-5  \n            newline position
-```
-
-Lexical matching is local to a supplied structural element because the
-tokenizer has no context outside it and matching across JSON elements is not
-meaningful. A newline is not a boundary when it occurs inside that element.
-Token positions remain globally composable: phrases and other GCL expressions
-may relate local evidence across boundaries when desired.
-
-Short suffix grams preserve the bytes at the end of every supplied element.
-Dictionary-backed phrase and regexp expansion can combine them with complete
-grams to discover expressions shorter than `n`; the initial phrase expander
-does not yet provide that dictionary access.
-
-### `count`, `bow`, and `phrase`
-
-For `NGramTokenizer`:
-
-- `count` scans and returns the number of logical positions.
-- `split` mirrors tokenization without address metadata: complete and short
-  marked grams plus empty structural positions remain aligned.
-- `bow` returns only complete marked grams, omitting universal and null
-  positions.
-- Until phrase expansion has dictionary access, `phrase` retains only complete
-  marked grams and converts short suffix and structural positions to the
-  universal marker. If the input contains no complete gram, it returns an
-  empty vector so phrase expansion reports a semantic error rather than
-  constructing a query that only finds element-ending occurrences.
-
-## 6. Literal Byte-String Matching
-
-Before implementing general regular expressions, make quoted phrases mean this
-exact sequence of bytes. Space, tab, carriage return, and newline are distinct,
-as are repeated separator bytes. Stored text and returned intervals are
-unchanged.
-
-`NGramTokenizer::phrase` produces the raw marked feature strings. Phrase
-expansion turns them into positional GCL over their featurized n-grams and
-universal positions, then the existing optimizer may rewrite the result.
-
-Individual n-gram evidence remains local. GCL supplies interval width,
-ordering, containment, and any explicit composition across line or structural
-boundaries. This stage should establish precise extent and translation behavior
-before regular-expression automata add alternatives and repetition.
-
-Examples must be checked in both directions: generate index tokens for the
-candidate text, compile the literal query, and walk the resulting positional
-constraints. Include all four literal separator bytes, separator runs,
-append boundaries, arbitrary UTF-8 bytes, malformed input, and strings shorter
-than `n`.
-
-The basic end-to-end path is working without additional implementation beyond
-the completed tokenizer, featurizer, and phrase-expansion work. Interactive
-checks over `ai/` and `src/` found exact punctuation-heavy C++ fragments,
-including fragments beginning and ending inside identifiers and C++ escape
-spellings. Ordinary GCL containment recovered the containing source object and
-its `//` filename annotation, while fixed-width context composed around the
-literal match and crossed a source newline. These are smoke tests only; the
-systematic cases above remain for the exhaustive pass after step 7.
-
-## 7. Meadowlark Code Line Boundaries
-
-Before general regular-expression work, revise the Meadowlark `code` input
-path so one code structural element may span source lines. The n-gram tokenizer
-can then see and index grams across embedded newline bytes instead of treating
-each source line as a structural boundary. Preserve line-oriented metadata
-through annotations or later foraging rather than by splitting the indexed
-text into line-sized elements. This is a deferred Meadowlark ingestion change,
-not part of the tokenizer/featurizer implementation. It remains outstanding;
-after it is complete, run the exhaustive literal-matching tests before indexed
-regular-expression integration.
-
-## 8. Regular Expressions: Preliminary Direction
-
-General indexed regular-expression matching is not yet fully planned. The
-following surface is a rough implementation guide, not a compatibility promise.
-
-### NFA Construction Checkpoint
-
-`regexp/nfa.h` now provides the independent machine-construction layer:
-
-    vector<transition> nfa(const string &regexp, string *error)
-    vector<pair<size_t, size_t>> match(const vector<transition> &nfa,
-                                      const string &text)
-
-The exported transition vector is the complete machine description, so an
-indexed evaluator or another external consumer can reorganize it without using
-the parser. State `0` is the start and `final_state` is the final state. Each
-transition holds an explicit `set<symbol>`, where `symbol` is a 16-bit value.
-Values 0 through 255 are ordinary bytes; `START` and `END` are the two current
-special symbols. Dot and complemented byte classes are expanded over only the
-ordinary byte alphabet, so they never accept a buffer boundary. The vector is
-sorted by decreasing source state and then decreasing destination state.
-
-Construction internally preserves whether an expression accepts lambda while
-combining union, concatenation, closure, and intersection. A successful public
-machine is nonempty and lambda-free. A regexp accepting lambda or no strings is
-reported as an error rather than represented by an empty vector.
-
-Shortest-substring matching is locally defined: an accepted interval is a
-result exactly when none of its proper subintervals is accepted. This semantic
-contract is independent of tokenization. Byte n-grams and postings are future
-index-access mechanisms for running the same machine, not part of the
-definition of a match.
-
-The reference `match` implementation directly executes the NFA. It retains the
-largest start position when paths collide in one state and removes containing
-solutions, producing shortest, overlapping, inclusive byte intervals. It is
-primarily executable specification and focused test support, but is also
-usable for flat strings. `START` is presented immediately before byte zero at
-internal position -1, and `END` immediately after the final byte; those virtual
-positions are removed from returned intervals. In this runner the boundaries
-therefore refer exactly to the supplied string. Its coverage is the separate
-`//test:nfa_test` target rather than part of the large aggregate test binary.
-
-### Initial Syntax
-
-The initial compiler provides the widely used regular-language core:
-
-- literal bytes and literal UTF-8 strings;
-- concatenation and `|` alternation;
-- grouping with `(...)`;
-- the `*`, `+`, and `?` quantifiers;
-- dot as any ordinary byte, including newline; and
-- byte classes such as `[abc]`, `[a-z]`, and `[^a-z]`;
-- `^` and `$` as the start and end of the complete supplied string; and
-- `\R` as LF, CRLF, U+2028 LINE SEPARATOR, or U+2029 PARAGRAPH SEPARATOR.
-
-Forms such as `.*`, `.+`, and `.?` are ordinary applications of a quantifier
-to dot, not additional operators. Parentheses group but do not capture. The
-precedence is quantification, concatenation, intersection, then alternation.
-
-Character-class labels are explicit byte sets. A complemented class expands
-to the ordinary bytes it accepts. Ranges are numeric byte ranges and are
-normally ASCII-shaped, for example `[0-9]`, `[a-z]`, and `[A-Fa-f0-9]`;
-`\xHH` permits arbitrary byte values. A class consumes exactly one byte.
-Multibyte UTF-8 literals are therefore not class members or range endpoints;
-Unicode alternatives can be written with ordinary grouping and alternation.
-A later Unicode-aware surface could compile character predicates into byte
-automata without changing the indexed matcher.
-
-The useful initial escapes are escaped metacharacters, `\\`, `\n`, `\r`,
-`\t`, `\f`, `\v`, and `\xHH`. The common shorthand byte classes `\d`, `\s`,
-and `\w`, together with their complements, have explicit ASCII meanings. `\R`
-is the multi-byte line-ending expression described above and is not valid
-inside a byte class. Consistent with literal feature strings, an otherwise
-unknown escape quotes the following character; a trailing backslash is an
-error.
-
-Intersection `&` is included in the compiler, with precedence between
-concatenation and alternation. Counted repetition (`{m}`, `{m,n}`, and
-`{m,}`) is deferred. It adds no expressive power and can later be compiled
-into concatenation, optional paths, and closure with an expansion limit. `^`
-and `$` deliberately mean only the complete matching buffer; line boundaries
-can be expressed from `(^|\R)` and related ordinary expressions. Lazy or
-possessive quantifiers, captures, backreferences, lookaround, conditionals,
-recursion, and embedded code are outside the intended language. In particular,
-shortest-substring semantics removes the need for greediness modifiers.
-
-Known design inputs to revisit later are:
-
-- regular-expression terms expand over the reversible n-gram dictionary;
-- matching is local to supplied structural elements, with newline treated as
-  an ordinary byte and GCL handling wider relationships;
-- results are shortest, nonnested intervals;
-- when automaton paths collide in one state, retain the largest starting
-  address;
-- selective posting lists should drive query planning;
-- regexp syntax need not promise POSIX compatibility; and
-- unselective expressions cannot be made selective merely by introducing a
-  universal feature.
-
-Relevant prior work includes Clarke's *An Algebra for Structured Text Search*
-(1996), Clarke and Cormack's *On the Use of Regular Expressions for Searching
-Text* (1995), and Qiu et al.'s *Efficient Regular Expression Matching Based on
-Positional Inverted Index* (2020/2022). Positional regexp evaluation itself is
-not a novelty claim.
+# Indexed String Matching: Checkpoint and Preliminary Plan
+
+Updated 2026-09-20. The tokenizer/featurizer foundations, basic indexed literal
+matching, and independent byte-NFA compiler are implemented. General indexed
+regexp execution is not. The flat-file scanner is described in
+[cgrep.md](cgrep.md).
+
+Regexp development is paused while the active direction returns to shipping
+Meadowlark; see [plan.md](plan.md). This document preserves implemented
+contracts and unfinished reasoning, not authorization for source changes.
+
+## Return Plan
+
+1. Keep the current scanner stable and collect real agent searches through
+   opt-in CGREP_LOG instrumentation. Its private development contract is in
+   cgrep.md; no logging is enabled by default.
+2. When the collection is useful, return to general regexp execution over
+   inverted lists. Establish the transition-seeking algorithm and its
+   correctness before optimizing it. Resolve dictionary access, short
+   matches, structural boundaries, and the Warren/GCL entry points below.
+3. Use the collection to select useful follow (... r0 r1) and union
+   (+ r0 r1) special cases for both indexed execution and the scanner. Check
+   that optimizations preserve all shortest, overlapping matches.
+4. Keep cross-line Meadowlark code ingestion and exhaustive indexed literal
+   tests in the indexed-matching workstream. They remain unfinished, not the
+   next automatic task or a newly imposed Meadowlark release requirement.
+
+Do not begin by decomposing every regexp into follow components, deleting
+self-loops, replacing the existing machine vector, or optimizing dot-only
+paths. Those directions were explored, not implemented. The latest preference
+is to get the general algorithm working first.
+
+## Matching Semantics
+
+Let G select the accepted intervals having no accepted proper subinterval.
+These are shortest-substring matches, not a single globally shortest match.
+Results may overlap but do not nest. The rule is local, independent of lines,
+documents, tokenization, or leftmost-longest conventions.
+
+The flat scanner consumes literal bytes. Newline is ordinary input; ^ and $
+refer to the complete input. Indexed regexp matches are intended to remain
+within supplied structural elements; GCL can express wider relationships.
+How to enforce that boundary for every indexed regexp remains part of the
+implementation design.
+
+A regexp accepting lambda is rejected by the public NFA compiler. Nullable
+subexpressions are nevertheless essential while constructing a larger,
+nonnullable expression. An empty language is also rejected.
+
+## Implemented Index Foundations
+
+These correspond to steps 1--6 of the original workplan. The reusable NFA
+foundation (original step 8) was implemented independently, before the
+deferred code-ingestion change (step 7).
+
+### Feature and Append Contracts
+
+- HashingFeaturizer maps the INT64_MIN normalization boundary to the fixed
+  positive hashed feature 0x6f2d4b18a937c5e1. Other feature values are unchanged.
+  The shared MurmurHash routine is also used by NGramFeaturizer.
+- Feature 0 is null: it can account for a token position without a posting.
+  Index construction ignores non-positive features.
+- Feature -1 is universal_feature. Idx::hopper(-1) returns UniversalHopper,
+  equivalent to (# 1); Idx::count(-1) is zero. It has no stored posting list.
+  GCL compilation also uses UniversalHopper for (# 1); (# 0) is a parse error.
+- Appender::append and Builder::add_text append LF to nonempty input only
+  when its final byte is not space, tab, CR, or LF. Concrete implementations
+  store and tokenize the same normalized bytes; the old Fiver discrepancy is
+  fixed. Empty appends stay empty.
+- Those four append separators do not imply whitespace normalization in the
+  n-gram tokenizer. Spaces, tabs, CR, LF, and repeated separators stay distinct.
+  Big-endian feature portability remains deferred.
+
+### Tokenizer Interface
+
+Tokenizer provides tokenize, skip, count, bow, phrase, and split.
+
+- tokenize supplies feature/address/byte-offset records for indexing.
+- skip advances through logical positions for text translation.
+- count returns the number of logical positions.
+- bow supplies feature strings for bag-of-words/ranking consumers.
+- phrase supplies feature strings for phrase expansion, not GCL.
+- split supplies the address-aligned feature-string sequence without
+  annotation metadata.
+
+Default count/bow/phrase implementations use split, preserving existing
+tokenizers. Their callers were separated by purpose; address-sensitive
+consumers retain split. NGramTokenizer overrides all relevant operations.
+
+### Literal Features and Quoted GCL
+
+The implemented |...| syntax denotes exactly one raw feature string. The
+parser decodes it; the active featurizer later decides its feature value.
+
+Supported escapes are `\\` and `\|`; named controls `\a`, `\b`, `\f`, `\n`, `\r`, `\t`,
+`\v`; exact-width `\xHH` bytes; and `\uHHHH` / `\UHHHHHHHH` Unicode values encoded
+as UTF-8. Unknown escapes drop the backslash. Incomplete numeric escapes
+follow that unknown-escape rule; a trailing unpaired backslash is an error.
+Unicode escapes reject surrogates and out-of-range values. Physical LF and
+NUL are not supported in literal-feature syntax; escaped LF is supported.
+
+Quoted spelling, including its delimiter, is retained in a QUOTE node.
+Thus "foo bar" is a QUOTE while |"foo bar"| is a TERM with the same bytes.
+Phrase expansion conventionally interprets double quotes. Single-quoted
+regexp terms and Warren-level expansion remain future work; backticks remain
+reserved.
+
+term_to_gcl serializes TERM values canonically, using raw spelling only when
+it reparses as the same TERM. phrase_to_string normalizes quoted phrase
+spelling before Tokenizer::phrase. The phrase expander still constructs GCL
+text and reparses it, but escapes generated features through term_to_gcl.
+Replacing that construction with direct tree building is not an active task.
+
+An internal ERROR node with message_ propagates semantic expansion failures
+before optimization or hopper construction. An empty phrase result reports
+Cannot expand phrase rather than becoming a meaningless positional query.
+Optimizer::estimate_memory returns zero for an uncompilable query.
+
+### NGramFeaturizer
+
+The tokenizer and featurizer share a typed-string protocol:
+
+| Prefix | Payload and feature |
+| --- | --- |
+| U+FDDA, NGRAM_MARKER | Fewer than eight payload bytes are packed literally into an addr; longer payloads map to 0. |
+| U+FDDB, UNIVERSAL_MARKER | Maps to -1 regardless of payload. |
+| U+FDDC, TRANSLATE_MARKER | Hexadecimal hashed feature; malformed or out-of-namespace input maps to 0. |
+| No marker | Nonempty ordinary strings are hashed. |
+| Empty string or a JSON structural token U+FDD0--U+FDD9 | Maps to 0. |
+
+The actual C++ constants are ngram_marker, universal_marker, and
+translate_marker in src/ngram_featurizer.h. Markers are dispatch prefixes,
+not part of the gram payload. They can be entered via escaped |...| syntax.
+
+Whenever HashingFeaturizer and NGramFeaturizer hash the same bytes, their
+hash values agree. NGramFeaturizer does not apply HashingFeaturizer's ordinary
+short-string shortcut: reversible grams require the explicit marker.
+Its recipe must be empty, and it has no knowledge of the gram size.
+
+translate returns the universal marker for negative features, the n-gram
+marker plus string bytes for a reversible feature, or the translation marker
+plus lowercase hexadecimal for a hash. Null translates as an empty marked
+gram. The encoding is zero-padded and machine-local.
+
+NUL caveat: literal packing accepts byte payloads, but translation reconstructs
+a C string and loses bytes after an embedded NUL. Zero padding also cannot
+distinguish a payload from the same payload with trailing NULs. Do not promise
+unrestricted binary dictionary round-tripping or infer it from cgrep's binary
+support. Resolve the supported indexed domain before dictionary-backed binary
+matching; no encoding change is authorized here.
+
+### NGramTokenizer
+
+Exactly one width is configured per index: 1 <= n <= 7. Recipes accept the
+digits 1--7 or words one--seven; empty defaults to five, and recipe() returns
+the canonical word. Four may suit short identifiers; five may offer greater
+selectivity. The supported range and default are separate from future workload
+tuning.
+
+Every ordinary byte is one position, including whitespace and malformed UTF-8.
+A complete UTF-8 encoding in U+FDD0--U+FDEF is instead one atomic structural
+position. This whole reserved block is treated structurally, not just the ten
+currently assigned JSON tokens.
+
+For each ordinary byte, tokenize generates the marked gram containing up to
+n bytes of right context. It stops at the supplied element end or before a
+structural token. Short suffixes are stored literally, not padded and not
+replaced by universal features. Structural positions receive null feature 0.
+There is one token record per logical position. Whether a posting is stored
+depends on its feature; null-valued byte encodings share the caveat above.
+
+With n = 4, hello followed by LF produces:
+
+    0  hell
+    1  ello
+    2  llo\n
+    3  lo\n
+    4  o\n
+    5  \n
+
+Newline does not itself stop a gram. Structural tokens have byte length three
+but consume one address, so skip and count scan boundaries rather than simply
+adding byte offsets.
+
+- split mirrors tokenize as marked complete/short grams and empty structural
+  entries, preserving address alignment.
+- bow retains only complete grams.
+- phrase retains complete grams and replaces short/structural entries with
+  the universal marker. It returns empty if there is no complete-gram evidence.
+
+Short suffix storage prepares for dictionary-backed queries shorter than n;
+it does not make those queries work through the current phrase expander.
+
+### Indexed Literal Matching and Ingestion
+
+Meadowlark --create ngram selects the paired tokenizer/featurizer with width
+five; --create ngram:n accepts numeric or word widths. The app validates the
+choice, appends ordinary Bigwig recipe overrides, and records the canonical
+recipe. Bare --create keeps the ordinary configuration. Empty meadow names
+resolve to the default a.meadow for creation and opening.
+
+Double-quoted phrases already lower to exact positional GCL through
+Tokenizer::phrase. Spaces and punctuation remain literal, not word-tokenized.
+Basic interactive checks over ai/ and src/ found exact C++ fragments and
+composed them with source/filename containment and fixed-width context.
+
+Grams remain local to individual append elements. The deferred Meadowlark
+code change will make a code element span source lines, retaining line metadata
+through annotations or later foraging. Do not claim this ingestion change is
+already implemented because cgrep can scan multiline files.
+
+Before indexed regexp integration, revisit the deferred exhaustive literal
+cases: separator runs, append/structural boundaries, short queries, UTF-8 and
+malformed bytes, exact extents, and translation consistency. The existing
+smoke tests do not establish those cases exhaustively.
+
+## Implemented NFA Foundation
+
+regexp/nfa.h exports:
+
+    std::vector<transition> nfa(const std::string &regexp, std::string *error);
+    std::vector<std::pair<std::size_t, std::size_t>>
+    match(const std::vector<transition> &machine, const std::string &text);
+
+A transition holds from/to states and std::set<symbol>. State 0 is the start;
+final_state is a sentinel, not an ordinary numbered state. Symbols use
+std::uint16_t: 0--255 are bytes, followed by START and END. The vector is
+normalized, compactly numbered, and sorted by decreasing from then to state.
+
+Construction keeps lambda separately while combining expressions. Closure
+adds restart transitions; concatenation explicitly adds nullable bypasses.
+It does not minimize states or preserve a deterministic shape merely because
+one exists for the regexp.
+
+For example, ab*c compiles to:
+
+    <0,1,a>  <0,2,a>
+    <1,1,b>  <1,2,b>
+    <2,F,c>
+
+The reference matcher retains the latest start at each state and input
+position, returning shortest overlapping inclusive intervals. START and END
+are consumed just outside the complete input, and their virtual positions are
+stripped from results. The reference matcher and cgrep handle embedded NUL.
+
+### Supported Syntax
+
+- Literal bytes and UTF-8 strings, concatenation, grouping, and alternation.
+- Intersection &, with precedence below concatenation and above alternation.
+- `*`, `+`, and `?` quantifiers.
+- Dot accepts every ordinary byte, including LF, but not START or END.
+- Classes/ranges such as `[abc]`, `[a-z]`, and `[^a-z]`, expanded to byte sets.
+- `^` and `$` are complete-input boundaries, not line anchors.
+- `\R` accepts LF, CRLF, U+2028, and U+2029; it is not valid inside a class.
+- Escaped metacharacters, `\\`, `\n`, `\r`, `\t`, `\f`, `\v`, and exact-width `\xHH`.
+  `\d`, `\s`, `\w` and their complements have ASCII meanings. An otherwise unknown
+  escape quotes the next character; a trailing backslash is an error.
+
+A class consumes one byte; multibyte Unicode characters are not class members
+or range endpoints. Use ordinary alternatives for UTF-8 literals. Unicode
+predicates could later compile to byte automata without changing the index.
+`\R` recognizes alternatives under G as usual: on CRLF, LF alone is a proper
+matching subinterval, so shortest-match selection can report just LF.
+
+Counted repetition, word-boundary assertions, and Unicode class semantics are
+deferred. There are no captures, backreferences, lookaround, lazy/possessive
+quantifiers, recursion, or embedded code. This is not POSIX/PCRE compatibility.
+
+## Indexed Execution: Still to Design
+
+The goal is execution over n-gram postings, not merely identifying documents
+and rescanning their text.
+
+- Give Warrens phrase and regexp operations. The proposed default phrase path
+  preserves today's expansion; the proposed default regexp path is unsupported.
+  Signatures, dictionary access, and GCL integration have not been implemented.
+- Expand labels/classes against the actual reversible gram dictionary.
+  A candidate was discussed as (gram context, NFA state), carrying start/end
+  positions; for five-gram evidence, the context would contain four bytes.
+  This remains a design sketch, not a settled state representation.
+- During dictionary traversal, discover matches shorter than n, including
+  those represented at element ends by short suffix grams. Lazily merge their
+  adjusted postings with longer-machine results. A large expansion may need
+  limits; do not promise efficient one-byte queries merely because possible.
+- Seek forward/backward in posting lists using tau/rho and their reverse
+  counterparts. Exactness must come from gram content, overlap, positions, and
+  boundary evidence. For flat files, verification can run the original NFA on
+  candidate bytes; indexed verification must not silently become text scanning.
+- Resolve structural-element boundaries and indexed START/END evidence.
+  Cross-element GCL composition is distinct from one lexical regexp match.
+- Latest-start merging is established for paths at the same state and input
+  position. Proposed merges of asynchronously positioned candidates, including
+  max(start)/min(end), still require an invariant and proof.
+- General completeness, failed-candidate pruning, restart rules, intersection,
+  and all-dot cases must be specified before performance claims.
+
+### Frontier Proposal
+
+Latest discussion, not implemented or proved for arbitrary NFAs:
+
+1. From the active states, collect outgoing symbol labels, excluding only
+   all-byte self-loops from the seek frontier.
+2. Seek the next occurrence of a frontier symbol. A non-self-loop dot accepts
+   every byte and therefore forces an ordinary one-byte advance.
+3. Dot-self-loop states persist across the seek and participate in processing
+   the found byte, including their other outgoing transitions. They are not
+   deleted from the graph.
+4. Restricted self-loops, such as the b loop in ab*c, remain ordinary
+   transitions. There is no general "remove all self-loops" transformation.
+5. Seek forward to an ending q, tighten backward to a starting p, and check
+   the candidate against the original expression. Width alone is a shortcut
+   only for fixed strings.
+6. Restart at p + 1, not q + 1, to preserve overlaps, once the required
+   completeness/pruning property is established.
+
+Examples: abc suggests (... a b c) followed by exact checking; ab|bc suggests
+(+ (... a b) (... b c)) followed by checking. These examples are not a proof
+that arbitrary regexp composition commutes with G and verification.
+
+For a.*c, the compiler's dot-loop state keeps reactivating the state waiting
+for c. The useful seek frontier is {c}. For a.*ef, after an e the selective
+frontier can be {e,f}, while the dot-loop state stays alive. Competing branches
+make this persistence essential: in a(bc)*d | a.*e, processing b in the first
+branch must not kill the second branch's ability to finish at e.
+
+Ordinary dot transitions and dot-only prefixes/suffixes should be processed
+normally in the first algorithm. Closure shortcuts, completion distances,
+endpoint padding, and clever set-search dispatch are possible optimizations,
+not prerequisites.
+
+### Counterexamples and Superseded Directions
+
+- For a(bdac)*d on abdacd, the whole string is a shortest exact match.
+  Relaxing to (... a d) yields smaller candidates abd and acd, both invalid,
+  and misses the real match. Preserve the repeated body's transitions.
+- More generally, language inclusion after adding arbitrary gaps does not
+  imply inclusion of the shortest intervals. Do not reuse that rejected
+  argument as a proof of candidate completeness.
+- The proposed operational frontier seeks are not simply ordinary NFA
+  execution with arbitrary extra .* loops at every state. The semantics of
+  skipped bytes and surviving states must be made explicit.
+- Removing self-loops and discarding every non-firing state fails, for example,
+  on ab*c | abbx against abbc. Retaining ordinary loops fixes that particular
+  example; it does not by itself prove the full algorithm.
+- We considered detecting true .* separators by choke points and decomposing
+  a machine into follow components. Nullable bypasses complicate recognition,
+  and the decomposition was set aside as premature. No follow() was added.
+  Workload-driven follow special cases remain a later possibility.
+- One-token-per-Unicode-character indexing was rejected in favor of byte
+  positions. Its historical outline is retained below.
+
+### Literature Leads
+
+These are comparison material, not evidence that the proposed general runner
+is correct or novel:
+
+- Clarke and Cormack, [On the Use of Regular Expressions for Searching
+  Text](https://cs.uwaterloo.ca/research/tr/1995/07/regexp.pdf), 1995 report
+  (TOPLAS publication 1997): shortest-substring semantics and direct NFA
+  execution. Clarke's [An Algebra for Structured Text
+  Search](https://plg.uwaterloo.ca/~claclark/phd.pdf) supplies the structural
+  algebra background.
+- Das et al., [Episode
+  Matching](https://www.researchgate.net/publication/2313349_Episode_Matching),
+  1997: forward subsequence matching, backward tightening, restart after the
+  tightened start; also discusses automata for more general patterns.
+- Yamamoto, [A Faster Algorithm for Finding Shortest Substring Matches of a
+  Regular Expression](https://doi.org/10.1016/j.ipl.2018.12.001), 2019:
+  extends the scanning approach using Thompson NFAs and efficient epsilon
+  handling. This is not the proposed posting-list seek algorithm.
+- Qiu et al., [Efficient Regular Expression Matching Based on Positional
+  Inverted Index](https://doi.org/10.1109/TKDE.2020.2992295), 2020 online /
+  2022 issue: gram-driven NFAs and positional constraints evaluated through
+  the index. Compare before making novelty or performance claims.
 
 ## Rejected Tokenization Plan
 
@@ -537,6 +397,7 @@ solve Unicode interpretation, normalization, variable-width context, malformed
 input, multiple annotations per position, and translation accounting all at
 once. Those complications were not required by the index.
 
-The replacement is deliberately mechanical: every stored byte is a token
-position, every proper gram has one configured byte length, and Unicode
-semantics—if wanted—belong above the positional representation.
+The replacement is deliberately mechanical: ordinary bytes are token
+positions, reserved structural noncharacters are atomic positions, and full
+grams have one configured byte length with shorter suffixes at structural
+boundaries. Unicode search semantics—if wanted—belong above this representation.

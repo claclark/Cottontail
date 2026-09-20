@@ -60,89 +60,50 @@ the ClimbMix collection in TREC RAG 2026. Agent verification remained
 compile-only; the user reports that the combined changes have been tested in
 various ways and are ready to commit.
 
-## Active Direction
+## Active Direction: Ship Meadowlark
 
-The current push is the preliminary indexed string-matching work recorded in
-`ai/regex.md`. Steps 1 through 4 are implemented: feature `-1` is virtual
-universal position evidence with zero count; the `HashingFeaturizer` boundary
-is fixed; append normalization is centralized with space, tab, carriage
-return, and newline as separators; and `Tokenizer` now separates counting,
-bag-of-words, phrase, and address-aligned split consumers while preserving the
-existing tokenizers through defaults. GCL literal feature strings now decode
-`|...|` into ordinary terms, quoted forms remain typed syntax for later
-semantic expansion, and ordinary terms serialize canonically and safely.
-Agent verification was compile-only through `bazel build //...`; user
-basic tests pass, and no deeper testing is planned for this narrow parser
-change.
+As of 2026-09-20, return to shipping a Meadowlark release. The regexp work is
+paused, not a release prerequisite. The next discussion should establish the
+release scope, remaining blockers, documentation/package expectations, and
+verification checklist from the current implementation. Do not assume every
+item in improvements.md or every experimental feature must ship first.
 
-Step 5 is now implemented. `NGramFeaturizer` has no recipe or gram-size
-knowledge; the shared MurmurHash routine preserves existing hashed values, and
-the typed marker protocol covers reversible grams, universal positions, hash
-translation, and JSON structural nulls. `NGramTokenizer` indexes literal bytes
-with a configurable width from one through seven, defaults to `five`, and
-canonicalizes its recipe as a word. Every ordinary byte is a position; every
-U+FDD0--U+FDEF reserved noncharacter is one atomic null position; grams stop at
-those positions and structural-element ends. Complete grams are shortened to
-the literal available suffix at those boundaries, preserving every ordinary
-position for later dictionary-backed short matching. `split` remains
-address-aligned, `bow` retains complete grams, and, until Warren-level phrase
-expansion has dictionary access, `phrase` supplies universal positional tails
-or returns empty when no complete-gram evidence exists. The GCL tree's internal
-semantic `ERROR` node reports that last case cleanly. All 54 targets compile
-successfully, and the user reports that basic testing works. The existing
-phrase expander completes step 6 by compiling quoted strings into exact
-positional GCL; no additional source change was required for that step. The
-Meadowlark file-oriented metadata work remains complete, and the separate
-Python wrapper still follows later.
+The user makes commits and runs the broader regression suite. No new code is
+authorized by this checkpoint. The immediate regexp closeout is documentation
+cleanup plus the already implemented opt-in cgrep search logging.
 
-Meadowlark creation now exposes the n-gram configuration. `--create ngram`
-uses the canonical default `five`, while `--create ngram:n` accepts the
-tokenizer's numeric or word recipes and stores the canonical word. The app
-validates this before creating the burrow, then appends ordinary Bigwig recipe
-overrides for the n-gram tokenizer and featurizer. Empty meadow names now mean
-`a.meadow` consistently for creation and opening. All 54 targets compile; the
-user's initial interactive checks over `ai/` and `src/` find exact
-punctuation-heavy C++ substrings, compose them with structural containment to
-recover source objects and filenames, and add fixed-width context across a
-source newline. These checks are intentionally basic. Step 7, changing code
-ingestion so a structural element can span source lines, and exhaustive
-literal-matching testing remain outstanding.
+The implemented Meadowlark ingestion, metadata, foraging, consolidation, and
+recovery records above remain the starting point for release planning. The
+Python wrapper and other follow-ups need explicit release-scope decisions;
+they are not silently promoted into mandatory work.
 
-The user then authorized the independent regexp machine foundation before the
-indexed evaluator. `regexp/nfa.h` exports a complete lambda-free byte NFA as a
-sorted vector of transitions with explicit 16-bit symbol sets, together with a
-reference matcher returning shortest, overlapping, inclusive byte intervals. The parser
-supports the agreed regular-language core and intersection. Virtual `START`
-and `END` symbols give `^` and `$` complete-buffer semantics without becoming
-ordinary bytes; `\R` covers LF, CRLF, U+2028, and U+2029. Lambda and
-empty-language results are errors. Focused coverage is isolated in
-`//test:nfa_test`, which passes, and all 57 Bazel targets compile. Indexed NFA
-execution remains to be designed.
+## Parked Regexp Work
 
-The first flat-search cut recorded in `ai/cgrep.md` is implemented without
-altering the public NFA or any existing source file. `Haystack` exposes
-arbitrary byte chunks and inclusive-offset translation; `Cgrep` compiles an
-opaque shareable state-by-symbol dispatch machine and iterates shortest,
-overlapping matches; and `apps/cgrep` emits streaming JSONL over files or
-stdin. The focused C++ and end-to-end JSONL tests are registered as
-`//test:cgrep_test` and `//test:cgrep_app_test`; the latter uses `rules_shell`
-as a root-only development dependency. `LineCgrep` now supplies a separate
-byte-oriented line-reporting engine with queued matches, an LF/EOF flush, a
-bounded line-position list, and coordinated reclamation. The app defaults to
-`--lines 4`; ordered `--lines n` and `--raw n` policies use zero for unlimited
-output. At that checkpoint, the end-to-end script passed directly and all 60
-Bazel targets compiled.
+- N-gram tokenizer/featurizer, universal feature, append normalization, GCL
+  literal-feature syntax, and basic byte-phrase matching are implemented.
+- The reusable byte-NFA compiler/reference matcher and flat-file cgrep work.
+  cgrep has typed lazy machine caches, buffer literal specialization, general
+  Haystack fallback, and separate buffer/Haystack line engines.
+- The user considers the matcher stable as far as testing and use establish.
+  Keep the existing machine vector and runner code unchanged while collecting
+  workloads.
+- CGREP_LOG optionally records replayable cgrep arguments for agent searches.
+  It is developer instrumentation documented only in ai/, with no logging
+  when unset. The app and app-test targets compile; new logging runtime cases
+  have not been run by the agent.
+- Continue normal dogfooding during Meadowlark work. Once the collection is
+  useful, return to indexed regexp execution, then add useful follow/union
+  special cases to both the index and scanner.
+- Dictionary-backed short matching, Warren phrase/regexp entry points,
+  cross-line code ingestion, and exhaustive indexed literal testing remain
+  unfinished. Their place in the regexp return plan is in regex.md.
+- The frontier-based seeking discussion is preliminary, not a proved general
+  algorithm. No follow decomposition or general springy-NFA runner was added.
 
-Raw `Cgrep` now specializes literal-chain NFAs by reducing them to a string.
-Forward `memchr` seeks cross chunks, a backward pass tightens each candidate,
-and interval length determines whether it is an exact match. Failed candidates
-resume at `p + 1`; exact matches use a precomputed self-overlap shift. Both
-release history before `p` immediately. The focused C++ target now
-has 18 cases, including relocation and trimming of retained history. The app
-and focused C++ target compile; the agent has not run the new tests or timing
-experiments. General springy matching remains under discussion.
-`--springy` (default) and `--no-springy` now select whether raw searches use
-literal specialization, independently of the output policy.
+Current implementation: [cgrep.md](cgrep.md).
+Indexed foundations, return plan, and design questions: [regex.md](regex.md).
+Search-tool limitations: [cgrep-improvements.md](cgrep-improvements.md).
+Historical changes: [log.md](log.md).
 
 ## Completed Meadowlark Filename And Labeling Step
 

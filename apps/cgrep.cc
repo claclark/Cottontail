@@ -1,3 +1,5 @@
+#include <cstdlib>
+#include <fstream>
 #include <iostream>
 #include <limits>
 #include <memory>
@@ -9,6 +11,32 @@
 #include "src/nlohmann.h"
 
 namespace {
+
+void log_arguments(int argc, char **argv) {
+  const char *filename = std::getenv("CGREP_LOG");
+  if (filename == nullptr)
+    return;
+  try {
+    std::string line;
+    for (int i = 1; i < argc; i++) {
+      if (i != 1)
+        line += ' ';
+      line += '\'';
+      for (const char *p = argv[i]; *p != '\0'; p++) {
+        if (*p == '\'')
+          line += "'\\''";
+        else
+          line += *p;
+      }
+      line += '\'';
+    }
+    line += '\n';
+    std::ofstream log(filename, std::ios::app | std::ios::binary);
+    log.write(line.data(), static_cast<std::streamsize>(line.size()));
+  } catch (...) {
+    // Logging must not affect the search or its diagnostics.
+  }
+}
 
 enum class OutputMode { LINES, RAW };
 
@@ -254,6 +282,7 @@ bool search(const char *program,
 } // namespace
 
 int main(int argc, char **argv) {
+  log_arguments(argc, argv);
   OutputPolicy policy;
   int argument = 1;
   while (argument < argc) {

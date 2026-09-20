@@ -3,6 +3,9 @@
 set -u
 set -o pipefail
 
+# Keep test invocations out of any caller's search collection.
+unset CGREP_LOG
+
 cgrep="${TEST_SRCDIR}/${TEST_WORKSPACE}/apps/cgrep"
 work="${TEST_TMPDIR}/cgrep"
 mkdir -p "${work}"
@@ -211,5 +214,37 @@ printf '%s\n' \
   '{"end":{"line":2,"position":3},"file":"named.txt","lines":"cat","p":4,"q":6,"start":{"line":2,"position":1}}' > expected.jsonl
 cmp actual.jsonl expected.jsonl || fail "search did not continue after error"
 [[ -s error.txt ]] || fail "missing input produced no diagnostic"
+
+# Logging precedes option parsing, appends, and omits the executable name.
+CGREP_LOG=commands.log expect_status 0 "${cgrep}" --help > help.txt
+CGREP_LOG=commands.log expect_status 0 "${cgrep}" --raw 0 cat named.txt \
+  > actual.jsonl
+printf '%s\n' "'--help'" "'--raw' '0' 'cat' 'named.txt'" > expected.log
+cmp commands.log expected.log || fail "argument log differs"
+
+# Replaying the shell quoting must recover every argument byte literally.
+arguments=(--help '' 'two words' "a'b" 'a"b' 'a\b' '*.cc' \
+  '$(touch injected)' '`touch injected`' '; touch injected' \
+  $'line\n\tcarriage\rreturn\n' 'café 中国' $'bad-\xff')
+CGREP_LOG=quoted.log expect_status 0 "${cgrep}" "${arguments[@]}" > help.txt
+printf '%s\0' "${arguments[@]}" > expected.args
+quoted=$(< quoted.log)
+eval "set -- ${quoted}"
+printf '%s\0' "$@" > actual.args
+cmp actual.args expected.args || fail "logged arguments did not round-trip"
+[[ ! -e injected ]] || fail "argument quoting allowed shell evaluation"
+
+CGREP_LOG=invalid.log expect_status 2 "${cgrep}" '[' named.txt \
+  > actual.jsonl 2> error.txt
+printf '%s\n' "'[' 'named.txt'" > expected.log
+cmp invalid.log expected.log || fail "invalid invocation was not logged"
+
+# An unusable log must not change status, output, or diagnostics.
+CGREP_LOG=missing-directory/log expect_status 0 "${cgrep}" --help \
+  > actual.help 2> error.txt
+cmp actual.help help.txt || fail "log failure changed output"
+[[ ! -s error.txt ]] || fail "log failure produced a diagnostic"
+CGREP_LOG= expect_status 0 "${cgrep}" --help > actual.help 2> error.txt
+[[ ! -s error.txt ]] || fail "empty log path produced a diagnostic"
 
 exit 0

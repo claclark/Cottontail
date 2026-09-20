@@ -582,63 +582,41 @@
   of reorderings are consistent with equal-score traversal-order churn caused
   by different physical merge layouts, not a partially incorrect merge.
 
-## N-Gram Literal Matching
+## Indexed Strings and Regular Expressions
 
-- `--create ngram[:n]` selects the paired n-gram tokenizer and featurizer;
-  the default and canonical recipe is `five`.
-- Quoted strings already compile through the general phrase-expansion path
-  into exact positional GCL over n-gram features.
-- Basic interactive checks over `ai/` and `src/` recover exact C++ substrings,
-  containing source objects, `//` filenames, and fixed-width context across a
-  source newline.
-- Meadowlark code ingestion spanning source lines and exhaustive
-  literal-matching tests remain outstanding.
-
-## Regular Expressions
-
-- `regexp/nfa.h` exports a complete lambda-free byte NFA as a sorted transition
-  vector with public start/final conventions. Labels are explicit sets of
-  16-bit symbols: ordinary bytes plus virtual `START` and `END` buffer events.
-- The initial compiler supports literal bytes, concatenation, grouping,
-  alternation, intersection, `*`, `+`, `?`, dot, byte classes/ranges, and the
-  documented escapes. `^` and `$` denote the complete supplied string; `\R`
-  accepts LF, CRLF, U+2028, or U+2029. Lambda and empty-language results are
-  errors.
-- The reference matcher returns shortest, overlapping, inclusive byte
-  intervals after removing the virtual positions outside the supplied string.
-  Its focused coverage is the separate `//test:nfa_test` target.
-- `regexp/cgrep.h` exposes an opaque shareable compiled dispatch machine and a
-  mutable runner over the abstract `Haystack` byte source. Chunk boundaries are
-  semantically invisible; translations use inclusive absolute byte offsets.
-  Each published chunk retains unreclaimed history contiguously behind its
-  start pointer, allowing live pointers to be saved as positions and rebased
-  after the next chunk publication.
-  The current concrete Haystack sizes seekable files, allocates an
-  uninitialized buffer once, and reads directly into it. The filename factory
-  opens and loads once, returning open/read errors directly. Stdin and unsized
-  sources grow a string using bulk reads. Both publish one whole-input chunk;
-  `limit()` remains a watermark only.
-- Raw `Cgrep` reduces literal-chain NFAs to a string and uses forward
-  `memchr` seeks plus backward tightening through retained history. An
-  interval is exact when its length equals the literal length. Failed
-  candidates resume at `p + 1`; exact matches use a precomputed self-overlap
-  shift. Both immediately release history before `p`, retaining a returned
-  match for translation. General NFAs retain the dispatch runner.
-  `Cgrep::compile(..., error, false)` disables specialization; the app exposes
-  `--springy` (default) and `--no-springy` for comparing raw runners.
-- `LineCgrep` is a separate byte loop over the same immutable machine. It queues
-  accepted intervals, retains a bounded GCL-like list of LF-delimited line
-  positions, and flushes reports at LF or EOF. Raw and line runners advance
-  Haystack reclamation on active-to-empty transitions and chunk boundaries;
-  the line runner also checks at LF boundaries. Repeated watermarks are
-  suppressed.
-- `apps/cgrep` searches files or stdin and emits one JSON object per match.
-  Strict JSON is attempted first; malformed UTF-8 fields use marked Base64
-  fallbacks. It defaults to `--lines 4`; `--lines n` and `--raw n` replace one
-  another in command order, and zero means unlimited.
-- Shortest-substring selection is a local matching semantic and is independent
-  of tokenization; n-grams will only provide indexed evidence for another
-  runner over the same exported machine.
+- N-gram collection creation uses --create ngram[:n], with canonical default
+  recipe five and supported widths one through seven. Token positions are
+  literal bytes except for atomic reserved structural noncharacters; boundary
+  suffix grams are stored without padding. Existing phrase expansion supplies
+  exact positional queries when complete-gram evidence is available.
+- Dictionary-backed short queries, Warren-level phrase/regexp entry points,
+  cross-line code ingestion, and exhaustive indexed literal testing remain
+  deferred. [regex.md](regex.md) records the foundations and open design.
+- regexp/nfa.h exports a lambda-free byte NFA and reference shortest-substring
+  matcher. Labels are explicit sets of 16-bit symbols: bytes plus START/END.
+  Anchors denote complete input; dot includes newline. Syntax and semantics
+  are documented in regex.md, with focused tests in //test:nfa_test.
+- regexp/machine.h holds an explicit shared compilation record and lazily
+  cached immutable HaystackMachine/BufferMachine representations, initialized
+  under a mutex. Buffer storage remains a one-element vector; no follow
+  decomposition is implemented.
+- Cgrep factories select owned buffers for small regular files and Haystacks
+  for streams/larger files. BufferCgrep recognizes literal-chain NFAs and uses
+  forward seeks/backward tightening; other expressions delegate through a
+  zero-copy buffer Haystack to bytewise dispatch. Concrete Haystacks still
+  materialize complete inputs, so source selection is not a memory cap.
+- LineCgrep selects BufferLineCgrep for buffer literals and HaystackLineCgrep
+  otherwise. Reports contain the enclosing lines, not surrounding context.
+  apps/cgrep defaults to --lines 4; ordered --lines/--raw policies use zero
+  for unlimited output. Invalid UTF-8 result text is omitted with binary:true;
+  only malformed filenames use Base64. Retired springy/no-match flags are gone.
+- CGREP_LOG optionally appends shell-quoted arguments for agent workload
+  collection, silently ignoring logging failures. It is not advertised in
+  user-facing docs and is inactive when unset. See [cgrep.md](cgrep.md) for
+  source/translation contracts, command behavior, and verification status.
+- Regexp development is paused while the active plan returns to shipping
+  Meadowlark. Later work starts with indexed execution and uses collected
+  searches to prioritize follow/union optimizations in both engines.
 
 ## Current Local Worktree Notes
 

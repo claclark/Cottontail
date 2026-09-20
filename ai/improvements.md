@@ -30,10 +30,10 @@ Especially don't do these things without discussion and approval from the user.
 
 ## Cached Phrase Postings
 
-- Formalize the existing rule that token text does not contain ASCII whitespace
-  or control characters. A normalized token sequence can then be serialized
-  with a reserved separator and featurized as a phrase cache key without
-  colliding with an ordinary token feature.
+- Define an unambiguous phrase-cache key without assuming token text excludes
+  ASCII whitespace or controls: n-gram features and literal GCL terms can
+  contain them. Any separator scheme must account for those feature strings
+  and avoid collisions with ordinary term features.
 - Add a phrase operation to `Warren` that returns a hopper. Its default
   implementation should construct exactly the phrase hopper used today, so
   Warrens without phrase caching preserve current behavior.
@@ -52,6 +52,9 @@ Especially don't do these things without discussion and approval from the user.
 - Decide the exact `Warren::phrase(...)` signature and canonical phrase-key
   encoding during design. The operation should receive normalized phrase
   components rather than depend on the original surface spelling.
+- Coordinate this older caching proposal with the deferred dictionary-backed
+  phrase/regexp entry points in `ai/regex.md`; do not introduce competing
+  Warren interfaces. Neither proposal is an active release task by default.
 
 ## Parallel Multi-Burrow Activation
 
