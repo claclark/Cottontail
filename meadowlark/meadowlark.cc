@@ -68,6 +68,8 @@ std::shared_ptr<Warren> open_meadow(const std::string &meadow,
                                     std::string *error) {
   std::string the_meadow = meadow == "" ? DEFAULT_MEADOW : meadow;
   std::shared_ptr<Warren> warren = Warren::make(the_meadow, error);
+  if (warren == nullptr)
+    return nullptr;
   warren->start();
   if (is_meadow(warren, error)) {
     warren->end();

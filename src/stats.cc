@@ -77,8 +77,13 @@ std::shared_ptr<Stats> Stats::make(const std::string &name,
       ((stats->stemmer_ = warren->stemmer()) == nullptr) &&
       ((stats->stemmer_ = Stemmer::make("", "", error)) == nullptr))
     return nullptr;
-  if (stats->tokenizer_ == nullptr)
-    assert((stats->tokenizer_ = warren->tokenizer()) != nullptr);
+  if (stats->tokenizer_ == nullptr) {
+    stats->tokenizer_ = warren->tokenizer();
+    if (stats->tokenizer_ == nullptr) {
+      safe_error(error) = "Missing tokenizer for statistics";
+      return nullptr;
+    }
+  }
   stats->name_ = name;
   return stats;
 }

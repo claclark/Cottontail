@@ -51,12 +51,15 @@ void restore(const std::string &nameof_contents,
   if (last_chunk == nullptr)
     return;
   if (chunk_map_limit == 0) {
-    assert(truncate(nameof_contents.c_str(), 0) == 0);
-    assert(truncate(nameof_chunk_map.c_str(), 0) == 0);
+    affirm(truncate(nameof_contents.c_str(), 0) == 0,
+           "truncate failure during text recovery");
+    affirm(truncate(nameof_chunk_map.c_str(), 0) == 0,
+           "truncate failure during text recovery");
     return;
   }
-  assert(truncate(nameof_chunk_map.c_str(),
-                  chunk_map_limit * sizeof(std::streamoff)) == 0);
+  affirm(truncate(nameof_chunk_map.c_str(),
+                  chunk_map_limit * sizeof(std::streamoff)) == 0,
+         "truncate failure during text recovery");
   std::fstream mapf(nameof_chunk_map,
                     std::ios::binary | std::ios::in | std::ios::out);
   assert(!mapf.fail());
@@ -73,7 +76,8 @@ void restore(const std::string &nameof_contents,
       std::unique_ptr<char[]>(new char[buffer_size]);
   std::streamsize amount = compressor->crush(last_chunk.get(), last_chunk_end,
                                              buffer.get(), buffer_size);
-  assert(truncate(nameof_contents.c_str(), where + amount) == 0);
+  affirm(truncate(nameof_contents.c_str(), where + amount) == 0,
+         "truncate failure during text recovery");
   std::fstream contents(nameof_contents,
                         std::ios::binary | std::ios::in | std::ios::out);
   assert(!contents.fail());

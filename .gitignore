@@ -5,6 +5,8 @@
 *.meadow
 
 # Top-level scratch files.
+/cgrep.log
+/splade/
 /codex-sessions.txt
 /*temp*
 /*test*

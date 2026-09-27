@@ -710,7 +710,8 @@ void Fiver::commit_() {
       std::string ready_name = working()->make_name(name() + "." + recipe());
       name_ = "fiver";
       std::string final_name = working()->make_name(name() + "." + recipe());
-      assert(link(ready_name.c_str(), final_name.c_str()) == 0);
+      affirm(link(ready_name.c_str(), final_name.c_str()) == 0,
+             "link failure on commit");
       std::remove(ready_name.c_str());
     } else {
       name_ = "fiver";

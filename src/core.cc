@@ -1,13 +1,28 @@
 #include "src/core.h"
 
 #include <chrono>
+#include <cstdlib>
 #include <ctime>
 #include <iostream>
 #include <regex>
 #include <string>
+#include <string_view>
 #include <thread>
 
 namespace cottontail {
+void affirm_helper(const char *full_file, int line, bool condition,
+                   std::string_view message) {
+  if (condition)
+    return;
+  std::string filename(full_file);
+  auto position = filename.find_last_of("/\\");
+  if (position != std::string::npos)
+    filename = filename.substr(position + 1);
+  std::cerr << "cottontail: " << message << " [" << filename << ":" << line << "]\n"
+            << std::flush;
+  std::abort();
+}
+
 bool okay(const std::string &value) {
   return value == "y" || value == "yes" || value == "on" || value == "true" ||
          value == "okay" || value == "ok" || value == "Y" || value == "Yes" ||

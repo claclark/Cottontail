@@ -8,6 +8,7 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace cottontail {
@@ -74,6 +75,11 @@ struct safe_error_helper {
 };
 
 #define safe_error(ptr) safe_error_helper((ptr), __FILE__, __LINE__)
+
+void affirm_helper(const char *full_file, int line, bool condition,
+                   std::string_view message = "internal failure");
+
+#define affirm(...) affirm_helper(__FILE__, __LINE__, __VA_ARGS__)
 
 template <typename T> std::shared_ptr<T> shared_array(addr size) {
   return std::shared_ptr<T>(new T[size], [](T *p) { delete[] p; });

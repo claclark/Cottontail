@@ -698,3 +698,24 @@
   direction in `ai/plan.md`, with indexed regexp work and workload-driven
   optimizations parked for later. This cleanup changed only agent notes;
   source/test files were untouched, and no builds or runtime tests were run.
+
+2026-09-26T16:47:47Z
+- Added always-on `affirm` for the six direct side-effect assertions: Fiver's
+  commit link, four text-recovery truncations, and Stats tokenizer assignment.
+  The final helper uses `__FILE__`/`__LINE__` through a macro, matching
+  `safe_error`, with an optional diagnostic followed by abort. Meadowlark and
+  the aggregate test target compile with optimization and `-DNDEBUG`; runtime
+  tests remain with the user. Also ignored the local `cgrep.log` and removed
+  it from Git's index while preserving the local file.
+
+2026-09-26T16:58:57Z
+- Changed the missing-tokenizer path in `Stats::make` to set `safe_error(error)`
+  and return `nullptr` instead of aborting through `affirm`. The tokenizer
+  assignment still executes under `NDEBUG`. Meadowlark and the aggregate test
+  target compile with optimization and `-DNDEBUG`; runtime tests were not run.
+
+2026-09-26T17:19:01Z
+- Added the missing null check after `Warren::make` in `open_meadow`, returning
+  the existing open error instead of dereferencing a null Warren. Meadowlark
+  and the aggregate test target compile with optimization and `-DNDEBUG`;
+  runtime tests were not run.
