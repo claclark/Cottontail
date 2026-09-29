@@ -8,9 +8,14 @@
   GCL-specific optimizer/hopper helpers. Built into the core Cottontail
   library.
 - `meadowlark/`: Meadowlark layer built on top of the core library.
-- `apps/`: CLI binaries, dataset utilities, and short-lived scratch programs.
+- `apps/`: currently useful CLI binaries and dataset utilities.
+- `expr/`: historical TREC/SPLADE programs, benchmarks, and scratch tools.
+- `iirj/`: the paper's TREC collection-update and JSON-table experiments,
+  with the TREC report script and JSON collection builder.
+- `src/collection.*` and `src/walk.*`: shared collection-ingestion and
+  filesystem-walking helpers, built into `//src:cottontail`.
 - `test/`: Bazel C++ tests. `//test:tests` is the aggregate target;
-  `//test:hazel_test` is the dedicated Hazel regression target.
+  focused targets cover Hazel, the optimizer, NFA, cgrep, and the cgrep app.
 - `ai/`: agent-facing architecture notes, plans, logs, and progress notes.
   `ai/consolidation.md` is the completed Bigwig/Hazel consolidation checkpoint;
   `ai/memory.md` is the deferred Warren memory-trimming design checkpoint.
@@ -55,6 +60,20 @@
 - Compression/stats/support: `compressor.*`, `post_compressor.*`,
   `tfdf_compressor.*`, `zlib_compressor.*`, `bad_compressor.h`, `stats.*`,
   `df_stats.*`, `idf_stats.*`, `field_stats.*`, `read_gate.h`.
+
+## Failure Reporting
+
+- `safe_error(error)` records a recoverable error with a source-file/line
+  suffix. `affirm(condition, message)` in `src/core.*` is always evaluated,
+  including under `NDEBUG`; failure prints `cottontail: message [file:line]`
+  to stderr and aborts. The default message is `internal failure`. Both use
+  the existing `__FILE__`/`__LINE__` convention.
+- Fiver's commit link and four `SimpleTxtIO` recovery truncations use `affirm`
+  so their system calls are not compiled out. Stats tokenizer setup also runs
+  under `NDEBUG`, but a missing tokenizer returns `nullptr` through the normal
+  error mechanism rather than aborting.
+- `open_meadow` checks `Warren::make` before starting the Warren and preserves
+  its open error on failure.
 
 ## Current GCL Optimization Notes
 
@@ -101,7 +120,7 @@
   Warren. It rejects the query through the normal JSON error response when the
   summed Warren estimates exceed one eighth of `MemTotal`. Both checks fail
   open on non-Linux systems or unreadable memory information.
-- `apps/ssr-timing` is a batch timing client for an existing `ssr-server`.
+- `expr/ssr-timing` is a batch timing client for an existing `ssr-server`.
   Usage is `ssr-timing port timing.queries [seconds]`. Each query file row has
   a qid and a query. The client runs each query as `c/opt`, `w/not`, then
   `w/opt`, checks that returned docnos match, prints each timing as it arrives,
@@ -199,24 +218,28 @@
   failure. `--verbose` enables timestamped phase descriptions and timings from
   the consolidation operation. The Bazel build emits `finish-merging` as a
   compatibility symlink to `consolidate`.
-- `apps/scratch.cc`: scratch utility for creating no-merge Bigwig/Fiver shards
+- `expr/scratch.cc`: scratch utility for creating no-merge Bigwig/Fiver shards
   from small text files with `line:` and `file:` annotations.
 
 ## Build And Verification
 
+- `.bazelrc` selects C++20 for target and host compilation.
 - `MODULE.bazel` defines the Bazel module with `nlohmann_json`, `googletest`,
   and `rules_cc`. Linenoise is vendored under `third_party/linenoise` with its
   BSD license, avoiding a system Readline dependency and external Bazel
   packaging compatibility patches.
 - `src/BUILD` exports `//src:cottontail`, including `src/*`, `gcl/*`, and the
   Meadowlark library.
-- `apps/BUILD` contains standalone `cc_binary` targets.
+- `apps/BUILD`, `expr/BUILD`, and `iirj/BUILD` contain standalone
+  `cc_binary` targets. Moved programs keep their names under the new package;
+  for example, `//iirj:trec-example` and `//expr:splade`.
 - The shared application filesystem walker uses C++17 `std::filesystem`; its
   consumers require no Boost installation or `/usr/local` include/link flags.
   It does not follow symlinked files or directories, including a symlink given
   as the top-level input path.
 - `test/BUILD` contains aggregate `//test:tests` and dedicated
-  `//test:hazel_test` and `//test:optimizer_test`.
+  `//test:hazel_test`, `//test:optimizer_test`, `//test:nfa_test`,
+  `//test:cgrep_test`, and `//test:cgrep_app_test` targets.
 - On 2026-08-23 the user reported that the complete regression suite and
   additional tests pass after the file-oriented forager and empty/tokenless
   Fiver work.

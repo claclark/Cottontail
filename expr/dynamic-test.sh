@@ -1,5 +1,5 @@
 #!/bin/sh -v
-TEST=/home/claclark/Cottontail/Three/bazel-bin/apps/dynamic-test
+TEST=/home/claclark/Cottontail/Three/bazel-bin/expr/dynamic-test
 QUERIES=/data/hdd3/claclark/queries.trec8
 QRELS=/data/hdd3/claclark/qrels.trec8
 TREC4=/home/claclark/Cottontail/TREC-disks/trec/trec_disk_4

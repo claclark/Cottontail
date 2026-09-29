@@ -20,6 +20,19 @@ explicitly requests a runtime experiment or test run.
 
 ## Current Checkpoint
 
+The application reorganization is complete as of 2026-09-27. Current utilities
+remain in `apps/`; historical experiments, SPLADE tools, and benchmarks are in
+`expr/`; the paper's TREC-update and JSON-table programs are in `iirj/`.
+Shared `collection.*` and `walk.*` helpers now live in `src/`. All 42 binary
+targets are preserved under their respective packages. The full optimized
+build passes; agent verification did not run regression tests.
+
+The six direct side-effecting assertion cases have been corrected for
+`NDEBUG` builds. Fiver publication and four text-recovery truncations use the
+always-on `affirm` helper; Stats tokenizer setup uses normal error returns.
+`open_meadow` also propagates a failed Warren open without dereferencing it.
+This was a narrow fix, not a general assertion cleanup.
+
 The Meadowlark JSONL, TSV, text, and code ingestion work is complete. Durable
 database and metadata conventions are recorded in `ai/meadowlark.md`; the
 model-facing database bootstrap guide is `ai/exploring-meadowlark.md`.
@@ -34,7 +47,7 @@ recovery behavior, and focused coverage are recorded in
 `ai/consolidation.md`.
 
 The follow-up Bigwig merge-publication cleanup is committed as `63d70b8`. The
-user reports that `apps/trec-example`, the regression tests, and
+user reports that `iirj/trec-example` (then in `apps/`), the regression tests, and
 `./rank.sh a.meadow` all pass after that change.
 
 The first narrow memory-pressure response is implemented for standalone
@@ -62,15 +75,25 @@ various ways and are ready to commit.
 
 ## Active Direction: Ship Meadowlark
 
-As of 2026-09-20, return to shipping a Meadowlark release. The regexp work is
-paused, not a release prerequisite. The next discussion should establish the
-release scope, remaining blockers, documentation/package expectations, and
-verification checklist from the current implementation. Do not assume every
-item in improvements.md or every experimental feature must ship first.
+As of 2026-09-29, the direction remains shipping Meadowlark. The regexp work is
+paused, not a release prerequisite. Do not assume every item in improvements.md
+or every experimental feature must ship first.
 
 The user makes commits and runs the broader regression suite. No new code is
-authorized by this checkpoint. The immediate regexp closeout is documentation
-cleanup plus the already implemented opt-in cgrep search logging.
+authorized by this checkpoint. The application reorganization and its directory
+READMEs are complete; the current task is updating agent documentation.
+
+The next feature discussed is SPLADE support over ordinary JSON records in the
+same index. The user's data includes `docid`, `raw_text`, and `splade_vector`:
+the intention is to derive SPLADE annotations and also forage the record text
+with TF-IDF for BM25, without loading a separate text collection. The legacy
+SPLADE programs now in `expr/` are to be replaced, not treated as the new
+Meadowlark interface. No replacement design or implementation is yet approved.
+
+For exceptionally large JSONL inputs, the agreed practical approach is to split
+at record boundaries and append the parts as separate logical files. Readying
+uncommitted Fivers does not release their bulk memory; rolling prepared
+transactions were discussed but are not planned work. See `ai/meadowlark.md`.
 
 The implemented Meadowlark ingestion, metadata, foraging, consolidation, and
 recovery records above remain the starting point for release planning. The

@@ -1,6 +1,6 @@
 # Meadowlark Database Conventions
 
-Status date: 2026-08-22.
+Status date: 2026-09-29.
 
 This is the durable reference for Meadowlark's machine-facing structure,
 metadata, source provenance, and append invariants. Completed implementation
@@ -395,6 +395,20 @@ metadata record, a canonical `/` identity, a local `//`, a filename feature on
 addressable data only, and coordinated publication. For nonempty data, `//`
 and the data are enclosed by `/.`; for an empty or tokenless source, `//`
 remains without `/.` or a filename-feature interval.
+
+## Large JSONL Inputs
+
+`append_jsonl` keeps one transaction per worker for the input file and readies
+it when the worker finishes. `Fiver::ready()` serializes its state but retains
+the text, annotations, and postings in memory; preparing smaller uncommitted
+transactions would not by itself bound memory use.
+
+For very large inputs, split at JSONL record boundaries and append the parts as
+separate logical files. Each part has its own source identity and commit set.
+Rerunning `append_all` with the same part filenames skips completed parts and
+retries missing ones. This is the agreed practical workaround, not a change to
+the file-level publication contract; disk-backed prepared-transaction memory
+release is not implemented.
 
 ## Compatibility Verification
 

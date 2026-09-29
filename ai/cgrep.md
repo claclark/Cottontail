@@ -1,6 +1,6 @@
 # cgrep: Implementation Checkpoint
 
-Updated 2026-09-20. The scanner is a stable working tool, as far as current
+Updated 2026-09-29. The scanner is a stable working tool, as far as current
 testing and use establish. Matcher development is paused while the main
 project returns to a Meadowlark release. This document describes current code;
 the preliminary indexed-regexp design and later optimization sequence are in
@@ -197,6 +197,8 @@ have already expanded; working directory, redirections, and pipe input are
 not recorded. Replay relative paths from the appropriate directory and supply
 stdin separately. Treat collected commands as data, not as trusted scripts.
 Do not automatically commit the local log; inspect git status before staging.
+The repository-root `cgrep.log` is now ignored and no longer tracked. A
+different log path is not automatically covered by that ignore rule.
 
 Agents should continue using cgrep for suitable repository searches. Record
 reasons for other tools in cgrep-improvements.md. Collection is intended to

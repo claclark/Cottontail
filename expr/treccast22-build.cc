@@ -1,6 +1,6 @@
 #include <iostream>
 
-#include "apps/collection.h"
+#include "src/collection.h"
 #include "src/cottontail.h"
 
 void usage(std::string program_name) {

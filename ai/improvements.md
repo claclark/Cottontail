@@ -269,10 +269,14 @@ follow-ups are:
 
 ## Deep Error Logging
 
-- Add a logging path for deep internal errors that currently only assert.
+- The always-on `affirm(...)` helper now reports a source-located message to
+  stderr and aborts for internal failures, including under `NDEBUG`. Fiver's
+  commit link and four text-recovery truncations use it. Stats tokenizer
+  setup instead uses the normal error return. The six direct side-effecting
+  assertion cases are fixed; a broader assertion review remains deferred.
 - Consider making `safe_error(...)` also log to stderr when it records an
-  error, then add a separate helper for invariant/deep-format failures that
-  should be visible even when assertions are disabled.
+  error. Recoverable errors should remain on their normal return paths rather
+  than being turned into fatal assertions.
 - Preserve lower-level `ready_()` / publication errors instead of collapsing
   them to only `"Transaction cannot be commited."`, especially around dynamic
   Bigwig/Fiver transaction readiness.

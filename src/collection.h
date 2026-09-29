@@ -1,5 +1,5 @@
-#ifndef COTTONTAIL_APPS_COLLECTION_H_
-#define COTTONTAIL_APPS_COLLECTION_H_
+#ifndef COTTONTAIL_SRC_COLLECTION_H_
+#define COTTONTAIL_SRC_COLLECTION_H_
 
 #include <map>
 #include <memory>
@@ -31,4 +31,4 @@ bool collection_CAsT2022_preprocessed(
     const std::string &location, std::shared_ptr<cottontail::Builder> builder,
     std::string *error);
 } // namespace cottontail
-#endif // COTTONTAIL_APPS_COLLECTION_H_
+#endif // COTTONTAIL_SRC_COLLECTION_H_

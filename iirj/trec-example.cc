@@ -9,9 +9,9 @@
 #include <thread>
 #include <vector>
 
-#include "apps/walk.h"
 #include "src/cache_gate.h"
 #include "src/cottontail.h"
+#include "src/walk.h"
 
 const std::string DEFAULT_COLLECTION = "/data/hdd3/Collections/trec";
 

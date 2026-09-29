@@ -1,9 +1,22 @@
 load("@rules_cc//cc:defs.bzl", "cc_binary")
 
 cc_binary(
-    name = "containers",
+    name = "splade-annotate",
     srcs = [
-      "containers.cc",
+      "splade-annotate.cc",
+    ],
+    deps = [
+      "//src:cottontail",
+    ] ,
+    linkopts = [
+      "-pthread",
+    ],
+)
+
+cc_binary(
+    name = "splade",
+    srcs = [
+      "splade.cc",
     ],
     deps = [
       "//src:cottontail",
@@ -14,35 +27,9 @@ cc_binary(
 )
 
 cc_binary(
-    name = "cgrep",
+    name = "c4-build",
     srcs = [
-      "cgrep.cc",
-    ],
-    deps = [
-      "//src:cottontail",
-    ],
-    visibility = [
-      "//test:__pkg__",
-    ],
-)
-
-cc_binary(
-    name = "fast-id",
-    srcs = [
-      "fast-id.cc",
-    ],
-    deps = [
-      "//src:cottontail",
-    ], 
-    linkopts = [
-      "-pthread",
-    ],
-)
-
-cc_binary(
-    name = "fiver2hazel",
-    srcs = [
-      "fiver2hazel.cc",
+      "c4-build.cc",
     ],
     deps = [
       "//src:cottontail",
@@ -53,9 +40,9 @@ cc_binary(
 )
 
 cc_binary(
-    name = "consolidate",
+    name = "dagstuhl",
     srcs = [
-      "consolidate.cc",
+      "dagstuhl.cc",
     ],
     deps = [
       "//src:cottontail",
@@ -65,48 +52,76 @@ cc_binary(
     ],
 )
 
-genrule(
-    name = "finish-merging-compat",
+cc_binary(
+    name = "dagstuhl-trec45",
     srcs = [
-        ":consolidate",
+      "dagstuhl-trec45.cc",
     ],
-    outs = [
-        "finish-merging",
+    deps = [
+      "//src:cottontail",
     ],
-    cmd = "ln -s consolidate $@",
-    executable = True,
+    linkopts = [
+      "-pthread",
+    ],
 )
 
 cc_binary(
-    name = "fluffy",
+    name = "dynamic-test",
     srcs = [
-      "fluffy.cc",
+      "dynamic-test.cc",
+    ],
+    deps = [
+      "//src:cottontail",
+    ],
+    linkopts = [
+      "-pthread",
+    ],
+)
+
+cc_binary(
+    name = "idx-timing",
+    srcs = [
+      "idx-timing.cc",
+    ],
+    deps = [
+      "//src:cottontail",
+    ],
+    linkopts = [
+      "-pthread",
+    ],
+)
+
+cc_binary(
+    name = "mt",
+    srcs = [
+      "mt.cc",
     ],
     deps = [
       "//src:cottontail",
       "//third_party/linenoise",
+    ],
+    linkopts = [
+      "-pthread",
+    ],
+)
+
+cc_binary(
+    name = "pref2train",
+    srcs = [
+      "pref2train.cc",
+    ],
+    deps = [
+      "//src:cottontail",
     ],
     linkopts = [
       "-pthread"
     ],
 )
 
-genrule(
-    name = "inspect-alias",
-    srcs = [
-        ":fluffy",
-    ],
-    outs = [
-        "inspect",
-    ],
-    cmd = "ln -s fluffy $@",
-    executable = True,
-)
-
 cc_binary(
-    name = "forage",
+    name = "qap",
     srcs = [
-      "forage.cc",
+      "qap.cc",
     ],
     deps = [
       "//src:cottontail",
@@ -117,9 +132,9 @@ cc_binary(
 )
 
 cc_binary(
-    name = "merge-hazels",
+    name = "rag2024-extract",
     srcs = [
-      "merge-hazels.cc",
+      "rag2024-extract.cc",
     ],
     deps = [
       "//src:cottontail",
@@ -130,9 +145,9 @@ cc_binary(
 )
 
 cc_binary(
-    name = "meadowlark",
+    name = "ssr-timing",
     srcs = [
-      "meadowlark.cc",
+      "ssr-timing.cc",
     ],
     deps = [
       "//src:cottontail",
@@ -143,22 +158,9 @@ cc_binary(
 )
 
 cc_binary(
-    name = "parameters",
+    name = "treccast20",
     srcs = [
-      "parameters.cc",
-    ],
-    deps = [
-      "//src:cottontail",
-   ],
-   linkopts = [
-      "-pthread",
-   ],
-)
-
-cc_binary(
-    name = "rank",
-    srcs = [
-      "rank.cc",
+      "treccast20.cc",
     ],
     deps = [
       "//src:cottontail",
@@ -169,9 +171,9 @@ cc_binary(
 )
 
 cc_binary(
-    name = "set",
+    name = "treccast20-build",
     srcs = [
-      "set.cc",
+      "treccast20-build.cc",
     ],
     deps = [
       "//src:cottontail",
@@ -182,9 +184,9 @@ cc_binary(
 )
 
 cc_binary(
-    name = "simple",
+    name = "treccast21",
     srcs = [
-      "simple.cc",
+      "treccast21.cc",
     ],
     deps = [
       "//src:cottontail",
@@ -195,23 +197,9 @@ cc_binary(
 )
 
 cc_binary(
-    name = "ssr-client",
+    name = "treccast21-build",
     srcs = [
-      "ssr-client.cc",
-    ],
-    deps = [
-      "//src:cottontail",
-      "//third_party/linenoise",
-    ],
-    linkopts = [
-      "-pthread",
-    ],
-)
-
-cc_binary(
-    name = "ssr-server",
-    srcs = [
-      "ssr-server.cc",
+      "treccast21-build.cc",
     ],
     deps = [
       "//src:cottontail",
@@ -222,39 +210,65 @@ cc_binary(
 )
 
 cc_binary(
-    name = "tf-df",
+    name = "treccast22",
     srcs = [
-      "tf-df.cc",
+      "treccast22.cc",
+    ],
+    deps = [
+      "//src:cottontail",
+    ],
+    linkopts = [
+      "-pthread",
+    ],
+)
+
+cc_binary(
+    name = "treccast22-build",
+    srcs = [
+      "treccast22-build.cc",
+    ],
+    deps = [
+      "//src:cottontail",
+    ],
+    linkopts = [
+      "-pthread",
+    ],
+)
+
+cc_binary(
+    name = "trecdl21",
+    srcs = [
+      "trecdl21.cc",
+    ],
+    deps = [
+      "//src:cottontail",
+    ],
+    linkopts = [
+      "-pthread",
+    ],
+)
+
+cc_binary(
+    name = "wikidata-build",
+    srcs = [
+      "wikidata-build.cc",
     ],
     deps = [
       "//src:cottontail",
     ] ,
     linkopts = [
-      "-pthread",
     ],
 )
 
 cc_binary(
-    name = "tf-idf",
+    name = "scratch",
     srcs = [
-      "tf-idf.cc",
+      "scratch.cc",
     ],
     deps = [
       "//src:cottontail",
-    ] ,
+    ],
     linkopts = [
       "-pthread",
-    ],
-)
-
-cc_binary(
-    name = "utf8-tables",
-    srcs = [
-      "utf8-tables.cc",
-    ],
-    deps = [
-      "//src:cottontail",
-    ] ,
-    linkopts = [
     ],
 )

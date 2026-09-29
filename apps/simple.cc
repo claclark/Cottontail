@@ -5,9 +5,9 @@
 #include <string>
 #include <vector>
 
-#include "apps/collection.h"
-#include "apps/walk.h"
+#include "src/collection.h"
 #include "src/cottontail.h"
+#include "src/walk.h"
 
 namespace {
 

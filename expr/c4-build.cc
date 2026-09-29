@@ -1,10 +1,10 @@
 #include <iostream>
 
-#include "apps/collection.h"
+#include "src/collection.h"
 #include "src/cottontail.h"
 
 void usage(std::string program_name) {
-  std::cerr << "usage: " << program_name << " [--burrow burrow] MARCO CAR\n";
+  std::cerr << "usage: " << program_name << " [--burrow burrow] [file]...\n";
 }
 
 int main(int argc, char **argv) {
@@ -20,13 +20,10 @@ int main(int argc, char **argv) {
     argc -= 2;
     argv += 2;
   }
-  if (argc != 3) {
+  if (argc < 2) {
     usage(program_name);
     return 1;
   }
-  std::string location_MARCO = argv[1];
-  std::string location_CAR = argv[2];
-  std::string options = "tokenizer:noxml";
   std::string error;
   std::shared_ptr<cottontail::Working> working =
       cottontail::Working::mkdir(burrow, &error);
@@ -34,20 +31,22 @@ int main(int argc, char **argv) {
     std::cerr << program_name << ": " << error << "\n";
     return -1;
   }
+  std::string options = "tokenizer:noxml";
   std::shared_ptr<cottontail::Builder> builder =
       cottontail::SimpleBuilder::make(working, options, &error);
   if (builder == nullptr) {
     std::cerr << program_name << ": " << error << "\n";
     return -1;
   }
-  if (!collection_TREC_MARCO(location_MARCO, builder, &error)) {
-    std::cerr << program_name << ": " << error << "\n";
-    return -1;
+  for (int i = 1; i < argc; i++) {
+    std::string location = argv[i];
+    std::cout <<  program_name << ": " << location << "\n";
+    if (!collection_c4(location, builder, &error)) {
+      std::cerr << program_name << ": " << error << "\n";
+      return -1;
+    }
   }
-  if (!collection_TREC_CAR(location_CAR, builder, &error)) {
-    std::cerr << program_name << ": " << error << "\n";
-    return -1;
-  }
+  std::cout <<  program_name << "... finalizing\n";
   if (!builder->finalize(&error)) {
     std::cerr << program_name << ": " << error << "\n";
     return -1;

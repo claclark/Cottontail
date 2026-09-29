@@ -5,9 +5,9 @@
 #include <utility>
 #include <vector>
 
-#include "apps/walk.h"
 #include "meadowlark/meadowlark.h"
 #include "src/tokenizer.h"
+#include "src/walk.h"
 
 void usage(std::string program_name) {
   std::cerr << "usage: " << program_name

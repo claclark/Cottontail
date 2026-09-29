@@ -98,7 +98,7 @@ to miss them consistently.
 
 ## Measurement And Correctness
 
-`apps/ssr-timing` runs each tagged query as cold/optimized, warm/unoptimized,
+`expr/ssr-timing` runs each tagged query as cold/optimized, warm/unoptimized,
 and warm/optimized, flushing each server-reported timing and checking returned
 docnos. The sampled runs produced no docno mismatch reports.
 

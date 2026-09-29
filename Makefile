@@ -1,4 +1,4 @@
-SRC = src test apps external WORKSPACE Makefile LICENSE README.md
+SRC = src test apps expr iirj external WORKSPACE Makefile LICENSE README.md
 
 .PHONY: building debugging testing perf FORCE
 

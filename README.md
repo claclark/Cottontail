@@ -16,6 +16,11 @@ In and of itself, Cottontail is not a search engine or database,
 but rather a unique approach to indexing that can form the foundation for
 these systems.
 
+Current command-line utilities live in [`apps/`](apps/). Historical experiments
+and benchmarks live in [`expr/`](expr/). The TREC collection-update
+and JSON-table experiments from the paper, with their supporting programs,
+live in [`iirj/`](iirj/). Shared library helpers live in `src/`.
+
 This repo also includes an initial version of a metadata layer for Cottontail,
 called Meadowlark.
 Meadowlark provides a simple filesystem-like layer over Cottontail,

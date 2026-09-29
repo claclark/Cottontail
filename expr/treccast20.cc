@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 
-#include "apps/collection.h"
+#include "src/collection.h"
 #include "src/cottontail.h"
 
 const std::string default_burrow = "/data/ssd1/claclark/TREC2020/the.burrow";

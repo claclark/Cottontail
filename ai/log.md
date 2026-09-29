@@ -719,3 +719,28 @@
   the existing open error instead of dereferencing a null Warren. Meadowlark
   and the aggregate test target compile with optimization and `-DNDEBUG`;
   runtime tests were not run.
+
+2026-09-27T13:32:27Z
+- Reorganized application sources into current utilities in `apps/`, historical
+  experiments and benchmarks (including both SPLADE tools) in `expr/`,
+  and the paper's TREC-update and JSON-table programs with their supporting
+  builder/report script in `iirj/`. Moved shared `collection.*` and `walk.*`
+  helpers into `src/` and updated includes, header guards, Bazel packages,
+  the dynamic-test script's executable path, and the source-archive manifest.
+  Updated README and current agent notes; historical log paths remain intact.
+  All 42 binary targets are preserved. Verified moved-file contents and script
+  modes, shell syntax, and `bazel build -c opt --cxxopt=-DNDEBUG //...`.
+  No runtime tests or experiments were run, and no commit was made.
+
+2026-09-27T14:31:37Z
+- Added README files to `apps/`, `expr/`, and `iirj/` describing their purposes
+  and build locations. The IIRJ README identifies both paper experiments and
+  repeats the citation from the main README. Documentation-only change.
+
+2026-09-29T00:03:17Z
+- Reviewed current agent documentation against the reorganized tree and recent
+  code. Updated the active checkpoint, completed assertion/open-error fixes,
+  focused test inventory, ignored cgrep log, and large-JSONL splitting guidance.
+  Recorded the SPLADE direction as discussed, not approved implementation work.
+  Left architecture and historical log entries unchanged. Documentation-only;
+  no builds or runtime tests were run.

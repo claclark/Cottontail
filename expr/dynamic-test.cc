@@ -9,8 +9,8 @@
 #include <thread>
 #include <vector>
 
-#include "apps/walk.h"
 #include "src/cottontail.h"
+#include "src/walk.h"
 
 #define ASSERT_EQ(a, b) (assert((a) == (b)))
 #define ASSERT_NE(a, b) (assert((a) != (b)))
