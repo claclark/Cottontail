@@ -21,6 +21,7 @@
 #include "src/scribe.h"
 #include "src/simple.h"
 #include "src/simple_builder.h"
+#include "src/splade.h"
 #include "src/stemmer.h"
 #include "src/tagging_featurizer.h"
 #include "src/tokenizer.h"

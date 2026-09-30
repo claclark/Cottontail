@@ -21,7 +21,8 @@ int main(int argc, char **argv) {
   bool report_addr = true;
   std::string burrow = cottontail::DEFAULT_BURROW;
   if (argc > 2 &&
-      (argv[1] == std::string("-b") || argv[1] == std::string("--burrow"))) {
+      (argv[1] == std::string("-b") || argv[1] == std::string("--burrow") ||
+       argv[1] == std::string("--meadow"))) {
     burrow = argv[2];
     argc -= 2;
     argv += 2;

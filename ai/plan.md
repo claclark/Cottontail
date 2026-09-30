@@ -79,16 +79,60 @@ As of 2026-09-29, the direction remains shipping Meadowlark. The regexp work is
 paused, not a release prerequisite. Do not assume every item in improvements.md
 or every experimental feature must ship first.
 
-The user makes commits and runs the broader regression suite. No new code is
-authorized by this checkpoint. The application reorganization and its directory
-READMEs are complete; the current task is updating agent documentation.
+The user makes commits and runs the broader regression suite. The first SPLADE
+implementation was authorized on 2026-09-29; the user subsequently reported
+all eight regression targets passing and a full MS MARCO run. On 2026-09-30,
+the user authorized the linked-list traversal described below. That follow-up
+is implemented; the user's full run took 529,972 ms with unchanged MRR@10.
+Regression tests for this follow-up remain pending. Further source changes need
+discussion and authorization. Measurements are in [splade.md](splade.md).
 
-The next feature discussed is SPLADE support over ordinary JSON records in the
+The first SPLADE implementation supports ordinary JSON records in the
 same index. The user's data includes `docid`, `raw_text`, and `splade_vector`:
-the intention is to derive SPLADE annotations and also forage the record text
-with TF-IDF for BM25, without loading a separate text collection. The legacy
-SPLADE programs now in `expr/` are to be replaced, not treated as the new
-Meadowlark interface. No replacement design or implementation is yet approved.
+the existing JSON field annotations already carry the SPLADE weights under
+`:splade_vector:<label>:`. No separate SPLADE annotation pass is needed. The
+record text can also be foraged with TF-IDF for BM25, without loading a separate
+text collection. The legacy SPLADE programs in `expr/` remain unchanged as
+historical experiments; the current CLI is `apps/splade`.
+
+### First SPLADE Pass: Implemented Interface
+
+- `src/splade.cc` and `src/splade.h` provide exact document-at-a-time batch
+  ranking analogous to `cottontail::trec`, with parallelism across queries.
+- Queries map topic IDs to maps of literal labels (such as `##n`) to `fval`
+  weights. Construct `:splade_vector:<label>:` internally; use the stored
+  floating-point annotation values and associate fields with their enclosing
+  containers. Return translated identifier intervals, as with `trec`.
+- Required arguments: Warren, queries, a string-to-string parameters map,
+  results. A convenience overload omits parameters and passes an empty map.
+  Optional arguments are `error = nullptr`, `threads = 0`, `time = nullptr`.
+- Parameters and defaults: `container` = `:`, `prefix` = `:splade_vector:`,
+  `id` = `:docid:`, `depth` = `1000`. Container and ID are GCL queries;
+  term feature labels are constructed directly, without parsing or stemming.
+- Finite nonnegative weights are required. Only positive scores rank; ties
+  prefer earlier container starts. Top-k storage is bounded by depth, without
+  document-wide accumulators or approximate pruning. Missing IDs are omitted,
+  like `trec`; there is no backfill beyond the selected top-k containers.
+- Hopper nodes are owned by a fixed vector and threaded into a raw-pointer
+  list ordered by current position. Score the prefix in the head's document,
+  then advance and reinsert those nodes. Containers must not overlap; each
+  vector label must have at most one single-position annotation per container.
+  Other hoppers are untouched. No WAND or threshold-window pruning is used.
+- `apps/splade.cc` reads JSONL `qid`/`splade_vector` records and converts them
+  to maps. Both integer and floating-point numeric query values are accepted.
+  It prints TREC output with synthetic rank-based scores, like `apps/rank`.
+  The CLI defaults to depth 10; the library still defaults to 1000.
+- SPLADE accepts `--burrow` and `--meadow`, with only `--burrow` in help.
+  `apps/fluffy.cc` (also built as `inspect`) now accepts the same alias.
+  General convention: `--meadow` may alias `--burrow`, not the reverse. Other
+  existing apps were not changed in this pass.
+- `src/ranker.h` now defaults `trec`'s error and threads arguments, preserving
+  argument order and implementation.
+- Focused library coverage is `//test:splade_test`; CLI coverage is
+  `//test:splade_app_test`. Runtime verification remains with the user.
+  Linked-list cases cover reordered fields, hopper exhaustion, scoped gaps,
+  and exhaustive dot-product comparison with 35 query labels. The old
+  overlapping-container case was removed to match the agreed contract.
 
 For exceptionally large JSONL inputs, the agreed practical approach is to split
 at record boundaries and append the parts as separate logical files. Readying

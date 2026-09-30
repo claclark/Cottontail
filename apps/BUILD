@@ -89,6 +89,9 @@ cc_binary(
     linkopts = [
       "-pthread"
     ],
+    visibility = [
+      "//test:__pkg__",
+    ],
 )
 
 genrule(
@@ -139,6 +142,9 @@ cc_binary(
     ],
     linkopts = [
       "-pthread",
+    ],
+    visibility = [
+      "//test:__pkg__",
     ],
 )
 
@@ -191,6 +197,19 @@ cc_binary(
     ],
     linkopts = [
       "-pthread",
+    ],
+)
+
+cc_binary(
+    name = "splade",
+    srcs = [
+      "splade.cc",
+    ],
+    deps = [
+      "//src:cottontail",
+    ],
+    visibility = [
+      "//test:__pkg__",
     ],
 )
 

@@ -8,6 +8,7 @@ cc_test(
         "hazel.cc",
         "nfa.cc",
         "optimizer.cc",
+        "splade.cc",
     ]) + glob(["**/*.h"]),
     deps = [
         "//src:cottontail",
@@ -28,6 +29,27 @@ cc_test(
         "test0.txt",
         "tokenless.txt",
         "test.qrels",
+    ],
+)
+
+cc_test(
+    name = "splade_test",
+    size = "small",
+    srcs = ["splade.cc"],
+    deps = [
+        "//src:cottontail",
+        "@googletest//:gtest_main",
+    ],
+)
+
+sh_test(
+    name = "splade_app_test",
+    size = "small",
+    srcs = ["splade.sh"],
+    data = [
+        "//apps:fluffy",
+        "//apps:meadowlark",
+        "//apps:splade",
     ],
 )
 

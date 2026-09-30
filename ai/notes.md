@@ -15,10 +15,11 @@
 - `src/collection.*` and `src/walk.*`: shared collection-ingestion and
   filesystem-walking helpers, built into `//src:cottontail`.
 - `test/`: Bazel C++ tests. `//test:tests` is the aggregate target;
-  focused targets cover Hazel, the optimizer, NFA, cgrep, and the cgrep app.
+  focused targets cover Hazel, the optimizer, NFA, cgrep, SPLADE, and CLI cases.
 - `ai/`: agent-facing architecture notes, plans, logs, and progress notes.
   `ai/consolidation.md` is the completed Bigwig/Hazel consolidation checkpoint;
   `ai/memory.md` is the deferred Warren memory-trimming design checkpoint.
+  `ai/splade.md` records user-run SPLADE performance and effectiveness baselines.
 - Local `*.burrow` and `*.meadow` directories are working indexes/examples and
   are ignored by Git.
 

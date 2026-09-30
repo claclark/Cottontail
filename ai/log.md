@@ -744,3 +744,43 @@
   Recorded the SPLADE direction as discussed, not approved implementation work.
   Left architecture and historical log entries unchanged. Documentation-only;
   no builds or runtime tests were run.
+
+2026-09-29T17:05:59Z
+- Recorded the first SPLADE batch interface discussion in `ai/plan.md`: reuse
+  JSON numeric-field annotations directly, default depth to 1000, and put
+  error first among optional arguments. Noted the accompanying `trec` header
+  defaults fix. No source changes or implementation authorization.
+
+2026-09-30T13:31:58Z
+- Added `ai/performance.md` with the user's initial SPLADE ranking baseline:
+  6,980 queries, 1,308,305 ms, approximately 5.34 queries/sec, and MRR@10
+  0.3832077477600405. Recorded missing run settings and the proposed linked-list
+  traversal separately from measured behavior. Linked it from `ai/notes.md`.
+  Documentation only; no code changes, builds, or runtime tests.
+
+2026-09-30T13:37:28Z
+- Replaced SPLADE's repeated all-hopper scans with the agreed vector-owned,
+  position-ordered raw-pointer list. Cache current weighted contributions,
+  score the current document's prefix, then advance and reinsert only those
+  hoppers. Documented nonoverlapping containers and unique single-position
+  vector labels. Preserved ignoring fields outside selected containers and
+  bounded top-k selection; no pruning was added.
+- Replaced the overlapping-container test with ordered-list traversal cases,
+  expanded scoped-gap and overflow checks, and extended the exhaustive oracle
+  to 35 labels with rotating physical field order. Updated the plan and
+  performance record, retaining the original 1,308,305 ms baseline.
+- Optimized compilation passed with `bazel build -c opt --cxxopt=-DNDEBUG
+  //apps:splade //test:splade_test //test:splade_app_test`. Tests and performance
+  runs remain with the user; no runtime checks or commits were performed.
+
+2026-09-30T13:58:37Z
+- Recorded the user's linked-list SPLADE run in `ai/performance.md`: 529,972 ms
+  ranking time, 535,492 ms whole-process elapsed, 6,980 queries at depth 10,
+  approximately 13.17 queries/sec, and unchanged MRR@10 0.3832077477600405.
+  Preserved the full command and CPU timings; the observed ranking-time
+  speedup over 1,308,305 ms is 2.47x. Updated the plan's verification status.
+  Documentation only; no agent-run tests or benchmarks.
+
+2026-09-30T14:19:02Z
+- Renamed `ai/performance.md` to `ai/splade.md` and updated current references
+  in notes and plan. Preserved historical log entries and all measurements.
