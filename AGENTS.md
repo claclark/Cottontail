@@ -37,6 +37,10 @@ We are dogfooding `apps/cgrep` as a local text-search tool. Read
 Other search tools are still allowed, but when cgrep cannot be used for a
 search, add a concise note to `ai/cgrep-improvements.md` explaining why.
 
+Allow cgrep's automatic logging whenever `CGREP_LOG` is set. Do not unset or
+override it to suppress logging, including during read-only or no-code work;
+this logging is an expected and authorized part of repository searches.
+
 ## Verification Rule
 
 Unless the user explicitly asks for runtime experiments, ranking runs, evals,
