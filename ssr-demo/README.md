@@ -12,7 +12,7 @@ an agent. The browser provides a view of the JSON exchanged with the service.
 
 https://github.com/user-attachments/assets/d7a6f2b1-3ba5-4b1d-8e3b-40481ecf979e
 
-## Build the ClimbMix Collection
+## Building the ClimbMix Collection
 
 The commands below run from the repository root, not from `ssr-demo/`.
 
@@ -45,7 +45,7 @@ restart. The script stops on errors and retains the meadows for the next run.
 This relies on the meadows having been successfully created; it does not
 delete or recreate an existing output if opening it fails.
 
-## Launch the SSR Server
+## Launching the SSR Server
 
 From the target index directory, serve the consolidated Hazel shards:
 
@@ -60,7 +60,7 @@ files inside the numbered meadow directories. The server prints its listening
 port; use that port when starting the web interface, a command-line client, or
 an agent. Keep the server running while using a client.
 
-## Run the Web Interface
+## Running the Web Interface
 
 In another terminal, return to the repository root. `ssr-web.py` uses only the
 Python standard library. Run it against the SSR server, using the port printed
@@ -82,7 +82,7 @@ bold, with the literal `<cover>` tags preserved. An empty search runs the exampl
 query and puts it into the input for editing. Full document is disabled while
 its successful response is displayed.
 
-## Use from the Command Line
+## Usage from the Command Line
 
 Two interactive clients are available in `apps/`. Both connect directly to the
 SSR server on localhost, using its port rather than the web port.
@@ -105,7 +105,7 @@ At the `>>` prompt, enter a Boolean GCL query. Enter `@next` or press Enter on
 an empty line for the next result, and enter `@full` for the current result's
 full document. Press Ctrl-D to exit.
 
-## Use from an Agent
+## Usage by an Agent
 
 An agent can use the same JSON-line TCP interface directly to submit a query,
 request another result by query ID, or retrieve a full document by document ID.
@@ -123,7 +123,7 @@ Examples of agent-driven use:
   reads results from the Cottontail SSR service over ClimbMix, and records
   evidence for cited reports.
 
-## Connect from Another Machine
+## Connecting from Another Machine
 
 On the machine running your browser, forward the web port with SSH:
 
