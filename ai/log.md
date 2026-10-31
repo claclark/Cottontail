@@ -881,3 +881,15 @@
   ports, and SSH forwarding. Updated agent references and recorded building
   out the demo support directory as the next step. Documentation only;
   application sources remain in `apps/`.
+
+2026-10-31T20:36:26Z
+- Added a prominent demo-video link in `ssr-demo/README.md` to the supplied
+  `ssr-server.mp4`, including its format and approximate size. Documentation
+  only; confirmed the relative link target exists and checked whitespace.
+
+2026-10-31T20:39:23Z
+- Documented C++ and Python SSR clients, their launch commands and interactive
+  actions, and direct agent use in `ssr-demo/README.md`. Verified client behavior
+  from source and linked TheVole and RAG2026 using their public README
+  descriptions. Clarified switching between the web app and other clients.
+  Documentation only; whitespace checks passed.

@@ -4,10 +4,16 @@ This directory holds documentation and support material for the Cottontail
 Boolean SSR agentic search demo. The web interface is
 [`apps/ssr-web.py`](../apps/ssr-web.py); the backend is
 [`apps/ssr-server.cc`](../apps/ssr-server.cc).
+The same search service can also be used from the command line or directly by
+an agent. The browser provides a view of the JSON exchanged with the service.
 
-The commands below run from the repository root, not from `ssr-demo/`.
+## Demo Video
+
+[Watch the SSR demo](ssr-server.mp4) (MP4, approximately 21 MB).
 
 ## Run the Web Interface
+
+The commands below run from the repository root, not from `ssr-demo/`.
 
 `ssr-web.py` uses only the Python standard library. Run it against an existing
 SSR server, using the port printed by that server:
@@ -28,6 +34,47 @@ bold, with the literal `<cover>` tags preserved. An empty search runs the exampl
 query and puts it into the input for editing. Full document is disabled while
 its successful response is displayed.
 
+## Use from the Command Line
+
+Two interactive clients are available in `apps/`. Both connect directly to the
+SSR server on localhost, using its port rather than the web port.
+
+Build and run the [C++ client](../apps/ssr-client.cc):
+
+```sh
+bazel build //apps:ssr-client
+./bazel-bin/apps/ssr-client 37815
+```
+
+Or run the [Python client](../apps/ssr-client.py), which uses only the standard
+library:
+
+```sh
+python3 apps/ssr-client.py 37815
+```
+
+At the `>>` prompt, enter a Boolean GCL query. Enter `@next` or press Enter on
+an empty line for the next result, and enter `@full` for the current result's
+full document. Press Ctrl-D to exit.
+
+## Use from an Agent
+
+An agent can use the same JSON-line TCP interface directly to submit a query,
+request another result by query ID, or retrieve a full document by document ID.
+The browser is not required. The Python client provides a compact example of
+sending requests and reading the server's `query`, `response`, and `time`
+envelope.
+
+Examples of agent-driven use:
+
+- [TheVole](https://github.com/claclark/TheVole): an LLM-based search agent
+  that issues Boolean queries to SSR, judges results, and continues searching
+  within a model-call budget.
+- [RAG2026](https://github.com/claclark/RAG2026): the WaterlooClarke TREC RAG
+  2026 workflow, in which Vole follows research plans, chooses GCL searches,
+  reads results from the Cottontail SSR service over ClimbMix, and records
+  evidence for cited reports.
+
 ## Connect from Another Machine
 
 On the machine running your browser, forward the web port with SSH:
@@ -44,5 +91,5 @@ web app connects to SSR on the server.
 
 The web app holds one persistent SSR connection. The current SSR server handles
 one connected client at a time, so exit an interactive SSR client before using
-the web demo. After editing `apps/ssr-web.py`, restart it and reload the browser
-page.
+the web demo, and stop the web app before connecting a command-line client or
+agent. After editing `apps/ssr-web.py`, restart it and reload the browser page.
