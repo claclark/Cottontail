@@ -893,3 +893,40 @@
   from source and linked TheVole and RAG2026 using their public README
   descriptions. Clarified switching between the web app and other clients.
   Documentation only; whitespace checks passed.
+
+2026-10-31T20:45:48Z
+- Replaced the demo README's repository-file video link with the user's
+  GitHub attachment URL on its own line for inline video playback. Kept the
+  repository MP4 unchanged. Documentation only; whitespace checks passed.
+
+2026-10-31T20:53:10Z
+- Added executable `ssr-demo/climbix.sh`, accepting source and target
+  directories and using `meadowlark` and `consolidate` from `PATH`. Preserved
+  all twelve original ClimbMix file groupings, building directly into numbered
+  target meadows and consolidating each before the next ingestion. Added checks
+  for missing commands, existing outputs, and missing/unreadable input files.
+- Documented setup, usage, and failure behavior in the demo README and updated
+  agent notes and the plan. Shell syntax and whitespace checks passed; static
+  comparison confirmed every grouping matches the original external script.
+  No ingestion, consolidation, runtime tests, or benchmarks were run.
+
+2026-10-31T20:54:11Z
+- Added the user's ClimbMix SSR launch command to the demo README, specifying
+  the target index working directory, field meanings, and use of the printed
+  port by clients. Included the SSR server in the prerequisite build command.
+  Documentation only; whitespace checks passed.
+
+2026-10-31T20:59:10Z
+- Made `ssr-demo/climbix.sh` restartable by creating all missing numbered
+  meadows before ingestion, reopening existing ones without `--create`, and
+  relying on Meadowlark's source-completion records and consolidation recovery.
+  Removed the existing-output refusal. Updated the README and agent notes to
+  describe rerunning with the same source files and directories after failure.
+  Shell syntax and whitespace checks passed; no collection build or runtime
+  recovery checks were run.
+
+2026-10-31T21:03:21Z
+- Resolved the demo README's rebase conflict between the GitHub video-link
+  edit and local demo additions. Kept the attachment URL on its own line for
+  inline playback and preserved the collection-build and restart instructions.
+  Whitespace checks passed; staging and rebase continuation remain with the user.

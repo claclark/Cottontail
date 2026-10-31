@@ -210,6 +210,12 @@
   covered text. Search, Full document, and Next result share one persistent
   SSR connection; the current server accepts one active client at a time.
   Launch, SSH forwarding, and restart instructions are in `ssr-demo/README.md`.
+- `ssr-demo/climbix.sh`: builds twelve ClimbMix meadows from source and target
+  directory arguments, using `meadowlark` and `consolidate` from `PATH`.
+  Consolidation completes after each ingestion before the next shard starts.
+  Original corpus file groupings are preserved. All missing meadows are
+  created before ingestion; reruns reopen existing meadows and rely on
+  ingestion and consolidation recovery with the same source files and directories.
 - `apps/simple.cc`: build a simple burrow from TREC/MARCO-style corpora.
 - `apps/fiver2hazel.cc`: convert live Fiver shards in a burrow to Hazel shards
   with `--convert`, merge available Hazel shards with `--merge`, and time the

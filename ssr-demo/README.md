@@ -10,14 +10,61 @@ an agent. The browser provides a view of the JSON exchanged with the service.
 
 ## Demo Video
 
-[Watch the SSR demo](https://github.com/user-attachments/assets/d7a6f2b1-3ba5-4b1d-8e3b-40481ecf979e).
+https://github.com/user-attachments/assets/d7a6f2b1-3ba5-4b1d-8e3b-40481ecf979e
 
-## Run the Web Interface
+## Build the ClimbMix Collection
 
 The commands below run from the repository root, not from `ssr-demo/`.
 
-`ssr-web.py` uses only the Python standard library. Run it against an existing
-SSR server, using the port printed by that server:
+Build the ingestion, consolidation, and server applications and put them on
+`PATH`, then run
+[`climbix.sh`](climbix.sh) with the source corpus directory and target index
+directory:
+
+```sh
+bazel build -c opt //apps:meadowlark //apps:consolidate //apps:ssr-server
+export PATH="$PWD/bazel-bin/apps:$PATH"
+./ssr-demo/climbix.sh /path/to/corpus /path/to/climbmix-index
+```
+
+The source directory must contain the ClimbMix `shard_*.jsonl.gz` files using
+the original numbering. The script preserves the original twelve file
+groupings and creates `00.meadow` through `11.meadow` inside the target
+directory. All missing meadows are initialized with `meadowlark --create`
+before ingestion begins. Each group is ingested with `meadowlark --jsonl` and
+immediately consolidated with `consolidate --verbose` before the next group
+starts. The script finds both executables on `PATH` and can be invoked from any
+working directory; source and target paths are relative to that directory
+unless absolute paths are supplied.
+
+The target directory is created if needed. The build can fail or be interrupted;
+after resolving the cause, rerun the same command with the same source files
+and directories. Existing meadows are reopened, and Meadowlark skips committed
+source files and retries unfinished ingestion. Consolidation also supports
+restart. The script stops on errors and retains the meadows for the next run.
+This relies on the meadows having been successfully created; it does not
+delete or recreate an existing output if opening it fails.
+
+## Launch the SSR Server
+
+From the target index directory, serve the consolidated Hazel shards:
+
+```sh
+cd /path/to/climbmix-index
+ssr-server : :contents: :docid: */hazel*
+```
+
+Here `:` selects the document containers, `:contents:` selects the text to
+search, and `:docid:` selects document identifiers. The glob selects the Hazel
+files inside the numbered meadow directories. The server prints its listening
+port; use that port when starting the web interface, a command-line client, or
+an agent. Keep the server running while using a client.
+
+## Run the Web Interface
+
+In another terminal, return to the repository root. `ssr-web.py` uses only the
+Python standard library. Run it against the SSR server, using the port printed
+by that server:
 
 ```sh
 ./apps/ssr-web.py 8080 37815 --info "Climbmix 1.6TB"

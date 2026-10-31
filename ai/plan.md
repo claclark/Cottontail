@@ -29,10 +29,15 @@ syntax checks pass. The earlier HTTP query/document check and the user's
 interactive use are recorded in `ai/log.md`; no new runtime checks were run
 during push preparation. Multi-client SSR server work remains deferred.
 
-The next step is to build out the `ssr-demo/` support directory. It currently
-contains the demo README, moved from `apps/README.md` at the user's request.
-The applications remain in `apps/`. Discuss the support material needed before
-adding implementation beyond this initial documentation step.
+The first collection-build support script is implemented in
+`ssr-demo/climbix.sh`. It accepts source and target directories, preserves the
+twelve ClimbMix file groupings from the original collection script, and runs
+`consolidate` after each `meadowlark` ingestion, finding both executables on
+`PATH`. All missing meadows are created before ingestion; reruns reopen existing
+meadows and delegate recovery to ingestion and consolidation. Usage is documented in the
+demo README. Verification is
+shell syntax and static grouping review only; no collection build was run.
+Further demo support work needs discussion and authorization.
 
 The application reorganization is complete as of 2026-09-27. Current utilities
 remain in `apps/`; historical experiments, SPLADE tools, and benchmarks are in
