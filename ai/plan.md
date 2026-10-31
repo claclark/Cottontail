@@ -20,6 +20,20 @@ explicitly requests a runtime experiment or test run.
 
 ## Current Checkpoint
 
+The SSR web demo is ready for the user's commit as of 2026-10-31.
+`apps/ssr-web.py` provides a single raw JSON display with query, next-result,
+and full-document actions, visible cover tags with bold content, an editable
+default query, and configurable heading information through `--info`.
+Launch instructions are in `ssr-demo/README.md`. Python and embedded JavaScript
+syntax checks pass. The earlier HTTP query/document check and the user's
+interactive use are recorded in `ai/log.md`; no new runtime checks were run
+during push preparation. Multi-client SSR server work remains deferred.
+
+The next step is to build out the `ssr-demo/` support directory. It currently
+contains the demo README, moved from `apps/README.md` at the user's request.
+The applications remain in `apps/`. Discuss the support material needed before
+adding implementation beyond this initial documentation step.
+
 The application reorganization is complete as of 2026-09-27. Current utilities
 remain in `apps/`; historical experiments, SPLADE tools, and benchmarks are in
 `expr/`; the paper's TREC-update and JSON-table programs are in `iirj/`.

@@ -10,3 +10,6 @@ are placed in `bazel-bin/apps/`.
 See the [main README](../README.md) for installation and a Meadowlark demo.
 Older experiments live in [expr/](../expr/), and examples from the paper live
 in [iirj/](../iirj/).
+
+The standard-library Python web interface is `ssr-web.py`. Its launch and SSH
+forwarding instructions are in the [SSR demo directory](../ssr-demo/README.md).

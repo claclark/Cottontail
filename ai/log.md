@@ -784,3 +784,100 @@
 2026-09-30T14:19:02Z
 - Renamed `ai/performance.md` to `ai/splade.md` and updated current references
   in notes and plan. Preserved historical log entries and all measurements.
+
+2026-10-28T16:00:23Z
+- Fixed the local `apps/ssr-web.py` demo to unwrap SSR response records,
+  propagate server errors, and use `document` for full-document requests.
+  Result timing displays the server's envelope `time` value in milliseconds.
+  Python compilation and embedded JavaScript syntax checks passed; no runtime
+  tests or server sessions were run.
+
+2026-10-28T16:27:42Z
+- At the user's request, checked the running SSR web demo on localhost:8080.
+  Its served page contains the corrected protocol handling. A `waterloo`
+  query and a subsequent `document` request through `/api` succeeded for
+  `shard_01978_29812`: HTTP 200, 73,805 document characters, and server-reported
+  document time of 127 ms. This verified the HTTP/proxy path, not browser
+  interaction; the reported browser hang was not reproduced. No source edits.
+
+2026-10-28T16:35:52Z
+- Renamed the SSR web demo heading and browser title to "SSR agentic search
+  raw interface demo". Added a latest-response panel showing the complete JSON
+  envelope with indentation, including error responses and server timing;
+  existing search and document controls remain available. JSON is rendered as
+  literal text. Python compilation and embedded JavaScript syntax checks
+  passed; no runtime checks were run for this change.
+
+2026-10-28T16:43:27Z
+- Set `autocomplete="off"` on the SSR web demo query field at the user's
+  request. HTML attribute change only; no runtime checks were run.
+
+2026-10-28T16:44:36Z
+- Set the SSR web demo's visible heading and browser title to the user's exact
+  wording: "Cottontail Boolean SRR agentic search (raw interface demo)".
+
+2026-10-28T16:46:20Z
+- Made raw JSON the SSR web demo's sole response display, removing the
+  separately rendered passage and full-document text. Navigation restores each
+  result's complete response envelope; the full-document button switches to
+  its document envelope and back. Server timing remains in the original JSON.
+  Python compilation and embedded JavaScript syntax checks passed; no runtime
+  checks were run for this change.
+
+2026-10-28T16:48:00Z
+- Removed Previous and browser result history from the SSR web demo. Full
+  document and Next result now sit directly below the search form. Each action
+  replaces the sole JSON display; full-document requests use the current
+  result's identifier. Python compilation and embedded JavaScript syntax
+  checks passed; no runtime checks were run.
+
+2026-10-28T16:50:53Z
+- Added "Agent actions" beside the SSR web demo buttons and removed the
+  separate status, result identifier, and JSON heading. The single JSON view
+  now bolds text between cover tags while preserving both literal tags and
+  all JSON text, using text nodes rather than HTML interpretation. Python
+  compilation and embedded JavaScript syntax checks passed; no runtime checks
+  were run.
+
+2026-10-28T16:55:55Z
+- Kept "Enter a Boolean query" and added the user's example
+  `(^ black bears (+ attack attack))` to the query placeholder. Submitting an
+  empty or whitespace-only field now sends that example. Python compilation
+  and embedded JavaScript syntax checks passed; no runtime checks were run.
+
+2026-10-28T16:57:26Z
+- Changed the example query to `(^ black bear (+ attack attack))` and copy
+  the submitted query into the input, making the default example editable
+  alongside results. Python compilation and embedded JavaScript syntax checks
+  passed; no runtime checks were run.
+
+2026-10-28T17:01:01Z
+- Disabled Full document while its successful response is displayed in the
+  SSR web demo. Subsequent results re-enable it, and failed document requests
+  remain retryable. Python compilation and embedded JavaScript syntax checks
+  passed; no runtime checks were run.
+
+2026-10-28T17:30:33Z
+- Added `--info` to the SSR web demo to customize the parenthetical text in
+  its visible heading and browser title, defaulting to "raw interface demo".
+  The supplied text is HTML-escaped when rendering the page. Python compilation
+  and embedded JavaScript syntax checks passed; no runtime checks were run.
+
+2026-10-31T18:40:16Z
+- Corrected the SSR web demo's placeholder and default query to
+  `(^ black bear (+ attack attacks))`. Text-only change; no runtime checks.
+
+2026-10-31T18:50:21Z
+- Prepared the SSR web demo for the user's commit and push. Added launch,
+  `--info`, SSH forwarding, single-client, and restart instructions to
+  `apps/README.md`; recorded the completed demo in agent notes and the plan.
+  Reviewed the complete new script, confirmed its executable mode, and passed
+  Python compilation, embedded JavaScript syntax, and whitespace checks.
+  No new runtime tests, source changes, commits, or pushes were performed.
+
+2026-10-31T18:53:34Z
+- Created `ssr-demo/README.md` and moved the demo instructions there from
+  `apps/README.md`, leaving a link. Clarified repository-root commands, example
+  ports, and SSH forwarding. Updated agent references and recorded building
+  out the demo support directory as the next step. Documentation only;
+  application sources remain in `apps/`.

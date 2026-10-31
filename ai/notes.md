@@ -204,6 +204,12 @@
   result, and `@full` requests the full document for the last returned result.
 - `apps/ssr-client.py`: no-dependency Python example client for the same
   JSON-line protocol and interactive `@next`/`@full` commands.
+- `apps/ssr-web.py`: standard-library web demo, run directly as
+  `./apps/ssr-web.py [web_port] ssr_port [--info text] [--ssr-host host]`.
+  Shows one complete JSON response at a time with literal cover tags and bold
+  covered text. Search, Full document, and Next result share one persistent
+  SSR connection; the current server accepts one active client at a time.
+  Launch, SSH forwarding, and restart instructions are in `ssr-demo/README.md`.
 - `apps/simple.cc`: build a simple burrow from TREC/MARCO-style corpora.
 - `apps/fiver2hazel.cc`: convert live Fiver shards in a burrow to Hazel shards
   with `--convert`, merge available Hazel shards with `--merge`, and time the
