@@ -1,3 +1,4 @@
+
 # SSR Demo
 
 This directory holds documentation and support material for the Cottontail
@@ -9,7 +10,7 @@ an agent. The browser provides a view of the JSON exchanged with the service.
 
 ## Demo Video
 
-[Watch the SSR demo](ssr-server.mp4) (MP4, approximately 21 MB).
+[Watch the SSR demo](https://github.com/user-attachments/assets/d7a6f2b1-3ba5-4b1d-8e3b-40481ecf979e).
 
 ## Run the Web Interface
 
