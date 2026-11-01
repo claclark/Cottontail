@@ -1,5 +1,8 @@
 # Cottontail
 
+> **Coding agents:** Read [AGENTS.md](AGENTS.md) before working in this
+> repository.
+
 Cottontail aims to provide a unified storage substrate for agentic search.
 Cottontail is built around annotative indexing, a unified approach to indexing
 that currently supports inverted indices, links, graph structures, JSON, other
@@ -24,9 +27,6 @@ Current command-line utilities live in [`apps/`](apps/). Historical experiments
 and benchmarks live in [`expr/`](expr/). The TREC collection-update and JSON-table
 experiments from the paper, with their supporting programs, live in
 [`iirj/`](iirj/). Shared library helpers live in `src/`.
-
-> **Coding agents:** Read [AGENTS.md](AGENTS.md) before working in this
-> repository.
 
 ## Demos
 

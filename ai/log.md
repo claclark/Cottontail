@@ -946,3 +946,10 @@
   for its heading and installation link, the Installation section is unchanged,
   local Markdown links resolve, and whitespace checks pass. Documentation only;
   no builds or runtime tests were run.
+
+2026-11-01T16:07:20Z
+- Moved the README coding-agent notice directly below the title and updated
+  `AGENTS.md` with the goal of a unified storage substrate for agentic search,
+  Meadowlark's database-discovery role, and the long-term agentic-store goal.
+  Preserved the existing working rules. Documentation only; whitespace checks
+  passed.

@@ -1,9 +1,10 @@
 # Cottontail Agent Notes
 
 Be a little chill. This repo started life as a research project exploring
-novel indexing structures. Now we are moving toward a more generally usable
-library, along with a Python wrapper. We want the code to be solid and usable.
-There is no rush. We want people to have a good experience when we release.
+novel indexing structures. Our goal has evolved to provide a unified storage substrate
+for agentic search, built around annotative indexing.
+We want the code to be solid and usable. There is no rush. We want people to have a good
+experience when we release.
 
 This file is mostly intended for an AI coding assistant working on the
 development of Cottontail, but of course anyone is free to look around.
@@ -12,6 +13,10 @@ natural-language intent into precise structural queries over code, text, JSON,
 and metadata, then retrieve only the local context they need. When a collection
 records paths, fields, symbols, spans, provenance, and transactions, the
 resulting evidence remains exact and inspectable.
+
+Meadowlark provides the metadata layer that helps agents explore and understand
+previously unseen databases. The long-term goal is to establish a universal
+standard for agentic stores.
 
 All agent documentation lives in the `ai/` directory.
 
