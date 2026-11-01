@@ -21,12 +21,12 @@ agentic stores.
 
 Cottontail is the reference implementation of annotative indexing described in:
 
-Charles L. A. Clarke. 2025. Annotative Indexing. *Information Retrieval Research* 1, 1 (2025), 109–136. https://doi.org/10.54195/irrj.19910
+> Charles L. A. Clarke. 2025. Annotative Indexing. *Information Retrieval Research*
+> 1, 1 (2025), 109–136. https://doi.org/10.54195/irrj.19910
 
 Current command-line utilities live in [`apps/`](apps/). Historical experiments
-and benchmarks live in [`expr/`](expr/). The TREC collection-update and JSON-table
-experiments from the paper, with their supporting programs, live in
-[`iirj/`](iirj/). Shared library helpers live in `src/`.
+and benchmarks live in [`expr/`](expr/). Meadowlark-specific code lives in
+[`meadowlark/`](meadowlark/). The core Cottontail library lives in [`src/`](src/).
 
 ## Demos
 
@@ -35,6 +35,8 @@ experiments from the paper, with their supporting programs, live in
 - [SSR agentic search demo](ssr-demo/README.md): watch the video, build and serve
   the 1.6 TB ClimbMix collection, and explore Boolean search through the web
   interface, command-line clients, or an agent.
+- [Examples from the IIRJ paper](iirj/): TREC collection building and updating,
+  and JSON tables.
 
 ## Installation
 

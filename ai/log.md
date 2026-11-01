@@ -894,6 +894,10 @@
   descriptions. Clarified switching between the web app and other clients.
   Documentation only; whitespace checks passed.
 
+2026-11-01T21:00:22Z
+- Added a link to `meadowlark/` in the main README repository overview to
+  identify the Meadowlark-specific code. Preserved the user's demo-label edit.
+
 2026-10-31T20:45:48Z
 - Replaced the demo README's repository-file video link with the user's
   GitHub attachment URL on its own line for inline video playback. Kept the
@@ -959,3 +963,8 @@
   role to `ai/architecture.md`, linked its detailed conventions and exploration
   guide, and connected the architectural purpose to the agentic-search substrate
   goal. Documentation only; whitespace checks passed.
+
+2026-11-01T20:58:45Z
+- Indented the main README paper citation as a blockquote and moved the `iirj/`
+  examples into the demo list, shortening the repository-layout paragraph.
+  Documentation only; whitespace checks passed.
