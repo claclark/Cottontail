@@ -930,3 +930,7 @@
   edit and local demo additions. Kept the attachment URL on its own line for
   inline playback and preserved the collection-build and restart instructions.
   Whitespace checks passed; staging and rebase continuation remain with the user.
+
+2026-11-01T15:35:59Z
+- Added an opening sentence to `ssr-demo/README.md` linking the demo to the
+  main Cottontail repository. Documentation only; whitespace checks passed.

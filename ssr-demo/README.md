@@ -1,6 +1,8 @@
 
 # SSR Demo
 
+This demo is part of [Cottontail](https://github.com/claclark/Cottontail).
+
 This directory holds documentation and support material for the Cottontail
 Boolean SSR agentic search demo. The web interface is
 [`apps/ssr-web.py`](../apps/ssr-web.py); the backend is
