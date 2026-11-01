@@ -7,7 +7,8 @@ and clients.
 Build from the repository root with `bazel build //apps:all`. Compiled programs
 are placed in `bazel-bin/apps/`.
 
-See the [main README](../README.md) for installation and a Meadowlark demo.
+See the [main README](../README.md#installation) for installation and the
+[MS MARCO demo](../msm-demo.md) for a Meadowlark walkthrough.
 Older experiments live in [expr/](../expr/), and examples from the paper live
 in [iirj/](../iirj/).
 

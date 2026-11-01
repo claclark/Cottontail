@@ -934,3 +934,15 @@
 2026-11-01T15:35:59Z
 - Added an opening sentence to `ssr-demo/README.md` linking the demo to the
   main Cottontail repository. Documentation only; whitespace checks passed.
+
+2026-11-01T16:00:58Z
+- Rewrote the main README introduction around Cottontail as a unified storage
+  substrate for agentic search and Meadowlark metadata for database discovery.
+  Scoped the ACID wording to individual transactions and framed a universal
+  standard for agentic stores as a long-term goal. Kept the paper citation,
+  repository layout, and coding-agent notice.
+- Moved the MS MARCO walkthrough to `msm-demo.md`, added links to both demos,
+  and updated `apps/README.md`. Verified the walkthrough was preserved except
+  for its heading and installation link, the Installation section is unchanged,
+  local Markdown links resolve, and whitespace checks pass. Documentation only;
+  no builds or runtime tests were run.
