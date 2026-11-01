@@ -17,6 +17,9 @@ completed design to remain in `ai/plan.md`.
 Annotative indexing is a general indexing framework designed to unify several
 data management and retrieval paradigms under a single abstraction.
 
+Cottontail builds on this framework with the goal of providing a unified
+storage substrate for agentic search.
+
 Traditional systems tend to use separate technologies for:
 
 * text search (inverted indexes)
@@ -133,6 +136,24 @@ The implementation includes:
 
 The architecture is intentionally modular: a central "Warren" object manages
 the major system components and index structures.
+
+## Metadata Layer: Meadowlark
+
+Meadowlark provides a filesystem-like metadata layer over Cottontail for JSONL,
+TSV, text, and code. It records source identity, data structure, provenance,
+and derived annotation definitions within the same annotative index as the
+content.
+
+Its purpose is to let agents explore previously unseen databases through a
+consistent discovery interface. The `@` query retrieves typed JSON metadata
+records, `/` inventories source files, and `:` identifies ordinary data objects.
+Agents use these records to discover the collection's structure rather than
+infer it from filenames or application-specific conventions.
+
+Detailed conventions and recovery invariants are documented in
+[meadowlark.md](meadowlark.md);
+[exploring-meadowlark.md](exploring-meadowlark.md) provides the model-facing
+exploration guide.
 
 ## Mental Model for Developers
 

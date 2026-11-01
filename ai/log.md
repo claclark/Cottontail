@@ -953,3 +953,9 @@
   Meadowlark's database-discovery role, and the long-term agentic-store goal.
   Preserved the existing working rules. Documentation only; whitespace checks
   passed.
+
+2026-11-01T16:12:20Z
+- With explicit user authorization, added Meadowlark's metadata and discovery
+  role to `ai/architecture.md`, linked its detailed conventions and exploration
+  guide, and connected the architectural purpose to the agentic-search substrate
+  goal. Documentation only; whitespace checks passed.
