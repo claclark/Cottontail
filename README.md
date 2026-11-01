@@ -21,7 +21,7 @@ agentic stores.
 
 Cottontail is the reference implementation of annotative indexing described in:
 
-> Charles L. A. Clarke. 2025. Annotative Indexing. *Information Retrieval Research*
+> Charles L. A. Clarke. 2025. Annotative Indexing. *Information Retrieval Research Journal*
 > 1, 1 (2025), 109–136. https://doi.org/10.54195/irrj.19910
 
 Current command-line utilities live in [`apps/`](apps/). Historical experiments
