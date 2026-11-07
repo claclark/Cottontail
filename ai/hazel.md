@@ -351,8 +351,10 @@ complete posting record. An empty filtered result is written as an `n == 0`
 completion marker.
 
 `SimplePostingFactory::posting_from_merge(...)` supplies the annotation merge
-semantics: innermost intervals survive; when intervals have identical
-`(p, q)`, the value from the newest source survives. Fiver and Hazel callers
+semantics: innermost ordinary intervals and outermost null-feature intervals
+survive. The latter are maximal intervals, not a union that coalesces overlaps
+or adjacency. When intervals have identical `(p, q)`, the value from the newest
+source survives. Fiver and Hazel callers
 preserve oldest-to-newest shard order, so chronological merge grouping retains
 those semantics.
 

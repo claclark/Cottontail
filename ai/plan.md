@@ -18,6 +18,42 @@ For the current Meadowlark push, the user makes all commits and runs the
 regression tests. Agent verification is compile/build-only unless the user
 explicitly requests a runtime experiment or test run.
 
+## Next Work: Deletions And Text Garbage Collection
+
+Agreed sequence as of 2026-11-04: three separate diffs, with thorough testing
+of each before proceeding. Diff 1 was authorized and implemented on 2026-11-06;
+the user reports `make testing` and `build.sh` followed by `rank.sh` passing on
+2026-11-07. Diffs 2 and 3 are not authorized.
+The user continues to run regression tests and make commits; agent verification
+remains compile/build-only unless explicitly authorized otherwise.
+
+1. Implement outer merging for `null_feature`, including initial deletion
+   posting construction, in `src/simple_posting.*`. Canonically sort raw
+   annotations by feature, then by `(p ascending, q descending)` for null and
+   `(q ascending, p descending)` otherwise. Select strictly increasing ends
+   for null, starts otherwise. Use this sort at the four construction sites in
+   Fiver, SimpleBuilder, and SimpleAnnotator. Ordinary features retain inner
+   semantics, now correctly normalizing nesting, equal endpoints, and duplicates.
+   Both merge queues retain newest-source values for exact interval duplicates;
+   inputs remain oldest to newest. The append shortcut checks across empty
+   sources. Outer merging retains maximal intervals, without coalescing overlap
+   or adjacency. Tests cover selection against an independent containment oracle,
+   staged merges, exclusion filtering, live snapshots, Fiver/Hazel conversion,
+   mixed collections, consolidation, and reopening. Focused target:
+   `//test:erasures_test`; existing posting tests remain in `//test:tests`.
+   Per the user, old partial Hazel merge logs are out of scope. SimpleBuilder's
+   existing cross-batch ordered-GC-list input contract is unchanged.
+2. When `null_feature` is active, detect `Txt::translate` requests that touch
+   any deleted position and return an empty string. Test boundary contacts,
+   partial overlaps, requests spanning deleted intervals, unaffected requests,
+   and consistency across relevant storage and snapshot paths. Keep physical
+   text reclamation out of this diff.
+3. Garbage-collect text segments during Hazel creation/merging, working at
+   `text_chunk_tag` granularity. Test reclamation and retained-text translation,
+   address gaps, byte-offset remapping, allocation high-water preservation,
+   empty/tokenless cases, reopening, snapshots, and merge recovery. Preserve
+   the translation semantics established in diff 2.
+
 ## Current Checkpoint
 
 The SSR web demo is ready for the user's commit as of 2026-10-31.

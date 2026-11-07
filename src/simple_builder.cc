@@ -621,7 +621,7 @@ bool SimpleBuilder::maybe_flush_annotations(bool force, std::string *error) {
         [](std::string ann_filename,
            std::unique_ptr<std::vector<Annotation>> annotations,
            std::shared_ptr<SimplePostingFactory> posting_factory) {
-          std::sort(annotations->begin(), annotations->end(), annotation_cmp);
+          sort_annotations(annotations.get());
           std::fstream ann(ann_filename, std::ios::binary | std::ios::out);
           assert(!ann.fail());
           std::vector<Annotation>::iterator it = annotations->begin();

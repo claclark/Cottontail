@@ -476,10 +476,20 @@
 - `SimplePosting` decodes compressed fields directly into sized vectors,
   reuses thread-local output buffers, and bulk-appends in the ordered merge
   case while preserving compact point/no-value representations.
-- `SimplePostingFactory::posting_from_merge(...)` implements minimal-interval
-  semantics: innermost intervals survive, and when `(p, q)` is identical the
-  newest source value survives. Callers must supply posting sources from oldest
-  to newest; Fiver and Hazel shard merges do so in sequence order.
+- `SimplePostingFactory::posting_from_merge(...)` keeps innermost intervals for
+  ordinary features and outermost intervals for `null_feature`. Outer merging
+  does not coalesce crossing or adjacent intervals. Exact `(p, q)` duplicates
+  keep the newest source value, including zero. Callers supply sources from
+  oldest to newest; Fiver and Hazel shard merges do so in sequence order.
+- `sort_annotations(vector*)` groups by feature, then sorts null by start
+  ascending/end descending and ordinary features by end ascending/start
+  descending. `posting_from_annotations` requires this order and selects
+  strictly increasing ends/starts respectively. Raw duplicate values within a
+  batch have no guaranteed winner. The four construction sites use this helper;
+  SimpleBuilder's external file sorter and ordered cross-batch assembly retain
+  their existing contracts. Diff 1 coverage is `//test:erasures_test`. On
+  2026-11-07, the user reports `make testing` and `build.sh` followed by `rank.sh`
+  passing. Translation and physical text GC remain later work.
 - Hazel's posting-log merge advances through sequential source directories,
   reads source postings without populating the query cache, and writes merged
   compressed records once before final assembly.

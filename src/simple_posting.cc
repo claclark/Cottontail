@@ -17,6 +17,17 @@
 
 namespace cottontail {
 
+void sort_annotations(std::vector<Annotation> *annotations) {
+  std::sort(annotations->begin(), annotations->end(),
+            [](const Annotation &a, const Annotation &b) {
+              if (a.feature != b.feature)
+                return a.feature < b.feature;
+              if (a.feature == null_feature)
+                return a.p < b.p || (a.p == b.p && a.q > b.q);
+              return a.q < b.q || (a.q == b.q && a.p > b.p);
+            });
+}
+
 std::shared_ptr<SimplePosting> SimplePostingFactory::posting_from_tokens(
     std::vector<TokRecord>::iterator *start,
     const std::vector<TokRecord>::iterator &end) {
@@ -51,13 +62,14 @@ std::shared_ptr<SimplePosting> SimplePostingFactory::posting_from_annotations(
   for (stop = (*start); stop < end && stop->feature == posting->feature_;
        stop++)
     if (stop->p <= stop->q) {
-      if (stop->p < stop->q)
-        clear_qostings = false;
-      if (stop->v != 0.0)
-        clear_fostings = false;
       if (posting->postings_.size() == 0 ||
-          (stop->p >= posting->postings_.back() &&
-           stop->q >= posting->qostings_.back())) {
+          (posting->feature_ == null_feature
+               ? stop->q > posting->qostings_.back()
+               : stop->p > posting->postings_.back())) {
+        if (stop->p < stop->q)
+          clear_qostings = false;
+        if (stop->v != 0.0)
+          clear_fostings = false;
         posting->postings_.push_back(stop->p);
         posting->qostings_.push_back(stop->q);
         posting->fostings_.push_back(stop->v);
@@ -351,10 +363,18 @@ private:
 class Compare {
 public:
   bool operator()(const Element &a, const Element &b) {
-    return !(
-        (a.q() < b.q()) ||
-        ((a.q() == b.q()) &&
-         ((a.p() > b.p()) || ((a.p() == b.p()) && (a.index() > b.index())))));
+    return a.q() > b.q() ||
+           (a.q() == b.q() &&
+            (a.p() < b.p() || (a.p() == b.p() && a.index() < b.index())));
+  };
+};
+
+class OuterCompare {
+public:
+  bool operator()(const Element &a, const Element &b) {
+    return a.p() > b.p() ||
+           (a.p() == b.p() &&
+            (a.q() < b.q() || (a.q() == b.q() && a.index() < b.index())));
   };
 };
 } // namespace
@@ -400,22 +420,42 @@ std::shared_ptr<SimplePosting> SimplePostingFactory::posting_from_merge(
     return postings[0];
   addr feature = postings[0]->feature();
   bool can_append = true;
-  for (size_t i = 1; can_append && i < postings.size(); i++) {
-    assert(postings[i]->feature() == feature);
-    size_t size0 = postings[i - 1]->size();
-    size_t size1 = postings[i]->size();
-    if (size0 > 0 && size1 > 0) {
+  std::shared_ptr<SimplePosting> previous;
+  for (auto &posting : postings) {
+    assert(posting->feature() == feature);
+    if (posting->size() == 0)
+      continue;
+    if (previous != nullptr) {
       addr p0, p1, q0, q1;
       fval v0, v1;
-      postings[i - 1]->get(size0 - 1, &p0, &q0, &v0);
-      postings[i]->get(0, &p1, &q1, &v1);
+      previous->get(previous->size() - 1, &p0, &q0, &v0);
+      posting->get(0, &p1, &q1, &v1);
       can_append = (p0 < p1 && q0 < q1);
+      if (!can_append)
+        break;
     }
+    previous = posting;
   }
   std::shared_ptr<SimplePosting> merged_posting = posting_from_feature(feature);
   if (can_append) {
     for (auto &posting : postings)
       merged_posting->append(posting);
+  } else if (feature == null_feature) {
+    std::priority_queue<Element, std::vector<Element>, OuterCompare> queue;
+    for (size_t i = 0; i < postings.size(); i++)
+      if (postings[i]->size() > 0)
+        queue.emplace(postings[i], i);
+    addr k = minfinity;
+    while (queue.size() > 0) {
+      Element e = queue.top();
+      queue.pop();
+      if (e.q() > k) {
+        merged_posting->push(e.p(), e.q(), e.v());
+        k = e.q();
+      }
+      if (e.next())
+        queue.push(e);
+    }
   } else {
     std::priority_queue<Element, std::vector<Element>, Compare> queue;
     for (size_t i = 0; i < postings.size(); i++)

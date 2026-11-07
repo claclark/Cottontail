@@ -531,12 +531,7 @@ Fiver::merge(const std::vector<std::shared_ptr<Fiver>> &fivers,
       *text += *(fiver->text_);
     }
   }
-  std::sort(ann.begin(), ann.end(),
-            [](const Annotation &a, const Annotation &b) {
-              return a.feature < b.feature ||
-                     (a.feature == b.feature &&
-                      (a.q < b.q || (a.q == b.q && a.p > b.p)));
-            });
+  sort_annotations(&ann);
   std::shared_ptr<Fiver> fiver = std::shared_ptr<Fiver>(
       new Fiver(fivers[0]->working_, fivers[0]->featurizer_,
                 fivers[0]->tokenizer_, nullptr, nullptr));
@@ -674,12 +669,7 @@ bool Fiver::ready_(std::string *error) {
       annotation.p -= relocate;
       annotation.q -= relocate;
     }
-  std::sort(annotations_->begin(), annotations_->end(),
-            [](const Annotation &a, const Annotation &b) {
-              return a.feature < b.feature ||
-                     (a.feature == b.feature &&
-                      (a.q < b.q || (a.q == b.q && a.p > b.p)));
-            });
+  sort_annotations(annotations_.get());
   std::shared_ptr<SimplePostingFactory> posting_factory =
       SimplePostingFactory::make(posting_compressor_, fvalue_compressor_);
   std::vector<Annotation>::iterator it = annotations_->begin();

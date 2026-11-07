@@ -193,6 +193,7 @@ TEST(SimplePosting, Annotations) {
     ann.emplace_back(3, 4, 10, 0.0);
     ann.emplace_back(3, 5, 11, 0.0);
     ann.emplace_back(3, 6, 12, 0.0);
+    cottontail::sort_annotations(&ann);
     std::vector<cottontail::Annotation>::iterator it = ann.begin();
     posting1 = factory->posting_from_annotations(&it, ann.end());
     ASSERT_NE(posting1, nullptr);
@@ -352,6 +353,7 @@ TEST(SimplePosting, Append) {
   ann.emplace_back(100, 1, 4, 1.0);
   ann.emplace_back(100, 14, 22, 2.0);
   ann.emplace_back(100, 20, 24, 3.0);
+  cottontail::sort_annotations(&ann);
   std::vector<cottontail::Annotation>::iterator it = ann.begin();
   posting1 = factory->posting_from_annotations(&it, ann.end());
   ASSERT_NE(posting1, nullptr);
@@ -366,6 +368,7 @@ TEST(SimplePosting, Append) {
   ann.emplace_back(100, 100, 104, 1.0);
   ann.emplace_back(100, 114, 122, 2.0);
   ann.emplace_back(100, 120, 124, 3.0);
+  cottontail::sort_annotations(&ann);
   it = ann.begin();
   posting3 = factory->posting_from_annotations(&it, ann.end());
   ASSERT_NE(posting3, nullptr);
@@ -683,7 +686,7 @@ TEST(SimplePosting, Invariants) {
   ann.emplace_back(1, 0, 400, -1.0);
   ann.emplace_back(1, 200, 400, 2.0);
   ann.emplace_back(1, 300, 500, 3.0);
-  ann.emplace_back(1, 300, 500, 1.0);
+  ann.emplace_back(1, 300, 500, 3.0);
   ann.emplace_back(1, 1000, 400, -1.0);
   ann.emplace_back(1, 400, 600, 4.0);
   ann.emplace_back(1, 100, 2, -1.0);
@@ -693,6 +696,7 @@ TEST(SimplePosting, Invariants) {
   std::shared_ptr<cottontail::SimplePostingFactory> factory =
       cottontail::SimplePostingFactory::make(compressor, compressor);
   ASSERT_NE(factory, nullptr);
+  cottontail::sort_annotations(&ann);
   std::vector<cottontail::Annotation>::iterator it = ann.begin();
   std::shared_ptr<cottontail::SimplePosting> posting =
       factory->posting_from_annotations(&it, ann.end());
@@ -722,6 +726,7 @@ TEST(SimplePosting, GarbageCollection) {
   ann1.emplace_back(12, 2, 8, 2.0);
   ann1.emplace_back(12, 4, 10, 4.0);
   ann1.emplace_back(12, 6, 12, 6.0);
+  cottontail::sort_annotations(&ann1);
   std::vector<cottontail::Annotation>::iterator it1 = ann1.begin();
   std::shared_ptr<cottontail::SimplePosting> posting1 =
       factory->posting_from_annotations(&it1, ann1.end());
@@ -732,6 +737,7 @@ TEST(SimplePosting, GarbageCollection) {
   ann2.emplace_back(12, 3, 9, 3.0);
   ann2.emplace_back(12, 5, 11, 5.0);
   ann2.emplace_back(12, 7, 13, 7.0);
+  cottontail::sort_annotations(&ann2);
   std::vector<cottontail::Annotation>::iterator it2 = ann2.begin();
   std::shared_ptr<cottontail::SimplePosting> posting2 =
       factory->posting_from_annotations(&it2, ann2.end());
@@ -740,6 +746,7 @@ TEST(SimplePosting, GarbageCollection) {
   std::vector<cottontail::Annotation> annX;
   annX.emplace_back(0, 2, 9, 0.0);
   annX.emplace_back(0, 5, 12, 0.0);
+  cottontail::sort_annotations(&annX);
   std::vector<cottontail::Annotation>::iterator itX = annX.begin();
   std::shared_ptr<cottontail::SimplePosting> postingX =
       factory->posting_from_annotations(&itX, annX.end());

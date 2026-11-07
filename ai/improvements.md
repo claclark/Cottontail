@@ -298,13 +298,15 @@ follow-ups are:
 
 ## Exclusion Merge Semantics
 
-- `null_feature` / exclusion postings may need an outer interval merge rather
-  than the ordinary `SimplePostingFactory::posting_from_merge(...)` semantics.
-- Fiver/Hazel/Bigwig merge paths should preserve the full covering exclusion
-  intervals so ordinary postings are removed anywhere the logical deletion
-  applies.
-- Consider adding a dedicated exclusion/null merge helper instead of relying on
-  ordinary posting-list merge behavior.
+- Implemented in deletion diff 1 (2026-11-06), with user-reported passing
+  regression tests and `build.sh` followed by `rank.sh` on 2026-11-07:
+  canonical annotation sorting and `SimplePostingFactory` outer selection for
+  `null_feature`. Fiver/Hazel/Bigwig retain maximal deletion intervals; ordinary
+  intervals wholly contained in any deletion are filtered. Crossing and
+  containing intervals survive; overlapping deletions are not coalesced.
+- No compatibility handling for old partial Hazel merge logs is planned in
+  this diff, as agreed with the user. Translation and text GC remain separate
+  steps in `ai/plan.md`.
 
 ## Hazel Posting-Log Follow-Ups
 

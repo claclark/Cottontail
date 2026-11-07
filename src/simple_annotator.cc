@@ -201,9 +201,6 @@ bool merge_updates(const std::vector<std::string> &posting_filenames,
   return true;
 }
 
-bool annotation_cmp(const Annotation &a, const Annotation &b) {
-  return a.feature < b.feature || (a.feature == b.feature && a.p < b.p);
-}
 } // namespace
 
 void SimpleAnnotator::maybe_flush_additions(bool force) {
@@ -214,7 +211,7 @@ void SimpleAnnotator::maybe_flush_additions(bool force) {
                      std::unique_ptr<std::vector<Annotation>> added,
                      std::shared_ptr<SimplePostingFactory> posting_factory,
                      std::shared_ptr<bool> cannot_create_temp_files) {
-      std::sort(added->begin(), added->end(), annotation_cmp);
+      sort_annotations(added.get());
       std::fstream addf(add_filename, std::ios::binary | std::ios::out);
       if (addf.fail()) {
         (*cannot_create_temp_files) = true;

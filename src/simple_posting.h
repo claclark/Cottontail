@@ -15,6 +15,10 @@ namespace cottontail {
 
 struct CacheRecord;
 
+// Group by feature, then order erasures for outer selection and all other
+// annotations for inner selection. Equal annotations have no value tie-break.
+void sort_annotations(std::vector<Annotation> *annotations);
+
 class SimplePosting final {
 public:
   void append(std::shared_ptr<SimplePosting> more);
@@ -69,6 +73,7 @@ public:
   std::shared_ptr<SimplePosting>
   posting_from_tokens(std::vector<TokRecord>::iterator *start,
                       const std::vector<TokRecord>::iterator &end);
+  // Input must have been ordered by sort_annotations.
   std::shared_ptr<SimplePosting>
   posting_from_annotations(std::vector<Annotation>::iterator *start,
                            const std::vector<Annotation>::iterator &end);
@@ -81,6 +86,8 @@ public:
                                         const char *data, addr length,
                                         std::string *error = nullptr);
   std::shared_ptr<SimplePosting> posting_from_file(std::fstream *f);
+  // Sources must be GC-lists in oldest-to-newest order. Identical intervals
+  // retain the newest source value, for both inner and outer merging.
   std::shared_ptr<SimplePosting> posting_from_merge(
       const std::vector<std::shared_ptr<SimplePosting>> &postings);
   std::shared_ptr<SimplePosting> posting_from_merge(

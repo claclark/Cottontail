@@ -5,6 +5,7 @@ cc_test(
     name = "tests",
     srcs = glob(["**/*.cc"], exclude = [
         "cgrep.cc",
+        "erasures.cc",
         "hazel.cc",
         "nfa.cc",
         "optimizer.cc",
@@ -29,6 +30,16 @@ cc_test(
         "test0.txt",
         "tokenless.txt",
         "test.qrels",
+    ],
+)
+
+cc_test(
+    name = "erasures_test",
+    size = "small",
+    srcs = ["erasures.cc"],
+    deps = [
+        "//src:cottontail",
+        "@googletest//:gtest_main",
     ],
 )
 

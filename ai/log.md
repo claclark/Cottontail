@@ -968,3 +968,33 @@
 - Indented the main README paper citation as a blockquote and moved the `iirj/`
   examples into the demo list, shortening the repository-layout paragraph.
   Documentation only; whitespace checks passed.
+
+2026-11-04T19:40:11Z
+- Recorded the agreed three-diff deletion/GC sequence in `ai/plan.md`: outer
+  null-feature merging, deletion-aware translation returning empty on contact,
+  then Hazel text reclamation, each with thorough testing. No implementation
+  or runtime tests; coding still requires explicit authorization.
+
+2026-11-06T20:29:21Z
+- Implemented authorized deletion diff 1. Added canonical annotation sorting
+  in `simple_posting.*` and used it at the four Fiver/SimpleBuilder/
+  SimpleAnnotator construction sites. Raw ordinary postings now normalize to
+  strict inner GC-lists; null postings retain maximal intervals. Null merges
+  use outer selection without coalescing. Both merge queues preserve newest
+  source values for identical intervals, and the append shortcut checks across
+  empty sources.
+- Added `//test:erasures_test` with containment-oracle selection tests,
+  chronological value updates (including zero), flat/staged merges, exclusion
+  filtering, compressed round trips, live snapshots, Fiver/Hazel conversion,
+  mixed collections, consolidation, reopening, and SimpleBuilder/Annotator
+  coverage. Updated existing posting tests to use the canonical sort.
+- `bazel build -c dbg --cxxopt=-Og //...` passed; rebuilt the focused test after
+  final test review, also successfully. Whitespace checks passed. No runtime
+  tests were run and no commit was made; both remain with the user. Updated
+  the plan and relevant notes. Translation, physical text GC, and old partial
+  merge-log compatibility remain outside this diff.
+
+2026-11-07T21:04:14Z
+- The user reports `make testing` passing, along with `build.sh` followed by
+  `rank.sh`, for deletion diff 1. Updated the verification checkpoint in the
+  plan and notes. No additional code changes or agent-run tests.
