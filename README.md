@@ -3,8 +3,8 @@
 > **Coding agents:** Read [AGENTS.md](AGENTS.md) before working in this
 > repository.
 
-For an explanation of Cottontail, annotative indexing, and their conceptual foundations, use the [Cottontail explainer skill](ai/explainer/SKILL.md).
-Humans can point an agent there instead of reading on.
+Humans, ask your agent to use the [Cottontail explainer skill](ai/explainer/SKILL.md)
+to explain Cottontail, annotative indexing, and their conceptual foundations.
 
 Cottontail aims to provide a unified storage substrate for agentic search.
 Cottontail is built around annotative indexing, a unified approach to indexing
