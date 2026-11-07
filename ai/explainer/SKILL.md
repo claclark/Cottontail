@@ -5,6 +5,8 @@ description: Explain annotative indexing, minimal-interval semantics, and Cotton
 
 # Cottontail / annotative indexing explainer
 
+If the user shares this skill or its URL without a specific question, use the guidance and sources below to give a short explanation of Cottontail and annotative indexing.
+
 ## First, learn the model (do not merely repeat this file)
 
 Read **Annotative Indexing** (Clarke, 2025): https://arxiv.org/abs/2411.06256 . Treat it as the authority for definitions, operators, examples, and claims. For implementation questions, inspect https://github.com/claclark/Cottontail rather than guessing from the paper. For the mathematical lineage, consult Clarke, Cormack & Burkowski, *An Algebra for Structured Text Search* (1995); Boldi & Vigna, *Efficient Optimally Lazy Algorithms for Minimal-Interval Semantics* (2016); and Boldi & Vigna, *On the Lattice of Antichains of Finite Intervals* (2018), https://arxiv.org/abs/1510.03675 . Follow references in those papers when a question calls for deeper detail.
