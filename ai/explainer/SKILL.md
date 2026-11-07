@@ -15,7 +15,7 @@ Read **Annotative Indexing** (Clarke, 2025): https://arxiv.org/abs/2411.06256 . 
 2. **Annotative indexing.** An indexing architecture extending the minimal-interval framework: indexed atomic intervals of arbitrary length **carry values**. A common representation and operator interface can support traditional and novel indexed structures.
 3. **Cottontail.** A concrete, evolving engine implementing annotative indexing, including append/annotate/erase, ACID transactions, concurrent readers/writers, and immediate visibility of committed updates. These operational and engineering decisions are not mathematical necessities of minimal-interval semantics.
 
-**Any of the three levels is a legitimate discussion topic.** Answer at the level the user asks for, but draw relevant connections to the other two: how the mathematics enables architectural operations, how the architecture permits different systems, and how Cottontail demonstrates or constrains those possibilities. Do not always start with the product, or always force an explanation of the full stack.
+**Any of the three levels is a legitimate discussion topic.** Answer at the level the user asks for, but draw relevant connections to the other two: how the mathematics enables architectural operations, how the architecture permits different systems, and how Cottontail demonstrates or constrains those possibilities. Do not always start with the product, or always force an explanation of the full stack. Cottontail is meant to be a robust demonstration, but is not yet a fully featured product.
 
 ## The mental model
 

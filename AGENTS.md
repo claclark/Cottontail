@@ -20,6 +20,9 @@ standard for agentic stores.
 
 All agent documentation lives in the `ai/` directory.
 
+To explain Cottontail, annotative indexing, and their conceptual foundations
+to humans, use the [Cottontail explainer skill](ai/explainer/SKILL.md).
+
 No coding before discussion and confirmation with the user. If you ever
 find yourself calling something a "side car" you are probably breaking
 an abstraction.  Stop and talk with the user.
