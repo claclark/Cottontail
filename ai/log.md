@@ -998,3 +998,43 @@
 - The user reports `make testing` passing, along with `build.sh` followed by
   `rank.sh`, for deletion diff 1. Updated the verification checkpoint in the
   plan and notes. No additional code changes or agent-run tests.
+
+2026-11-08T22:57:57Z
+- Recorded the translation decisions: check original requested bounds with
+  `rho(p)` against local Hazel or whole-snapshot Bigwig erasures, always create
+  the null hopper, and retain existing clamping. Added private hoppers for text
+  clones to the wishlist; existing shard sharing and locks stay in this pass.
+  Documentation only; no source changes or runtime tests.
+
+2026-11-08T23:07:05Z
+- Implemented authorized deletion diff 2 in `src/hazel.cc` and `src/bigwig.cc`.
+  Each text wrapper receives a null-feature hopper from its index. Hazel
+  checks local erasures under its existing mutex before clamping; Bigwig
+  checks whole-snapshot erasures under a new wrapper mutex before delegating
+  to shards. Any intersection returns empty. EmptyHopper requires no special
+  path; the minfinity seek skips its virtual sentinel. FiverTxt, shard sharing,
+  physical text storage, and on-disk formats are unchanged.
+- Added translation coverage in `//test:erasures_test` for preserved clamping,
+  endpoint contacts and containment, deletion-only shards, snapshot clones,
+  compressed/uncompressed text, concurrent shared-Txt calls, standalone Hazel
+  pre-clamp checks, Fiver conversion, Hazel merging, mixed collection activation,
+  consolidation, and reopening. Updated the plan and related notes.
+- `bazel build -c dbg --cxxopt=-Og //...` and whitespace checks pass. No runtime
+  tests were run and no commit was made; both remain with the user.
+
+2026-11-08T23:16:22Z
+- Investigated the user's regression result: only `Erasures.Translation` failed,
+  on the pre-erasure `translate(16, maxfinity)` expectation in both compression
+  profiles. Fiver passed the sentinel to `ohr`, then treated its virtual result
+  as a real text anchor, returning only the first token. With user approval,
+  normalized an upper `maxfinity` bound to `maxfinity - 1` in FiverTxt, matching
+  SimpleTxt. The existing failing assertion covers this change.
+- Compile checks for `//test:erasures_test`, `//test:tests`, and
+  `//test:hazel_test` pass with `-c dbg --cxxopt=-Og`. No agent-run runtime tests
+  or commit; user verification remains pending.
+
+2026-11-09T16:36:54Z
+- The user reports extensive tests without deletions and no obvious regressions
+  after the translation changes. Updated the plan and notes with that scope;
+  this report does not establish a passing rerun of the focused erasure tests
+  after the Fiver sentinel correction. No source changes or agent-run tests.

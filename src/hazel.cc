@@ -1537,7 +1537,8 @@ public:
   static std::shared_ptr<HazelTxt>
   make(const std::string &recipe, const std::string &filename, addr blob_offset,
        addr blob_length, std::shared_ptr<Tokenizer> tokenizer,
-       std::unique_ptr<Hopper> hopper, std::string *error = nullptr) {
+       std::unique_ptr<Hopper> hopper, std::unique_ptr<Hopper> erasures,
+       std::string *error = nullptr) {
     std::shared_ptr<HazelTxt> txt = std::shared_ptr<HazelTxt>(new HazelTxt());
     txt->therecipe_ = recipe;
     txt->read_gate_ = ReadGate::make(filename, error, 16);
@@ -1545,6 +1546,7 @@ public:
       return nullptr;
     txt->tokenizer_ = tokenizer;
     txt->hopper_ = std::move(hopper);
+    txt->erasures_ = std::move(erasures);
     if (!compressor_from_recipe(recipe, "compressor", "compressor_recipe",
                                 &txt->compressor_, error) ||
         !txt->load(blob_offset, blob_length, error))
@@ -1573,6 +1575,16 @@ private:
     return nullptr;
   }
   std::string translate_(addr p, addr q) final {
+    if (p == maxfinity || q < p)
+      return "";
+    {
+      std::lock_guard<std::mutex> lock(hopper_lock_);
+      addr pe, qe;
+      // Check the requested range before clamping to this shard's text.
+      erasures_->rho(p == minfinity ? p + 1 : p, &pe, &qe);
+      if (pe != maxfinity && pe <= q)
+        return "";
+    }
     if (token_start_ == maxfinity)
       return "";
     if (p < token_start_)
@@ -1839,6 +1851,7 @@ private:
   std::shared_ptr<Tokenizer> tokenizer_;
   std::shared_ptr<Compressor> compressor_;
   std::unique_ptr<Hopper> hopper_;
+  std::unique_ptr<Hopper> erasures_;
   std::mutex hopper_lock_;
   std::mutex cache_write_lock_;
   addr token_start_ = maxfinity;
@@ -2734,7 +2747,8 @@ std::shared_ptr<Warren> Hazel::make(const std::string &filename,
   }
   std::shared_ptr<HazelTxt> hazel_txt = HazelTxt::make(
       txt_recipe, filename, txt_blob->second.offset, txt_blob->second.length,
-      tokenizer, std::move(text_chunk_hopper), error);
+      tokenizer, std::move(text_chunk_hopper), hazel_idx->hopper(null_feature),
+      error);
   if (hazel_txt == nullptr)
     return nullptr;
   std::shared_ptr<Txt> txt = Txt::wrap(txt_recipe, hazel_txt, error);

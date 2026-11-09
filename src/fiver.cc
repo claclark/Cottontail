@@ -273,6 +273,8 @@ private:
   std::string name_() final { return "fiver"; };
   std::string recipe_() final { return ""; };
   std::string translate_(addr p, addr q) final {
+    if (q == maxfinity)
+      --q;
     if (p < 0)
       p = 0;
     if (p == maxfinity || q < p)

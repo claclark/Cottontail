@@ -208,16 +208,22 @@ token interval p,q -> raw text byte offset in v
 
 For a `translate(p, q)` request, Hazel txt:
 
-1. Uses a mutex-protected hopper over `text_chunk_tag`.
-2. Finds the Fiver-style raw byte offsets bracketing the requested token range.
+1. Checks its local null-feature hopper under `hopper_lock_`; if any erasure
+   intersects the original requested range, returns empty. Releases the lock
+   before continuing. The seek is `rho(p)`, using `minfinity + 1` if `p` is the
+   virtual `minfinity` sentinel.
+2. Clamps to its token range and uses a mutex-protected hopper over
+   `text_chunk_tag` to find the Fiver-style raw byte offsets bracketing it.
 3. Uses the txt chunk directory to locate compressed text chunks containing
    those raw byte offsets.
 4. Decompresses only the needed compressed chunks.
 5. Uses tokenizer `skip(...)` logic to trim to exact token boundaries.
 
-`translate(...)` is forgiving: impossible, inverted, out-of-range, failed-read,
-or failed-decompression requests return the empty string because the `Txt` API
-has no error channel.
+`translate(...)` preserves its forgiving clamping for requests extending beyond
+the available token range. Invalid, wholly out-of-range, failed-read, or
+failed-decompression requests return the empty string because the `Txt` API has
+no error channel. Bigwig additionally checks the whole snapshot's erasures
+before delegating to any shard; an erasure can live separately from its text.
 
 ## Activation And Runtime
 

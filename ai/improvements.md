@@ -284,14 +284,30 @@ follow-ups are:
   decode failures before returning structured bogus fallback data.
 - Replace failsafe NullAppender/NullAnnotator with error logging equivalents.
 
+## Private Hoppers For Text Clones
+
+- Consider giving text clones their own persistent hoppers and mutexes while
+  sharing immutable postings, text storage, and Hazel's decompressed-block
+  cache. Keep per-clone locking so concurrent calls on the same clone remain
+  safe; normal use by separate workers would avoid hopper contention.
+- Bigwig currently creates fresh outer Idx/Txt wrappers but shares shard
+  objects and their Txt instances. Reducing contention would require private
+  shard text views as well, particularly separating HazelTxt's shared cache
+  from its mutable seek state.
+- Deferred on 2026-11-08: retain existing text sharing and locks for the
+  deletion-aware translation change. The short locked seeks do not currently
+  justify the broader cloning changes; no contention benchmark has been run.
+
 ## Text Deletions
 
 - Current Fiver/Hazel/Bigwig merge behavior may preserve physical text bytes
   even when ordinary postings covered by `null_feature` are removed from the
   merged idx.
-- Translation semantics should remain logical rather than physical: if a
-  requested range touches excluded/deleted text, return an empty string instead
-  of splicing surrounding text together.
+- Implemented in deletion diff 2 (2026-11-08), pending user runtime tests:
+  Hazel and Bigwig translations return empty if the original requested range
+  touches an erasure, preserving existing clamping otherwise. Bigwig checks
+  snapshot-wide erasures before delegating; Hazel checks its local null posting.
+  No physical bytes are reclaimed by this change.
 - Long-term compaction can reclaim storage by omitting txt chunks that are
   fully covered by exclusions, while preserving the invariant that tokenizing
   translated text yields the indexed tokens for the requested range.

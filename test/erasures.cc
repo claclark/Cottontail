@@ -3,6 +3,8 @@
 #include <memory>
 #include <sstream>
 #include <string>
+#include <thread>
+#include <utility>
 #include <vector>
 
 #include "gtest/gtest.h"
@@ -450,4 +452,156 @@ TEST(Erasures, SimpleBuilderAndAnnotatorUseCanonicalOrder) {
   ASSERT_NE(idx, nullptr) << error;
   expect_hopper(idx->hopper(other), {{3, 4, 2.0}});
   expect_hopper(idx->hopper(feature), {{3, 4, 0.0}});
+}
+
+TEST(Erasures, Translation) {
+  for (const std::string compression : {"null", "zlib"}) {
+    SCOPED_TRACE(compression);
+    std::string error, root = temporary_directory();
+    ASSERT_FALSE(root.empty());
+    auto working = cottontail::Working::mkdir(root + "/live", &error);
+    ASSERT_NE(working, nullptr) << error;
+    auto featurizer = cottontail::Featurizer::make("hashing", "", &error);
+    auto tokenizer = cottontail::Tokenizer::make("utf8", "", &error);
+    auto pc = cottontail::Compressor::make("post", "", &error);
+    auto vc = cottontail::Compressor::make(compression, "", &error);
+    auto tc = cottontail::Compressor::make(compression, "", &error);
+    auto bigwig = cottontail::Bigwig::make(working, featurizer, tokenizer,
+                                          &error, nullptr, pc, vc, tc);
+    ASSERT_NE(bigwig, nullptr) << error;
+    bigwig->merge(false);
+    for (const std::string text : {
+             "zero one two three four five six seven eight nine ten eleven "
+             "twelve thirteen fourteen fifteen\n",
+             "sixteen seventeen eighteen nineteen\n"}) {
+      ASSERT_TRUE(bigwig->transaction(&error)) << error;
+      addr p, q;
+      ASSERT_TRUE(bigwig->appender()->append(text, &p, &q, &error)) << error;
+      ASSERT_TRUE(bigwig->ready(&error)) << error;
+      bigwig->commit();
+    }
+    bigwig->start();
+    auto before = bigwig->clone(&error);
+    ASSERT_NE(before, nullptr) << error;
+    ASSERT_TRUE(before->started());
+    bigwig->end();
+
+    // Capture ordinary translations, including clipping and sentinel bounds,
+    // before introducing erasures in a separate, text-free transaction.
+    std::vector<std::pair<addr, addr>> ranges;
+    for (addr p = -1; p <= 30; p++)
+      for (addr q = p; q <= 30; q++)
+        ranges.emplace_back(p, q);
+    ranges.emplace_back(cottontail::minfinity, 2);
+    ranges.emplace_back(cottontail::minfinity, cottontail::maxfinity);
+    ranges.emplace_back(16, cottontail::maxfinity);
+    ranges.emplace_back(cottontail::maxfinity, cottontail::maxfinity);
+    ranges.emplace_back(8, 7);
+    ranges.emplace_back(cottontail::minfinity, cottontail::minfinity);
+    std::vector<std::string> baseline;
+    for (const auto &range : ranges)
+      baseline.push_back(before->txt()->translate(range.first, range.second));
+    EXPECT_EQ(before->txt()->translate(cottontail::minfinity, 0), "zero ");
+    EXPECT_EQ(before->txt()->translate(16, cottontail::maxfinity),
+              "sixteen seventeen eighteen nineteen\n");
+
+    std::vector<Interval> erasures = {
+        {3, 5, 0.0}, {7, 9, 0.0}, {15, 15, 0.0}, {25, 28, 0.0}};
+    ASSERT_TRUE(bigwig->transaction(&error)) << error;
+    for (const auto &e : erasures)
+      ASSERT_TRUE(bigwig->annotator()->erase(e.p, e.q, &error)) << error;
+    ASSERT_TRUE(bigwig->ready(&error)) << error;
+    bigwig->commit();
+    bigwig->start();
+    auto after = bigwig->clone(&error);
+    ASSERT_NE(after, nullptr) << error;
+    ASSERT_TRUE(after->started());
+    bigwig->end();
+
+    auto check = [&](std::shared_ptr<cottontail::Warren> warren) {
+      ASSERT_NE(warren, nullptr) << error;
+      if (!warren->started())
+        warren->start();
+      for (size_t i = 0; i < ranges.size(); i++) {
+        addr p = ranges[i].first, q = ranges[i].second;
+        bool touched = false;
+        for (const auto &e : erasures)
+          touched = touched || (p <= e.q && e.p <= q);
+        EXPECT_EQ(warren->txt()->translate(p, q), touched ? "" : baseline[i])
+            << "translate [" << p << "," << q << "]";
+      }
+      // Repeated seeks in differing orders exercise shared hopper locking.
+      std::vector<std::thread> readers;
+      for (size_t t = 0; t < 4; t++)
+        readers.emplace_back([&, t] {
+          for (size_t j = 0; j < ranges.size(); j++) {
+            size_t i = t % 2 == 0 ? j : ranges.size() - 1 - j;
+            addr p = ranges[i].first, q = ranges[i].second;
+            bool touched = false;
+            for (const auto &e : erasures)
+              touched = touched || (p <= e.q && e.p <= q);
+            EXPECT_EQ(warren->txt()->translate(p, q), touched ? "" : baseline[i]);
+          }
+        });
+      for (auto &reader : readers)
+        reader.join();
+      warren->end();
+    };
+    check(after);
+    check(cottontail::Bigwig::make(root + "/live", &error));
+    // The pre-deletion snapshot keeps its original text and empty null hopper.
+    for (size_t i = 0; i < ranges.size(); i++)
+      EXPECT_EQ(before->txt()->translate(ranges[i].first, ranges[i].second),
+                baseline[i]);
+    before->end();
+
+    auto names = working->ls("fiver");
+    std::sort(names.begin(), names.end());
+    ASSERT_EQ(names.size(), 3U);
+    std::vector<std::shared_ptr<cottontail::Fiver>> fivers;
+    std::vector<std::shared_ptr<cottontail::Hazel>> hazels;
+    for (size_t i = 0; i < names.size(); i++) {
+      auto fiver = cottontail::Fiver::unpickle(names[i], working, featurizer,
+                                              tokenizer, &error, pc, vc, tc);
+      ASSERT_NE(fiver, nullptr) << error;
+      fiver->start();
+      fivers.push_back(fiver);
+      std::string filename = root + "/source-" + std::to_string(i) + ".hazel";
+      ASSERT_TRUE(fiver->hazel(filename, &error, 32)) << error;
+      auto hazel = std::dynamic_pointer_cast<cottontail::Hazel>(
+          cottontail::Warren::make(filename, &error));
+      ASSERT_NE(hazel, nullptr) << error;
+      hazel->start();
+      hazels.push_back(hazel);
+    }
+    // A standalone shard without erasures still clips as before.
+    EXPECT_EQ(hazels[1]->txt()->translate(0, cottontail::maxfinity),
+              "sixteen seventeen eighteen nineteen\n");
+    // Local erasures outside this shard's text must be checked before clipping.
+    auto suffix = cottontail::Hazel::merge(
+        {hazels[1], hazels[2]}, root + "/suffix.hazel", nullptr, &error);
+    ASSERT_NE(suffix, nullptr) << error;
+    suffix->start();
+    EXPECT_EQ(suffix->txt()->translate(16, 24),
+              "sixteen seventeen eighteen nineteen\n");
+    EXPECT_EQ(suffix->txt()->translate(0, 19), "");
+    EXPECT_EQ(suffix->txt()->translate(16, 30), "");
+    suffix->end();
+
+    auto merged = cottontail::Fiver::merge(fivers, &error, pc, vc, tc);
+    ASSERT_NE(merged, nullptr) << error;
+    merged->start();
+    std::string converted = root + "/converted.hazel";
+    ASSERT_TRUE(merged->hazel(converted, &error, 32)) << error;
+    check(cottontail::Warren::make(converted, &error));
+    std::string flat = root + "/flat.hazel";
+    check(cottontail::Hazel::merge(hazels, flat, nullptr, &error));
+    check(cottontail::Warren::make(flat, &error));
+    // Mixed collections must reject the complete request, even when only a
+    // different shard carries the erasure and other shards could return text.
+    ASSERT_NE(fivers[0]->hazel(&error), nullptr) << error;
+    check(cottontail::Bigwig::make(root + "/live", &error));
+    ASSERT_TRUE(cottontail::Bigwig::consolidate(root + "/live", &error)) << error;
+    check(cottontail::Bigwig::make(root + "/live", &error));
+  }
 }

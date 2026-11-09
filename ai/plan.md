@@ -23,7 +23,11 @@ explicitly requests a runtime experiment or test run.
 Agreed sequence as of 2026-11-04: three separate diffs, with thorough testing
 of each before proceeding. Diff 1 was authorized and implemented on 2026-11-06;
 the user reports `make testing` and `build.sh` followed by `rank.sh` passing on
-2026-11-07. Diffs 2 and 3 are not authorized.
+2026-11-07. Diff 2 was authorized and implemented on 2026-11-08; its full
+compile/build check passes. On 2026-11-09 the user reports extensive testing
+without deletions and no obvious regressions. A passing rerun of the focused
+erasure tests after the Fiver sentinel correction has not been reported.
+Diff 3 is not authorized.
 The user continues to run regression tests and make commits; agent verification
 remains compile/build-only unless explicitly authorized otherwise.
 
@@ -43,11 +47,26 @@ remains compile/build-only unless explicitly authorized otherwise.
    `//test:erasures_test`; existing posting tests remain in `//test:tests`.
    Per the user, old partial Hazel merge logs are out of scope. SimpleBuilder's
    existing cross-batch ordered-GC-list input contract is unchanged.
-2. When `null_feature` is active, detect `Txt::translate` requests that touch
+2. Implemented: detect Hazel/Bigwig `Txt::translate` requests that touch
    any deleted position and return an empty string. Test boundary contacts,
    partial overlaps, requests spanning deleted intervals, unaffected requests,
    and consistency across relevant storage and snapshot paths. Keep physical
-   text reclamation out of this diff.
+   text reclamation out of this diff. As agreed on 2026-11-08, retain existing
+   clamping but check the original requested bounds for deletion intersection:
+   `rho(p)` finds the first erasure ending at or after `p`; a finite result
+   starting at or before `q` invalidates the whole translation. Hazel checks
+   its local null posting; Bigwig checks its whole snapshot before delegating
+   to shards. Always create a null-feature hopper (EmptyHopper if absent).
+   Keep existing shard text sharing and mutexes; private hoppers for text
+   clones are deferred to the wishlist, not part of this diff.
+   FiverTxt does not check erasures because the user does not activate lone
+   Fivers; Bigwig checks its snapshot before delegating. A follow-up normalizes
+   Fiver's upper `maxfinity` bound to `maxfinity - 1`, matching SimpleTxt:
+   the user's test run exposed the existing sentinel translation corner case.
+   `minfinity` seeks use `minfinity + 1` to skip the virtual sentinel interval.
+   Coverage in `//test:erasures_test` includes retained snapshots, compression,
+   cross-shard erasures, pre-clamp checks, conversion/merging, reopening,
+   consolidation, and concurrent translations through shared text objects.
 3. Garbage-collect text segments during Hazel creation/merging, working at
    `text_chunk_tag` granularity. Test reclamation and retained-text translation,
    address gaps, byte-offset remapping, allocation high-water preservation,

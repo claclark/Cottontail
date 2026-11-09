@@ -223,11 +223,13 @@ private:
 class BigwigTxt final : public Txt {
 public:
   static std::shared_ptr<Txt>
-  make(const std::vector<std::shared_ptr<Owsla>> &warrens) {
+  make(const std::vector<std::shared_ptr<Owsla>> &warrens,
+       std::unique_ptr<Hopper> erasures) {
     std::shared_ptr<BigwigTxt> txt =
         std::shared_ptr<BigwigTxt>(new BigwigTxt());
     assert(txt != nullptr);
     txt->warrens_ = warrens;
+    txt->erasures_ = std::move(erasures);
     return txt;
   };
 
@@ -242,6 +244,16 @@ private:
   std::string name_() final { return "bigwig"; };
   std::string recipe_() final { return ""; };
   std::string translate_(addr p, addr q) final {
+    if (p == maxfinity || q < p)
+      return "";
+    {
+      std::lock_guard<std::mutex> lock(hopper_lock_);
+      addr pe, qe;
+      // minfinity is a seek sentinel; inspect the first real erasure.
+      erasures_->rho(p == minfinity ? p + 1 : p, &pe, &qe);
+      if (pe != maxfinity && pe <= q)
+        return "";
+    }
     std::string result;
     for (auto &warren : warrens_)
       result += warren->txt()->translate(p, q);
@@ -277,6 +289,8 @@ private:
     return true;
   };
   std::vector<std::shared_ptr<Owsla>> warrens_;
+  std::unique_ptr<Hopper> erasures_;
+  std::mutex hopper_lock_;
 };
 
 namespace {
@@ -1047,7 +1061,8 @@ void Bigwig::start_() {
   idx_ = BigwigIdx::make(warrens_, cache, posting_factory_,
                          featurizer_->featurize(text_chunk_tag));
   assert(idx_ != nullptr);
-  txt_ = Txt::wrap(txt_recipe_, BigwigTxt::make(warrens_));
+  txt_ = Txt::wrap(txt_recipe_,
+                   BigwigTxt::make(warrens_, idx_->hopper(null_feature)));
   assert(txt_ != nullptr);
 }
 

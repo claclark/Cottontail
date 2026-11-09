@@ -420,6 +420,20 @@
   true normal multi-shard posting merges.
 - When deletions exist, `BigwigIdx` caches raw feature and `null_feature`
   merges separately and composes their hoppers with `NotContainedIn`.
+- HazelTxt and BigwigTxt each hold a persistent null-feature hopper, naturally
+  empty when erasures are absent. Translation checks the original requested
+  range with `rho(p)` and returns empty on any deletion intersection, including
+  endpoint contact. `minfinity` is advanced by one for this seek to avoid the
+  virtual sentinel. Existing clamping is preserved. Hazel checks local erasures
+  under its existing hopper mutex; Bigwig checks snapshot-wide erasures under
+  a per-wrapper mutex before translating any shards. FiverTxt does not check
+  erasures; it now normalizes an upper `maxfinity` bound to `maxfinity - 1`,
+  matching SimpleTxt and avoiding a virtual-sentinel result from `ohr`.
+  Bigwig start/clone creates a new wrapper and erasure hopper; shard Txt objects
+  and Hazel text caches remain shared. Diff 2 compiles; on 2026-11-09 the user
+  reports extensive testing without deletions and no obvious regressions.
+  Focused erasure-test verification after the sentinel correction remains
+  unreported.
 - `CacheGate` is a one-way completion gate. `CacheRecord` starts closed and
   SimpleIdx cache-fill paths call `release()` after storage is filled.
   `SimplePosting` also carries a completion gate; normal postings are
