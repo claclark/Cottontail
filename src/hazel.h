@@ -4,6 +4,7 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "src/core.h"
@@ -13,6 +14,15 @@
 #include "src/working.h"
 
 namespace cottontail {
+
+// Construction helpers. Deleted byte ranges are half-open; logical offsets
+// remain unchanged when a compressed block's payload is omitted.
+bool hazel_deleted_bytes(std::shared_ptr<Idx> idx, addr text_chunk_feature,
+                         addr text_length,
+                         std::vector<std::pair<addr, addr>> *deleted,
+                         std::string *error = nullptr);
+bool hazel_bytes_deleted(const std::vector<std::pair<addr, addr>> &deleted,
+                         addr start, addr end);
 
 class Hazel final : public Owsla {
 public:

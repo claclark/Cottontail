@@ -420,6 +420,14 @@
   true normal multi-shard posting merges.
 - When deletions exist, `BigwigIdx` caches raw feature and `null_feature`
   merges separately and composes their hoppers with `NotContainedIn`.
+- Hazel construction reclaims compressed text blocks wholly covered by byte
+  ranges derived from fully erased text-chunk intervals in the completed
+  index. Logical offsets, index anchors, raw length, and directory entries
+  stay intact; a repeated compressed end records an absent payload. Conversion
+  skips compression; merging skips copying, including existing holes. Boundary
+  blocks and unindexed tokenless bytes are retained conservatively. This
+  preserves allocation high-water marks through full deletion and reopening.
+  Diff 3 compile checks pass; runtime verification is pending with the user.
 - HazelTxt and BigwigTxt each hold a persistent null-feature hopper, naturally
   empty when erasures are absent. Translation checks the original requested
   range with `rho(p)` and returns empty on any deletion intersection, including

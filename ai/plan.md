@@ -27,7 +27,8 @@ the user reports `make testing` and `build.sh` followed by `rank.sh` passing on
 compile/build check passes. On 2026-11-09 the user reports extensive testing
 without deletions and no obvious regressions. A passing rerun of the focused
 erasure tests after the Fiver sentinel correction has not been reported.
-Diff 3 is not authorized.
+Diff 3 was authorized on 2026-11-09 and is implemented; compile verification
+passes, with runtime verification left to the user.
 The user continues to run regression tests and make commits; agent verification
 remains compile/build-only unless explicitly authorized otherwise.
 
@@ -67,11 +68,22 @@ remains compile/build-only unless explicitly authorized otherwise.
    Coverage in `//test:erasures_test` includes retained snapshots, compression,
    cross-shard erasures, pre-clamp checks, conversion/merging, reopening,
    consolidation, and concurrent translations through shared text objects.
-3. Garbage-collect text segments during Hazel creation/merging, working at
-   `text_chunk_tag` granularity. Test reclamation and retained-text translation,
-   address gaps, byte-offset remapping, allocation high-water preservation,
-   empty/tokenless cases, reopening, snapshots, and merge recovery. Preserve
-   the translation semantics established in diff 2.
+3. Implemented: reclaim whole compressed text blocks during Hazel creation
+   and merging. After completing the index, use null and text-chunk postings
+   to derive conservative half-open deleted byte ranges from fully erased
+   token chunks. Omit a block's payload only when its entire raw byte range is
+   reclaimable. Keep all directory entries, logical byte offsets, text-chunk
+   anchors, token addresses, and allocation high-water marks. A hole has
+   positive raw length and zero compressed length; retained boundary blocks
+   and map entries are accepted residue. Conversion skips compression, merging
+   skips payload copying and carries existing holes forward. No-erasure
+   merging avoids rereading the completed index. The only text-reader change
+   is rejecting nonpositive raw or compressed lengths in `obtain()`.
+   Focused coverage in `//test:erasures_test` inspects payload lengths and map
+   entries, checks surviving translations, empty/tokenless text, standalone
+   reopening, snapshots, repeated merges, and append addresses after full
+   reclamation and consolidation. Posting-log recovery uses the completed
+   output index for reclamation decisions, including recovered feature work.
 
 ## Current Checkpoint
 

@@ -308,9 +308,11 @@ follow-ups are:
   touches an erasure, preserving existing clamping otherwise. Bigwig checks
   snapshot-wide erasures before delegating; Hazel checks its local null posting.
   No physical bytes are reclaimed by this change.
-- Long-term compaction can reclaim storage by omitting txt chunks that are
-  fully covered by exclusions, while preserving the invariant that tokenizing
-  translated text yields the indexed tokens for the requested range.
+- Implemented in deletion diff 3 (2026-11-09), pending user runtime tests:
+  Hazel construction omits whole compressed blocks covered by conservatively
+  derived deleted byte ranges. Logical offsets and map entries remain as
+  holes; boundary blocks remain intact. Text-chunk anchors preserve the
+  allocation high-water mark. No-erasure merges retain the direct-copy path.
 
 ## Exclusion Merge Semantics
 

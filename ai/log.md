@@ -1038,3 +1038,23 @@
   after the translation changes. Updated the plan and notes with that scope;
   this report does not establish a passing rerun of the focused erasure tests
   after the Fiver sentinel correction. No source changes or agent-run tests.
+
+2026-11-09T18:08:56Z
+- Implemented authorized deletion diff 3: Hazel conversion and merging derive
+  deleted byte ranges from fully erased text chunks in the completed index and
+  omit payload for wholly covered compressed blocks. Retained map entries use
+  zero compressed length; logical byte offsets, text-chunk anchors, raw length,
+  and allocation high-water marks remain intact. Existing holes survive later
+  merges. Boundary blocks and unindexed tokenless bytes remain conservative
+  residue. `obtain()` rejects nonpositive raw or compressed lengths.
+- Added shared construction helpers in `hazel.*`, and focused coverage in
+  `//test:erasures_test` that reads the actual text directory and payload sizes.
+  Cases cover no erasures, first/middle/tail/all blocks, adjacent erased chunks,
+  partial/coarse blocks, compression profiles, empty/tokenless bytes, reopening,
+  repeated merges, retained source snapshots, and append addresses after full
+  reclamation followed by further consolidation. Updated the plan and notes.
+- The full `bazel build -c dbg --cxxopt=-Og //...` passes; the focused target
+  also rebuilt successfully after final test additions. Whitespace checks pass.
+  Bazelisk version lookup required the approved build escalation after sandbox
+  DNS restrictions blocked it. No runtime tests or commits were performed;
+  user verification remains pending.

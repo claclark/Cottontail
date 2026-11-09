@@ -1048,17 +1048,20 @@ bool hazel_write_text_chunk(std::fstream *out, addr chunk_space_start,
                             const std::string &text, addr raw_start,
                             addr raw_length,
                             std::shared_ptr<Compressor> text_compressor,
+                            const std::vector<std::pair<addr, addr>> &deleted,
                             std::vector<HazelTextEntry> *directory,
                             std::string *error) {
   if (raw_length <= 0)
     return true;
-  std::string compressed;
-  if (!hazel_crush(text_compressor, text.data() + raw_start, raw_length,
-                   &compressed, error))
-    return false;
   HazelTextEntry entry;
   entry.raw_byte_end = raw_start + raw_length;
-  out->write(compressed.data(), compressed.size());
+  if (!hazel_bytes_deleted(deleted, raw_start, entry.raw_byte_end)) {
+    std::string compressed;
+    if (!hazel_crush(text_compressor, text.data() + raw_start, raw_length,
+                     &compressed, error))
+      return false;
+    out->write(compressed.data(), compressed.size());
+  }
   entry.compressed_byte_end = hazel_tellp(out) - chunk_space_start;
   directory->push_back(entry);
   if (out->fail()) {
@@ -1075,6 +1078,10 @@ bool hazel_write_txt_blob(std::fstream *out, std::shared_ptr<Idx> idx,
                           addr target_chunk_size,
                           addr *blob_start, addr *blob_length,
                           std::string *error) {
+  std::vector<std::pair<addr, addr>> deleted;
+  if (!hazel_deleted_bytes(idx, featurizer->featurize(text_chunk_tag),
+                            text.size(), &deleted, error))
+    return false;
   *blob_start = hazel_tellp(out);
   const std::string magic = hazel_txt_magic;
   out->write(magic.data(), magic.size());
@@ -1111,7 +1118,7 @@ bool hazel_write_txt_blob(std::fstream *out, std::shared_ptr<Idx> idx,
     } else if (raw_start - group_start >= target_chunk_size) {
       if (!hazel_write_text_chunk(out, chunk_space_start, text, group_start,
                                   raw_start - group_start, text_compressor,
-                                  &directory, error))
+                                  deleted, &directory, error))
         return false;
       group_start = raw_start;
     }
@@ -1119,11 +1126,11 @@ bool hazel_write_txt_blob(std::fstream *out, std::shared_ptr<Idx> idx,
   if (have_chunk) {
     if (!hazel_write_text_chunk(out, chunk_space_start, text, group_start,
                                 (addr)text.size() - group_start,
-                                text_compressor, &directory, error))
+                                text_compressor, deleted, &directory, error))
       return false;
   } else if (text.size() > 0) {
     if (!hazel_write_text_chunk(out, chunk_space_start, text, 0, text.size(),
-                                text_compressor, &directory, error))
+                                text_compressor, deleted, &directory, error))
       return false;
   }
   addr directory_start = hazel_tellp(out);

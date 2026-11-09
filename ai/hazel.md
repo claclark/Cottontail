@@ -174,7 +174,8 @@ The text directory is a boundary list. The first raw chunk starts at raw offset
 compressed chunk starts at chunk-space offset `0`, and later compressed chunks
 start at the previous entry's `compressed_end`.
 
-`raw_end` is a byte offset into the original Fiver text blob.
+`raw_end` is a logical byte offset into the original text, including reclaimed
+spans; payload reclamation does not repack this address space.
 `compressed_end` is relative to chunk space. For a non-empty txt blob, the
 final `compressed_end` should equal `directory_offset`.
 
@@ -182,6 +183,18 @@ Text chunks are formed by walking a private hopper over the Fiver idx posting
 list for `text_chunk_tag`. Adjacent Fiver text chunks are grouped until the raw
 byte span reaches at least `target_chunk_size` when possible. The default
 target is 64 KiB.
+
+During construction, fully erased `text_chunk_tag` intervals define
+conservative deleted byte ranges: an anchor's byte offset through the next
+anchor, or logical text end for the last anchor. Adjacent deleted byte ranges
+are combined for storage coverage, without changing null-feature semantics.
+Only compressed blocks wholly covered by these ranges lose their payload.
+Partially covered blocks and bytes without token anchors remain stored.
+The directory entry is retained with its normal `raw_end` and the preceding
+`compressed_end`, encoding a hole. Even a fully reclaimed text retains its
+logical length, directory entries, and index anchors; it is distinct from the
+empty-text header below. `obtain()` returns null on nonpositive raw or
+compressed lengths; existing callers propagate this as empty translation.
 
 An empty txt blob is represented by the fixed header only:
 
@@ -384,8 +397,12 @@ After all features are complete, final assembly k-way scans the logs:
 - all other compressed posting records are copied into the final idx posting
   area without decompression or recompression.
 
-`HazelTxt::merge(...)` continues to copy already-compressed text chunks, build
-the cumulative txt directory, and require matching source chunk sizes. The
+After writing the complete idx blob, a merge with erasures reopens that blob
+directly to read its final null and text-chunk postings, including recovered
+posting-log results, and computes reclaimable byte ranges. Merges without
+erasures skip this reread. `HazelTxt::merge(...)` copies retained compressed
+blocks unchanged, omits wholly reclaimable payloads, preserves existing holes,
+builds the cumulative txt directory, and requires matching source chunk sizes. The
 idx, txt, DNA, and blob dictionary are assembled in the ordinary
 `dst + ".tmp"` file and then published as `dst`. Source Hazels and posting logs
 remain until publication succeeds. If the target already exists, it wins and

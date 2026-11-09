@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <cstdlib>
+#include <fstream>
 #include <memory>
 #include <sstream>
 #include <string>
@@ -113,6 +114,68 @@ std::string temporary_directory() {
   char *directory = mkdtemp(buffer.data());
   EXPECT_NE(directory, nullptr);
   return directory == nullptr ? "" : directory;
+}
+
+struct TextLayout {
+  addr raw_length = 0;
+  addr payload_length = 0;
+  std::vector<cottontail::HazelTextEntry> blocks;
+};
+
+TextLayout text_layout(const std::string &filename) {
+  TextLayout result;
+  std::fstream in(filename, std::ios::in | std::ios::binary);
+  in.seekg(cottontail::cottontail_file_magic.size());
+  std::string line;
+  while (std::getline(in, line) && !line.empty()) {
+  }
+  in.seekg(cottontail::hazel_blob_dictionary_magic.size(), std::ios::cur);
+  addr count;
+  if (!cottontail::read_pod(&in, &count)) {
+    ADD_FAILURE() << "Cannot read blob dictionary: " << filename;
+    return result;
+  }
+  for (addr i = 0; i < count; i++) {
+    addr length, offset, blob_length;
+    if (!cottontail::read_pod(&in, &length) || length < 0) {
+      ADD_FAILURE() << "Cannot read blob name";
+      return result;
+    }
+    std::string name(length, '\0');
+    in.read(name.data(), length);
+    if (!cottontail::read_pod(&in, &offset) ||
+        !cottontail::read_pod(&in, &blob_length)) {
+      ADD_FAILURE() << "Cannot read blob entry";
+      return result;
+    }
+    if (name != "txt")
+      continue;
+    in.seekg(offset + cottontail::hazel_txt_magic.size());
+    addr directory_offset, directory_length, entries, target;
+    if (!cottontail::read_pod(&in, &directory_offset) ||
+        !cottontail::read_pod(&in, &directory_length) ||
+        !cottontail::read_pod(&in, &entries) ||
+        !cottontail::read_pod(&in, &result.raw_length) ||
+        !cottontail::read_pod(&in, &target)) {
+      ADD_FAILURE() << "Cannot read text header";
+      return result;
+    }
+    result.payload_length = directory_offset;
+    in.seekg(offset + cottontail::hazel_txt_magic.size() + 5 * sizeof(addr) +
+             directory_offset);
+    for (addr j = 0; j < entries; j++) {
+      cottontail::HazelTextEntry entry;
+      if (!cottontail::read_pod(&in, &entry.raw_byte_end) ||
+          !cottontail::read_pod(&in, &entry.compressed_byte_end)) {
+        ADD_FAILURE() << "Cannot read text block";
+        return result;
+      }
+      result.blocks.push_back(entry);
+    }
+    return result;
+  }
+  ADD_FAILURE() << "Missing text blob: " << filename;
+  return result;
 }
 
 void expect_hopper(std::unique_ptr<cottontail::Hopper> hopper,
@@ -467,13 +530,13 @@ TEST(Erasures, Translation) {
     auto vc = cottontail::Compressor::make(compression, "", &error);
     auto tc = cottontail::Compressor::make(compression, "", &error);
     auto bigwig = cottontail::Bigwig::make(working, featurizer, tokenizer,
-                                          &error, nullptr, pc, vc, tc);
+                                           &error, nullptr, pc, vc, tc);
     ASSERT_NE(bigwig, nullptr) << error;
     bigwig->merge(false);
-    for (const std::string text : {
-             "zero one two three four five six seven eight nine ten eleven "
-             "twelve thirteen fourteen fifteen\n",
-             "sixteen seventeen eighteen nineteen\n"}) {
+    for (const std::string text :
+         {"zero one two three four five six seven eight nine ten eleven "
+          "twelve thirteen fourteen fifteen\n",
+          "sixteen seventeen eighteen nineteen\n"}) {
       ASSERT_TRUE(bigwig->transaction(&error)) << error;
       addr p, q;
       ASSERT_TRUE(bigwig->appender()->append(text, &p, &q, &error)) << error;
@@ -540,7 +603,8 @@ TEST(Erasures, Translation) {
             bool touched = false;
             for (const auto &e : erasures)
               touched = touched || (p <= e.q && e.p <= q);
-            EXPECT_EQ(warren->txt()->translate(p, q), touched ? "" : baseline[i]);
+            EXPECT_EQ(warren->txt()->translate(p, q),
+                      touched ? "" : baseline[i]);
           }
         });
       for (auto &reader : readers)
@@ -562,7 +626,7 @@ TEST(Erasures, Translation) {
     std::vector<std::shared_ptr<cottontail::Hazel>> hazels;
     for (size_t i = 0; i < names.size(); i++) {
       auto fiver = cottontail::Fiver::unpickle(names[i], working, featurizer,
-                                              tokenizer, &error, pc, vc, tc);
+                                               tokenizer, &error, pc, vc, tc);
       ASSERT_NE(fiver, nullptr) << error;
       fiver->start();
       fivers.push_back(fiver);
@@ -601,7 +665,242 @@ TEST(Erasures, Translation) {
     // different shard carries the erasure and other shards could return text.
     ASSERT_NE(fivers[0]->hazel(&error), nullptr) << error;
     check(cottontail::Bigwig::make(root + "/live", &error));
-    ASSERT_TRUE(cottontail::Bigwig::consolidate(root + "/live", &error)) << error;
+    ASSERT_TRUE(cottontail::Bigwig::consolidate(root + "/live", &error))
+        << error;
     check(cottontail::Bigwig::make(root + "/live", &error));
+  }
+}
+
+TEST(Erasures, CompressedBlockReclamation) {
+  for (const std::string compression : {"null", "zlib"}) {
+    std::string error, root = temporary_directory();
+    ASSERT_FALSE(root.empty());
+    auto feat = cottontail::Featurizer::make("hashing", "", &error);
+    auto tok = cottontail::Tokenizer::make("ascii", "", &error);
+    auto pc = cottontail::Compressor::make("post", "", &error);
+    auto vc = cottontail::Compressor::make(compression, "", &error);
+    auto tc = cottontail::Compressor::make(compression, "", &error);
+    std::string text;
+    for (int i = 0; i < 2052; i++)
+      text += "word ";
+    text += "\n";
+    auto source =
+        cottontail::Fiver::make(nullptr, feat, tok, &error, pc, vc, tc);
+    ASSERT_NE(source, nullptr) << error;
+    source->set_sequence(0);
+    ASSERT_TRUE(source->transaction(&error)) << error;
+    addr source_p, source_q;
+    ASSERT_TRUE(source->appender()->append(text, &source_p, &source_q, &error))
+        << error;
+    EXPECT_EQ(source->relocate(0), 2052);
+    ASSERT_TRUE(source->ready(&error)) << error;
+    source->commit();
+    source->start();
+    std::string original = root + "/original.hazel";
+    ASSERT_TRUE(source->hazel(original, &error, 64)) << error;
+    auto base = text_layout(original);
+    ASSERT_EQ(base.blocks.size(), 4U);
+    EXPECT_EQ(base.raw_length, static_cast<addr>(text.size()));
+    auto original_hazel = std::dynamic_pointer_cast<cottontail::Hazel>(
+        cottontail::Warren::make(original, &error));
+    ASSERT_NE(original_hazel, nullptr) << error;
+    original_hazel->start();
+
+    // Whole first/middle/tail/all blocks, adjacent erased chunks, no erasures,
+    // and a partially erased chunk that must keep its entire compressed block.
+    for (unsigned mask : {0U, 1U, 2U, 3U, 8U, 15U, 16U}) {
+      SCOPED_TRACE(compression + ":" + std::to_string(mask));
+      auto erase =
+          cottontail::Fiver::make(nullptr, feat, tok, &error, pc, vc, tc);
+      ASSERT_NE(erase, nullptr) << error;
+      erase->set_sequence(1);
+      ASSERT_TRUE(erase->transaction(&error)) << error;
+      std::vector<Interval> deletions;
+      for (addr i = 0; i < 4; i++)
+        if (mask & (1U << i))
+          deletions.push_back({513 * i, 513 * (i + 1) - 1, 0.0});
+      if (mask == 16)
+        deletions.push_back({0, 511, 0.0});
+      for (const auto &e : deletions)
+        ASSERT_TRUE(erase->annotator()->erase(e.p, e.q, &error)) << error;
+      erase->relocate(2052);
+      ASSERT_TRUE(erase->ready(&error)) << error;
+      erase->commit();
+      erase->start();
+      std::string tag = root + "/" + std::to_string(mask);
+      auto combined =
+          cottontail::Fiver::merge({source, erase}, &error, pc, vc, tc);
+      ASSERT_NE(combined, nullptr) << error;
+      combined->start();
+      ASSERT_TRUE(combined->hazel(tag + "-convert.hazel", &error, 64)) << error;
+      ASSERT_TRUE(erase->hazel(tag + "-erase.hazel", &error, 64)) << error;
+      auto erase_hazel = std::dynamic_pointer_cast<cottontail::Hazel>(
+          cottontail::Warren::make(tag + "-erase.hazel", &error));
+      ASSERT_NE(erase_hazel, nullptr) << error;
+      erase_hazel->start();
+      auto merged = cottontail::Hazel::merge(
+          {original_hazel, erase_hazel}, tag + "-merge.hazel", nullptr, &error);
+      ASSERT_NE(merged, nullptr) << error;
+      merged->start();
+      // A subsequent merge must copy holes without trying to read their bytes.
+      auto empty =
+          cottontail::Fiver::make(nullptr, feat, tok, &error, pc, vc, tc);
+      ASSERT_NE(empty, nullptr) << error;
+      empty->set_sequence(2);
+      ASSERT_TRUE(empty->transaction(&error)) << error;
+      empty->relocate(2052);
+      ASSERT_TRUE(empty->ready(&error)) << error;
+      empty->commit();
+      empty->start();
+      ASSERT_TRUE(empty->hazel(tag + "-empty.hazel", &error, 64)) << error;
+      auto empty_hazel = std::dynamic_pointer_cast<cottontail::Hazel>(
+          cottontail::Warren::make(tag + "-empty.hazel", &error));
+      ASSERT_NE(empty_hazel, nullptr) << error;
+      empty_hazel->start();
+      ASSERT_NE(cottontail::Hazel::merge({merged, empty_hazel},
+                                         tag + "-again.hazel", nullptr, &error),
+                nullptr)
+          << error;
+
+      for (const std::string suffix :
+           {"-convert.hazel", "-merge.hazel", "-again.hazel"}) {
+        auto layout = text_layout(tag + suffix);
+        ASSERT_EQ(layout.blocks.size(), base.blocks.size());
+        EXPECT_EQ(layout.raw_length, base.raw_length);
+        addr old_end = 0, new_end = 0, saved = 0;
+        for (size_t i = 0; i < base.blocks.size(); i++) {
+          addr old_size = base.blocks[i].compressed_byte_end - old_end;
+          addr new_size = layout.blocks[i].compressed_byte_end - new_end;
+          EXPECT_EQ(layout.blocks[i].raw_byte_end, base.blocks[i].raw_byte_end);
+          bool deleted = mask & (1U << i);
+          EXPECT_EQ(new_size, deleted ? 0 : old_size);
+          if (deleted)
+            saved += old_size;
+          old_end = base.blocks[i].compressed_byte_end;
+          new_end = layout.blocks[i].compressed_byte_end;
+        }
+        EXPECT_EQ(layout.payload_length, base.payload_length - saved);
+        auto view = cottontail::Warren::make(tag + suffix, &error);
+        ASSERT_NE(view, nullptr) << error;
+        view->start();
+        addr p, q;
+        ASSERT_TRUE(view->txt()->range(&p, &q));
+        EXPECT_EQ(p, 0);
+        EXPECT_EQ(q, 2051);
+        EXPECT_EQ(view->txt()->tokens(), 2052);
+        expect_hopper(view->idx()->hopper(cottontail::null_feature),
+                      select(deletions, true));
+        // Check every token, particularly those next to a reclaimed block.
+        for (addr token = 0; token < 2052; token++) {
+          bool touched = false;
+          for (const auto &e : deletions)
+            touched = touched || (e.p <= token && token <= e.q);
+          EXPECT_EQ(view->txt()->translate(token, token),
+                    touched ? "" : source->txt()->translate(token, token))
+              << token;
+        }
+        view->end();
+      }
+      // The still-open source snapshot remains readable after output GC.
+      EXPECT_EQ(original_hazel->txt()->translate(0, 2051), text);
+      // Coarser compression keeps a block that includes any live text.
+      if (mask == 1) {
+        ASSERT_TRUE(combined->hazel(tag + "-coarse.hazel", &error, 1 << 20))
+            << error;
+        auto layout = text_layout(tag + "-coarse.hazel");
+        ASSERT_EQ(layout.blocks.size(), 1U);
+        EXPECT_GT(layout.payload_length, 0);
+      }
+    }
+  }
+}
+
+TEST(Erasures, ReclaimedTextPreservesAppendAddress) {
+  std::string error, root = temporary_directory();
+  ASSERT_FALSE(root.empty());
+  auto working = cottontail::Working::mkdir(root + "/live", &error);
+  auto feat = cottontail::Featurizer::make("hashing", "", &error);
+  auto tok = cottontail::Tokenizer::make("ascii", "", &error);
+  auto bigwig = cottontail::Bigwig::make(working, feat, tok, &error);
+  ASSERT_NE(bigwig, nullptr) << error;
+  bigwig->merge(false);
+  std::string text;
+  for (int i = 0; i < 1026; i++)
+    text += "word ";
+  ASSERT_TRUE(bigwig->transaction(&error)) << error;
+  addr p, q;
+  ASSERT_TRUE(bigwig->appender()->append(text, &p, &q, &error)) << error;
+  ASSERT_TRUE(bigwig->ready(&error)) << error;
+  bigwig->commit();
+  ASSERT_TRUE(bigwig->transaction(&error)) << error;
+  ASSERT_TRUE(bigwig->annotator()->erase(0, 1025, &error)) << error;
+  ASSERT_TRUE(bigwig->ready(&error)) << error;
+  bigwig->commit();
+  bigwig.reset();
+  ASSERT_TRUE(cottontail::Bigwig::consolidate(root + "/live", &error)) << error;
+  auto names = working->ls("hazel");
+  ASSERT_EQ(names.size(), 1U);
+  auto layout = text_layout(working->make_name(names[0]));
+  EXPECT_EQ(layout.raw_length, static_cast<addr>(text.size()));
+  EXPECT_EQ(layout.payload_length, 0);
+  bigwig = cottontail::Bigwig::make(root + "/live", &error);
+  ASSERT_NE(bigwig, nullptr) << error;
+  ASSERT_TRUE(bigwig->transaction(&error)) << error;
+  ASSERT_TRUE(bigwig->appender()->append("new content\n", &p, &q, &error))
+      << error;
+  ASSERT_TRUE(bigwig->ready(&error)) << error;
+  bigwig->commit();
+  bigwig->start();
+  auto hopper = bigwig->idx()->hopper(feat->featurize("new"));
+  hopper->tau(0, &p, &q);
+  EXPECT_EQ(p, 1026);
+  EXPECT_EQ(q, 1026);
+  EXPECT_EQ(bigwig->txt()->translate(p, q), "new ");
+  EXPECT_EQ(bigwig->txt()->translate(0, 1025), "");
+  bigwig->end();
+  bigwig.reset();
+  ASSERT_TRUE(cottontail::Bigwig::consolidate(root + "/live", &error)) << error;
+  bigwig = cottontail::Bigwig::make(root + "/live", &error);
+  ASSERT_NE(bigwig, nullptr) << error;
+  bigwig->start();
+  EXPECT_EQ(bigwig->txt()->translate(1026, 1027), "new content\n");
+  EXPECT_EQ(bigwig->txt()->translate(0, 1025), "");
+  bigwig->end();
+}
+
+TEST(Erasures, ReclamationKeepsUnindexedTokenlessBytes) {
+  std::string root = temporary_directory(), error;
+  ASSERT_FALSE(root.empty());
+  auto feat = cottontail::Featurizer::make("hashing", "", &error);
+  auto tok = cottontail::Tokenizer::make("ascii", "", &error);
+  for (const std::string text : {"", "\n \t\n"}) {
+    auto fiver = cottontail::Fiver::make(nullptr, feat, tok, &error);
+    ASSERT_NE(fiver, nullptr) << error;
+    fiver->set_sequence(0);
+    ASSERT_TRUE(fiver->transaction(&error)) << error;
+    addr p, q;
+    ASSERT_TRUE(fiver->appender()->append(text, &p, &q, &error)) << error;
+    ASSERT_TRUE(fiver->annotator()->erase(0, 100, &error)) << error;
+    fiver->relocate(0);
+    ASSERT_TRUE(fiver->ready(&error)) << error;
+    fiver->commit();
+    fiver->start();
+    std::string filename = root + "/" + std::to_string(text.size()) + ".hazel";
+    ASSERT_TRUE(fiver->hazel(filename, &error, 64)) << error;
+    auto layout = text_layout(filename);
+    EXPECT_EQ(layout.raw_length, static_cast<addr>(text.size()));
+    if (text.empty()) {
+      EXPECT_EQ(layout.payload_length, 0);
+      EXPECT_TRUE(layout.blocks.empty());
+    } else {
+      EXPECT_GT(layout.payload_length, 0);
+      EXPECT_EQ(layout.blocks.size(), 1U);
+    }
+    auto view = cottontail::Warren::make(filename, &error);
+    ASSERT_NE(view, nullptr) << error;
+    view->start();
+    EXPECT_EQ(view->txt()->tokens(), 0);
+    EXPECT_EQ(view->txt()->translate(0, cottontail::maxfinity), "");
+    view->end();
   }
 }

@@ -8,6 +8,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <iterator>
 #include <limits>
 #include <map>
 #include <memory>
@@ -37,6 +38,50 @@
 #include "src/tokenizer.h"
 
 namespace cottontail {
+
+bool hazel_deleted_bytes(std::shared_ptr<Idx> idx, addr text_chunk_feature,
+                         addr text_length,
+                         std::vector<std::pair<addr, addr>> *deleted,
+                         std::string *error) {
+  deleted->clear();
+  if (idx->count(null_feature) == 0)
+    return true;
+  auto erasures = idx->hopper(null_feature);
+  auto chunks = idx->hopper(text_chunk_feature);
+  addr p, q, offset;
+  chunks->tau(minfinity + 1, &p, &q, &offset);
+  while (p != maxfinity) {
+    addr next_p, next_q, next_offset;
+    chunks->tau(p + 1, &next_p, &next_q, &next_offset);
+    addr end = next_p == maxfinity ? text_length : next_offset;
+    if (offset < 0 || offset > end || end > text_length) {
+      safe_error(error) = "Hazel got invalid text chunk byte range";
+      return false;
+    }
+    addr pe, qe;
+    erasures->rho(q, &pe, &qe);
+    if (pe != maxfinity && pe <= p && offset < end) {
+      if (!deleted->empty() && deleted->back().second == offset)
+        deleted->back().second = end;
+      else
+        deleted->emplace_back(offset, end);
+    }
+    p = next_p;
+    q = next_q;
+    offset = next_offset;
+  }
+  return true;
+}
+
+bool hazel_bytes_deleted(const std::vector<std::pair<addr, addr>> &deleted,
+                         addr start, addr end) {
+  auto it = std::upper_bound(
+      deleted.begin(), deleted.end(), start,
+      [](addr start, const std::pair<addr, addr> &range) {
+        return start < range.first;
+      });
+  return it != deleted.begin() && end <= std::prev(it)->second;
+}
 
 namespace {
 
@@ -1562,6 +1607,7 @@ public:
   HazelTxt &operator=(HazelTxt &&) = delete;
 
   static bool merge(const std::vector<std::shared_ptr<HazelTxt>> &txts,
+                    const std::vector<std::pair<addr, addr>> &deleted,
                     std::ostream *out, std::string *error = nullptr);
   addr raw_text_length() const { return raw_text_length_; }
   addr estimated_size() const { return estimated_size_; }
@@ -1792,7 +1838,7 @@ private:
     addr compressed_byte_end = map_[k].compressed_byte_end;
     addr raw_length = raw_byte_end - raw_byte_start;
     addr compressed_length = compressed_byte_end - compressed_byte_start;
-    if (raw_length < 0 || compressed_length < 0)
+    if (raw_length <= 0 || compressed_length <= 0)
       return nullptr;
     std::unique_ptr<char[]> compressed = read_gate_->read(
         chunk_space_start_ + compressed_byte_start, compressed_length);
@@ -1859,6 +1905,7 @@ private:
 };
 
 bool HazelTxt::merge(const std::vector<std::shared_ptr<HazelTxt>> &txts,
+                     const std::vector<std::pair<addr, addr>> &deleted,
                      std::ostream *out, std::string *error) {
   if (txts.size() < 2) {
     safe_error(error) = "HazelTxt merge needs at least two texts";
@@ -1905,12 +1952,17 @@ bool HazelTxt::merge(const std::vector<std::shared_ptr<HazelTxt>> &txts,
         safe_error(error) = "Hazel got bad txt chunk boundary";
         return false;
       }
-      std::unique_ptr<char[]> compressed =
-          txt->read_gate_->read(txt->chunk_space_start_ + previous_compressed,
-                                compressed_length, error);
-      if (compressed == nullptr)
-        return false;
-      out->write(compressed.get(), compressed_length);
+      // Existing holes remain holes, even when this merge adds no erasures.
+      if (compressed_length > 0 &&
+          !hazel_bytes_deleted(deleted, raw_base + previous_raw,
+                                raw_base + entry.raw_byte_end)) {
+        std::unique_ptr<char[]> compressed =
+            txt->read_gate_->read(txt->chunk_space_start_ + previous_compressed,
+                                  compressed_length, error);
+        if (compressed == nullptr)
+          return false;
+        out->write(compressed.get(), compressed_length);
+      }
       if (out->fail()) {
         safe_error(error) = "Hazel merge failed to copy txt chunk";
         return false;
@@ -2637,8 +2689,34 @@ Hazel::merge(const std::vector<std::shared_ptr<Hazel>> &hazels,
     return nullptr;
   }
 
+  std::vector<std::pair<addr, addr>> deleted;
+  bool have_erasures = false;
+  for (auto &idx : idxs)
+    have_erasures = have_erasures || idx->count(null_feature) > 0;
+  if (have_erasures) {
+    // Read the completed output index, including recovered posting-log work.
+    output.out.flush();
+    if (output.out.fail()) {
+      safe_error(error) = "Hazel merge failed to flush idx blob";
+      remove_temp();
+      return nullptr;
+    }
+    auto file = HazelFile::make(tempname, error);
+    auto idx = file == nullptr ? nullptr : HazelIdx::make(
+        idxs[0]->recipe(), tempname, file, output.blobs[0], error);
+    addr text_length = 0;
+    for (auto length : text_lengths)
+      text_length += length; // prepare_merge already checked this sum.
+    if (idx == nullptr ||
+        !hazel_deleted_bytes(idx, text_chunk_feature, text_length, &deleted,
+                              error)) {
+      remove_temp();
+      return nullptr;
+    }
+  }
+
   output.blobs[1].offset = (addr)output.out.tellp();
-  if (!HazelTxt::merge(txts, &output.out, error)) {
+  if (!HazelTxt::merge(txts, deleted, &output.out, error)) {
     remove_temp();
     return nullptr;
   }
