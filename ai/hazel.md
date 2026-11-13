@@ -11,6 +11,10 @@ the shared `Owsla` interface.
 
 ## Current State
 
+- Deletion handling and text garbage collection are complete as of
+  2026-11-13: outer null-feature merging, deletion-aware translation, and
+  whole-block text reclamation during Hazel conversion and merging. The
+  verification checkpoint below records the user's TREC update/deletion runs.
 - Hazel v1 writing, standalone activation, Hazel-to-Hazel merge, startup
   sanitization, Bigwig activation, and merge-worker integration are in place.
 - `Fiver` and `Hazel` both subclass `Owsla`. The common shard surface is
@@ -237,6 +241,34 @@ the available token range. Invalid, wholly out-of-range, failed-read, or
 failed-decompression requests return the empty string because the `Txt` API has
 no error channel. Bigwig additionally checks the whole snapshot's erasures
 before delegating to any shard; an erasure can live separately from its text.
+
+## Deletion And Text Reclamation Verification
+
+As of 2026-11-13, the user has exercised `iirj/trec-example` through its heavy
+insertion/deletion sequence, both uncompressed and with compressed postings,
+values, and text, followed by consolidation and TREC-7 ranking/evaluation.
+The updated [Figure 7](../iirj/trec-2026-11-13.png) and its
+[data](../iirj/trec-2026-11-13.log) preserve the compressed run's score trace.
+
+- Compressed and uncompressed consolidated runs both reach 0.2515 MAP.
+  The compressed run reaches 0.2444 before consolidation. This difference is
+  consistent with document-frequency counts including physically retained
+  deleted postings until merging removes them; consolidation changes BM25 and
+  relevance-feedback statistics. These estimates during updates are expected.
+- The compressed consolidated collection occupies about 1.72 GB. Its text
+  payload is 649,714,245 bytes and its idx blob is 1,071,223,690 bytes.
+- Of 64,441 text-directory entries, 34,672 are holes, representing
+  2,325,876,569 reclaimed logical raw bytes. There are two hole runs: 30,988
+  leading entries for the earlier deleted disks and 3,684 later entries for
+  the deleted CR documents. These match the demo's deletion sequence.
+- Retained hole entries cost 554,752 bytes, about 0.085% of the remaining
+  compressed text payload. Keeping them and partially covered blocks is
+  accepted residue, not unfinished reclamation work.
+- Read-only inspection of all 50,000 ranked docids found the expected FT,
+  FBIS, LA, and FR94 patterns, no malformed ranking lines, and no duplicate
+  docids within a topic. Ranking and evaluation exercise surviving text and
+  address alignment after reclamation; the user also manually checked the
+  first half of the identifiers.
 
 ## Activation And Runtime
 

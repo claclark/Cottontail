@@ -96,7 +96,8 @@ std::map<std::string, std::map<std::string, cottontail::fval>> invert_qrels(
   return slerq;
 }
 
-std::shared_ptr<cottontail::Warren> make_warren(std::string *error) {
+std::shared_ptr<cottontail::Warren>
+make_warren(bool compress, std::string *error) {
   std::string burrow = "trec.burrow";
   std::shared_ptr<cottontail::Working> working =
       cottontail::Working::mkdir(burrow, error);
@@ -110,8 +111,22 @@ std::shared_ptr<cottontail::Warren> make_warren(std::string *error) {
       cottontail::Tokenizer::make("ascii", "xml", error);
   if (tokenizer == nullptr)
     return nullptr;
+  auto posting_compressor =
+      cottontail::Compressor::make(compress ? "post" : "null", "", error);
+  if (posting_compressor == nullptr)
+    return nullptr;
+  auto value_compressor =
+      cottontail::Compressor::make(compress ? "zlib" : "null", "", error);
+  if (value_compressor == nullptr)
+    return nullptr;
+  auto text_compressor =
+      cottontail::Compressor::make(compress ? "zlib" : "null", "", error);
+  if (text_compressor == nullptr)
+    return nullptr;
   std::shared_ptr<cottontail::Bigwig> bigwig =
-      cottontail::Bigwig::make(working, featurizer, tokenizer, error);
+      cottontail::Bigwig::make(working, featurizer, tokenizer, error, nullptr,
+                              posting_compressor, value_compressor,
+                              text_compressor);
   if (bigwig == nullptr)
     return nullptr;
   bigwig->start();
@@ -135,7 +150,9 @@ std::shared_ptr<cottontail::Warren> make_warren(std::string *error) {
 }
 
 void usage(std::string program_name) {
-  std::cerr << "usage: " << program_name << " collection queries qrels\n";
+  std::cerr << "usage: " << program_name
+            << " [--compress|--nocompress] [collection queries qrels]\n"
+            << "Compression is enabled by default.\n";
 }
 
 bool walk_directory(const std::string &directory,
@@ -181,9 +198,20 @@ bool walk_cr(const std::string &trec_directory, std::vector<std::string> *files,
 
 int main(int argc, char **argv) {
   std::string program_name = argv[0];
-  if (argc == 2 && argv[1] == std::string("--help")) {
-    usage(program_name);
-    return 0;
+  bool compress = true;
+  while (argc > 1) {
+    std::string option = argv[1];
+    if (option == "--help") {
+      usage(program_name);
+      return 0;
+    }
+    if (option == "--compress" || option == "--nocompress") {
+      compress = option == "--compress";
+      --argc;
+      ++argv;
+    } else {
+      break;
+    }
   }
   std::string trec_directory;
   std::string query_directory;
@@ -236,7 +264,7 @@ int main(int argc, char **argv) {
   }
   std::map<std::string, std::map<std::string, cottontail::fval>> slerq =
       invert_qrels(qrels);
-  std::shared_ptr<cottontail::Warren> trec_warren = make_warren(&error);
+  std::shared_ptr<cottontail::Warren> trec_warren = make_warren(compress, &error);
   if (trec_warren == nullptr) {
     std::cerr << program_name << ": " << error << "\n" << std::flush;
     exit(1);

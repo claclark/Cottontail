@@ -427,7 +427,9 @@
   skips compression; merging skips copying, including existing holes. Boundary
   blocks and unindexed tokenless bytes are retained conservatively. This
   preserves allocation high-water marks through full deletion and reopening.
-  Diff 3 compile checks pass; runtime verification is pending with the user.
+  Complete as of 2026-11-13: the user's TREC insertion/deletion demo, compressed
+  and uncompressed consolidation, and ranking/evaluation validate the full
+  path. Reclaimed storage and map-hole measurements are in `ai/hazel.md`.
 - HazelTxt and BigwigTxt each hold a persistent null-feature hopper, naturally
   empty when erasures are absent. Translation checks the original requested
   range with `rho(p)` and returns empty on any deletion intersection, including
@@ -438,10 +440,11 @@
   erasures; it now normalizes an upper `maxfinity` bound to `maxfinity - 1`,
   matching SimpleTxt and avoiding a virtual-sentinel result from `ohr`.
   Bigwig start/clone creates a new wrapper and erasure hopper; shard Txt objects
-  and Hazel text caches remain shared. Diff 2 compiles; on 2026-11-09 the user
-  reports extensive testing without deletions and no obvious regressions.
-  Focused erasure-test verification after the sentinel correction remains
-  unreported.
+  and Hazel text caches remain shared. The deletion-aware translation work is
+  complete; the user's subsequent TREC demo exercises deletion, merging, text
+  reclamation, and docid retrieval together. All 50,000 ranked docids match
+  expected patterns; the compressed and uncompressed consolidated runs both
+  reach 0.2515 MAP.
 - `CacheGate` is a one-way completion gate. `CacheRecord` starts closed and
   SimpleIdx cache-fill paths call `release()` after storage is filled.
   `SimplePosting` also carries a completion gate; normal postings are
@@ -511,7 +514,9 @@
   SimpleBuilder's external file sorter and ordered cross-batch assembly retain
   their existing contracts. Diff 1 coverage is `//test:erasures_test`. On
   2026-11-07, the user reports `make testing` and `build.sh` followed by `rank.sh`
-  passing. Translation and physical text GC remain later work.
+  passing. The subsequent translation and physical text GC steps are also
+  complete, with end-to-end TREC update/deletion verification recorded in
+  `ai/hazel.md`.
 - Hazel's posting-log merge advances through sequential source directories,
   reads source postings without populating the query cache, and writes merged
   compressed records once before final assembly.

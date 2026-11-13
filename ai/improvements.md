@@ -6,6 +6,11 @@ explicit coding task.
 
 Especially don't do these things without discussion and approval from the user.
 
+Deletion merge semantics, deletion-aware translation, and Hazel text garbage
+collection are complete as of 2026-11-13 and have been removed from this list.
+The implementation and TREC update/deletion verification are recorded in
+`ai/hazel.md` and the completed section of `ai/plan.md`.
+
 ## Warren Memory Trimming
 
 - Long-running services over large ClimbMix indexes need a way to release
@@ -297,34 +302,6 @@ follow-ups are:
 - Deferred on 2026-11-08: retain existing text sharing and locks for the
   deletion-aware translation change. The short locked seeks do not currently
   justify the broader cloning changes; no contention benchmark has been run.
-
-## Text Deletions
-
-- Current Fiver/Hazel/Bigwig merge behavior may preserve physical text bytes
-  even when ordinary postings covered by `null_feature` are removed from the
-  merged idx.
-- Implemented in deletion diff 2 (2026-11-08), pending user runtime tests:
-  Hazel and Bigwig translations return empty if the original requested range
-  touches an erasure, preserving existing clamping otherwise. Bigwig checks
-  snapshot-wide erasures before delegating; Hazel checks its local null posting.
-  No physical bytes are reclaimed by this change.
-- Implemented in deletion diff 3 (2026-11-09), pending user runtime tests:
-  Hazel construction omits whole compressed blocks covered by conservatively
-  derived deleted byte ranges. Logical offsets and map entries remain as
-  holes; boundary blocks remain intact. Text-chunk anchors preserve the
-  allocation high-water mark. No-erasure merges retain the direct-copy path.
-
-## Exclusion Merge Semantics
-
-- Implemented in deletion diff 1 (2026-11-06), with user-reported passing
-  regression tests and `build.sh` followed by `rank.sh` on 2026-11-07:
-  canonical annotation sorting and `SimplePostingFactory` outer selection for
-  `null_feature`. Fiver/Hazel/Bigwig retain maximal deletion intervals; ordinary
-  intervals wholly contained in any deletion are filtered. Crossing and
-  containing intervals survive; overlapping deletions are not coalesced.
-- No compatibility handling for old partial Hazel merge logs is planned in
-  this diff, as agreed with the user. Translation and text GC remain separate
-  steps in `ai/plan.md`.
 
 ## Hazel Posting-Log Follow-Ups
 

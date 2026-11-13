@@ -18,25 +18,29 @@ For the current Meadowlark push, the user makes all commits and runs the
 regression tests. Agent verification is compile/build-only unless the user
 explicitly requests a runtime experiment or test run.
 
-## Next Work: Deletions And Text Garbage Collection
+## Completed: Deletions And Text Garbage Collection
 
-Agreed sequence as of 2026-11-04: three separate diffs, with thorough testing
-of each before proceeding. Diff 1 was authorized and implemented on 2026-11-06;
-the user reports `make testing` and `build.sh` followed by `rank.sh` passing on
-2026-11-07. Diff 2 was authorized and implemented on 2026-11-08; its full
-compile/build check passes. On 2026-11-09 the user reports extensive testing
-without deletions and no obvious regressions. A passing rerun of the focused
-erasure tests after the Fiver sentinel correction has not been reported.
-Diff 3 was authorized on 2026-11-09 and is implemented; compile verification
-passes, with runtime verification left to the user.
-The user continues to run regression tests and make commits; agent verification
-remains compile/build-only unless explicitly authorized otherwise.
+Completed as of 2026-11-13. The three agreed diffs implement outer null-feature
+merging, deletion-aware translation, and physical text reclamation during Hazel
+construction and merging. They are no longer release todos. Compile checks
+pass; the user has exercised the heavy insertion/deletion TREC demo with and
+without compression, consolidation, and subsequent ranking/evaluation. The
+compressed consolidated index reaches the same 0.2515 MAP as the uncompressed
+one. All 50,000 ranked docids match the expected collection patterns, with no
+duplicates within a topic. Empty text-block runs match the deleted earlier
+disks and CR documents; their retained map entries are accepted residue.
+Measurements and the verification checkpoint are in `ai/hazel.md`; the updated
+Figure 7 and its data are in `iirj/trec-2026-11-13.{png,log}`.
 
-1. Implement outer merging for `null_feature`, including initial deletion
-   posting construction, in `src/simple_posting.*`. Canonically sort raw
-   annotations by feature, then by `(p ascending, q descending)` for null and
-   `(q ascending, p descending)` otherwise. Select strictly increasing ends
-   for null, starts otherwise. Use this sort at the four construction sites in
+The implemented sequence is retained below as a design record. No new coding
+step is selected here; further work requires discussion and authorization.
+The user continues to run regression tests and make commits.
+
+1. Implemented: outer merging for `null_feature`, including initial deletion
+   posting construction, in `src/simple_posting.*`. Raw annotations are sorted
+   canonically by feature, then by `(p ascending, q descending)` for null and
+   `(q ascending, p descending)` otherwise. Selection retains strictly increasing
+   ends for null, starts otherwise. The four construction sites use this sort in
    Fiver, SimpleBuilder, and SimpleAnnotator. Ordinary features retain inner
    semantics, now correctly normalizing nesting, equal endpoints, and duplicates.
    Both merge queues retain newest-source values for exact interval duplicates;
@@ -48,18 +52,18 @@ remains compile/build-only unless explicitly authorized otherwise.
    `//test:erasures_test`; existing posting tests remain in `//test:tests`.
    Per the user, old partial Hazel merge logs are out of scope. SimpleBuilder's
    existing cross-batch ordered-GC-list input contract is unchanged.
-2. Implemented: detect Hazel/Bigwig `Txt::translate` requests that touch
-   any deleted position and return an empty string. Test boundary contacts,
-   partial overlaps, requests spanning deleted intervals, unaffected requests,
-   and consistency across relevant storage and snapshot paths. Keep physical
-   text reclamation out of this diff. As agreed on 2026-11-08, retain existing
-   clamping but check the original requested bounds for deletion intersection:
+2. Implemented: Hazel/Bigwig `Txt::translate` requests that touch
+   any deleted position return an empty string. Coverage includes boundary
+   contacts, partial overlaps, requests spanning deleted intervals, unaffected
+   requests, and consistency across relevant storage and snapshot paths.
+   Physical text reclamation was kept in the third diff. Existing clamping is retained, but
+   original requested bounds are checked for deletion intersection:
    `rho(p)` finds the first erasure ending at or after `p`; a finite result
    starting at or before `q` invalidates the whole translation. Hazel checks
    its local null posting; Bigwig checks its whole snapshot before delegating
-   to shards. Always create a null-feature hopper (EmptyHopper if absent).
-   Keep existing shard text sharing and mutexes; private hoppers for text
-   clones are deferred to the wishlist, not part of this diff.
+   to shards. Each creates a null-feature hopper (EmptyHopper if absent).
+   Existing shard text sharing and mutexes remain; private hoppers for text
+   clones are deferred to the wishlist.
    FiverTxt does not check erasures because the user does not activate lone
    Fivers; Bigwig checks its snapshot before delegating. A follow-up normalizes
    Fiver's upper `maxfinity` bound to `maxfinity - 1`, matching SimpleTxt:
@@ -68,12 +72,12 @@ remains compile/build-only unless explicitly authorized otherwise.
    Coverage in `//test:erasures_test` includes retained snapshots, compression,
    cross-shard erasures, pre-clamp checks, conversion/merging, reopening,
    consolidation, and concurrent translations through shared text objects.
-3. Implemented: reclaim whole compressed text blocks during Hazel creation
-   and merging. After completing the index, use null and text-chunk postings
-   to derive conservative half-open deleted byte ranges from fully erased
-   token chunks. Omit a block's payload only when its entire raw byte range is
-   reclaimable. Keep all directory entries, logical byte offsets, text-chunk
-   anchors, token addresses, and allocation high-water marks. A hole has
+3. Implemented: reclamation of whole compressed text blocks during Hazel
+   creation and merging. After completing the index, null and text-chunk postings
+   are used to derive conservative half-open deleted byte ranges from fully
+   erased token chunks. A block's payload is omitted only when its entire raw byte range is
+   reclaimable. All directory entries, logical byte offsets, text-chunk anchors,
+   token addresses, and allocation high-water marks remain intact. A hole has
    positive raw length and zero compressed length; retained boundary blocks
    and map entries are accepted residue. Conversion skips compression, merging
    skips payload copying and carries existing holes forward. No-erasure

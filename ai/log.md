@@ -1058,3 +1058,33 @@
   Bazelisk version lookup required the approved build escalation after sandbox
   DNS restrictions blocked it. No runtime tests or commits were performed;
   user verification remains pending.
+
+2026-11-12T20:17:40Z
+- Added `--compress` and `--nocompress` to `iirj/trec-example`, defaulting to
+  compression. Matched `a.meadow` settings: `post` for postings, `zlib` for
+  annotation values and text. `--nocompress` explicitly selects `null` for all
+  three. Updated usage and `iirj/README.md`; existing default data paths and
+  optional collection/query/qrels directory arguments remain supported.
+- `bazel build -c dbg --cxxopt=-Og //...` and whitespace checks pass. No demo,
+  regression tests, ranking, or evaluation was run; the user handles runtime
+  verification and commits.
+
+2026-11-13T13:32:41Z
+- Created `iirj/trec-2026-11-13.png` from the user's `trec.log`, matching
+  Figure 7's colours, series labels, axis labels, and update annotations.
+  Phase markers are approximate: the CSV omits phase events, so they use
+  the TREC-4, TREC-5, and TREC-6 score peaks (434, 918, and 1377 seconds).
+  Rendered with Matplotlib in the `meadow` environment and visually inspected.
+
+2026-11-13T14:16:25Z
+- Marked the deletion and text garbage collection work complete in the plan,
+  removed the completed items from the improvements list, and updated the
+  notes and Hazel reference. Preserved earlier log entries as dated history.
+- Recorded the user's compressed/uncompressed TREC update/deletion runs and
+  consolidation/evaluation results: both consolidated runs reach 0.2515 MAP.
+  The compressed collection is about 1.72 GB; 34,672 empty text-block entries
+  represent about 2.33 GB of reclaimed raw bytes. Their two runs match the
+  deleted earlier disks and CR documents. All 50,000 inspected ranked docids
+  match expected patterns, without malformed lines or within-topic duplicates.
+- Linked the updated Figure 7 and its stored trace from the Hazel reference.
+  Documentation only; no new source changes, runtime tests, or commits.
