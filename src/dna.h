@@ -9,6 +9,8 @@ namespace cottontail {
 const std::string DEFAULT_BURROW = "the.burrow";
 const std::string DNA_NAME = "dna"; // parameters
 
+bool read_dna(const std::string &filename, std::string *dna,
+              std::string *error = nullptr);
 bool read_dna(std::shared_ptr<Working> working, std::string *dna,
               std::string *error = nullptr);
 bool write_dna(std::shared_ptr<Working> working, const std::string &dna,

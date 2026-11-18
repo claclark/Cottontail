@@ -18,6 +18,52 @@ For the current Meadowlark push, the user makes all commits and runs the
 regression tests. Agent verification is compile/build-only unless the user
 explicitly requests a runtime experiment or test run.
 
+## Current Work: Burrow Locking
+
+The user authorized a standalone WLock diff on 2026-11-18, before integration
+into Warren/Bigwig. `src/wlock.*` implements three shared-pointer factories:
+
+- `obtain`: require a directory, acquire a persistent `burrow.lock` with
+  nonblocking exclusive `flock`, and write ASCII `hostname/pid` to `burrow.pid`.
+  On contention, wait one second only if the PID file is absent, then report
+  its owner or a generic locked message. A missing lock file requires valid
+  DNA before creation; legacy Simple burrows succeed without either lock file.
+- `create(name, burrow, error)`: require a missing target or an empty directory,
+  establish the lock file, then obtain it. This operation does not initialize DNA.
+- `recreate(name, burrow, error)`: obtain an existing recognized burrow, refuse
+  Simple, and unlink its entries except `burrow.lock` and `burrow.pid`; a missing
+  target uses `create`. No recursive deletion is performed.
+
+WLock owns its fd and its Working; destruction closes the fd without deleting
+the lock files. Working is constructed after acquisition, or after identifying
+an unlocked Simple burrow. A pathname-based `read_dna` overload permits legacy
+validation before Working's existing constructor cleanup. Valid DNA uses the
+existing header check and recipe parser; missing or empty Warren names retain
+the historical Simple interpretation. Other type names are not restricted to
+Bigwig. An existing lock file is the new-format burrow marker, including before
+DNA has been initialized.
+
+WLock also stores the burrow type and exposes `name()`. Obtain discovers it
+from DNA after acquisition (or through the legacy Simple path). An existing
+lock marker without valid DNA still permits acquisition, with an empty name.
+Create and recreate retain the caller-supplied name for the new burrow;
+recreation checks the old type for the Simple prohibition before clearing.
+
+The user's pseudocode comparison accepted Working's existing temporary-file
+cleanup, including on the unlocked Simple path. A separately authorized narrow
+fix quotes directory names in Working's constructor shell commands, including
+single-quote escaping and `--`, while retaining glob expansion of `/temp.*`.
+
+Integration is a separate step requiring authorization: the Fluffle will retain
+WLock, Bigwig factories will use its Working, and the automatic Warren opener
+will preserve standalone Hazel and legacy Simple behavior. The explicit-type
+legacy Warren factory will accept only Simple; a new
+`Warren::create(name, recipe, burrow, error)` entry point is planned. Validate
+creation arguments before clearing a burrow. No current opening or creation
+path uses WLock yet. Verification for this standalone diff is compile/build
+and branch review; the user has not requested heavy runtime testing. The full
+`bazel build -c dbg --cxxopt=-Og //...` passes. No runtime tests were run.
+
 ## Completed: Deletions And Text Garbage Collection
 
 Completed as of 2026-11-13. The three agreed diffs implement outer null-feature

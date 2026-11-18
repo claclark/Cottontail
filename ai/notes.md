@@ -33,6 +33,15 @@
   call `transaction()` on their own clone.
 - `Working` (`src/working.h`) abstracts filesystem storage, naming, temp files,
   readers/writers, and preload hints.
+  Its constructor shell-quotes directory names for mkdir and `temp.*` cleanup,
+  including literal single quotes; only the cleanup suffix is glob-expanded.
+- `WLock` (`src/wlock.*`) supplies `obtain`, `create`, and `recreate` factories
+  for directory burrows. It owns a Working and a nonblocking exclusive flock
+  descriptor, closing the descriptor on destruction. Simple remains unlocked;
+  recreating Simple is refused. `name()` exposes the type discovered from DNA
+  on obtain or supplied to create/recreate; a lock-only burrow without valid
+  DNA has an empty discovered name. The class is implemented independently;
+  Warren/Bigwig/Fluffle integration remains a separate step in `ai/plan.md`.
 - `SimpleWarren` is the flat-file Warren implementation reconstructed from DNA
   metadata in a burrow.
 - `Bigwig` is the dynamic Warren backed by `Fiver` shards and `Fluffle` state.

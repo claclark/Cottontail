@@ -142,14 +142,16 @@ follow-ups are:
 
 ## Directory-level locking
 
-- Ensure only one process (that is, one Fluffle) is manipulating a database at
-  any one time.
-- Implement via a lock file with a clearly explained clean-up process.
-- Probably call the lock file "LOCKED.sh" and you should be able to unlock by
-  running it. With internal documentation explaining it.
-- Unlock cleanup should run the normal shard sanitizers. Valid restartable
-  merge state should remain recoverable; incomplete, obsolete, or conflicting
-  merge files should be discarded by the same rules used at ordinary startup.
+- The standalone `WLock` class is implemented as of 2026-11-18. Its persistent
+  `burrow.lock` provides exclusion and `burrow.pid` records ASCII host/pid
+  diagnostics. The fd closes with the object; neither file is removed on
+  release, and no manual stale-lock cleanup is needed.
+- Integration remains pending: one Fluffle retains WLock across its Bigwigs
+  and merge workers; opening, creation, recreation, and offline consolidation
+  must acquire it before Working cleanup or shard sanitization. Simple keeps
+  its legacy unlocked behavior. The agreed scope is in `ai/plan.md`.
+- Preserve existing shard sanitization and restartable merge recovery after
+  acquisition; locking does not replace them.
 
 ## Working File Operations
 
@@ -161,7 +163,10 @@ follow-ups are:
   boundary stays clear.
 - `Working` still shells out to `/bin/mkdir -p` when creating a working
   directory, `/bin/rm -f` when removing stale `temp.*` files, and `/bin/ls` or
-  `/usr/bin/ls` when listing contents. If a concrete portability, correctness,
+  `/usr/bin/ls` when listing contents. The constructor commands now quote the
+  directory argument and use `--`; cleanup retains the unquoted `/temp.*`
+  suffix for glob expansion. The separate `ls(...)` command still uses an
+  unquoted path. If a concrete portability, correctness,
   or error-reporting problem justifies changing this, replace those operations
   with C++17 `std::filesystem`; do not undertake the cleanup merely because the
   standard-library operation now exists.

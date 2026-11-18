@@ -1088,3 +1088,45 @@
   match expected patterns, without malformed lines or within-topic duplicates.
 - Linked the updated Figure 7 and its stored trace from the Hazel reference.
   Documentation only; no new source changes, runtime tests, or commits.
+
+2026-11-18T15:44:45Z
+- Implemented the authorized standalone `src/wlock.*` diff. The `obtain`,
+  `create`, and `recreate` factories return shared WLocks owning a Working and
+  a close-on-exec flock descriptor. Destruction closes the fd while retaining
+  both `burrow.lock` and ASCII `burrow.pid`. Contention reports the recorded
+  owner, waiting one second only when the PID file is absent.
+- Legacy validation uses the existing DNA header and recipe parser before
+  constructing Working. Simple burrows remain unlocked and cannot be
+  recreated; missing/empty Warren names retain legacy Simple interpretation.
+  Other type names use locking. Create accepts missing/empty directories;
+  recreate unlinks entries except the lock files, without recursive deletion.
+- Added a pathname-based `read_dna` overload and delegated the existing Working
+  overload to it. Existing Warren, Bigwig, Fluffle, and Working implementations
+  are unchanged; integration requires the next separately authorized step.
+  Updated the plan, notes, and directory-locking improvement checkpoint.
+- `bazel build -c dbg --cxxopt=-Og //...` and whitespace checks pass. No runtime
+  tests or commits were performed, and no test files were changed.
+
+2026-11-18T17:21:04Z
+- Added WLock's stored burrow type and `name()` accessor. Obtain discovers the
+  type from DNA after locking, with the existing unlocked Simple path retaining
+  its type. A lock-only directory without valid DNA retains an empty discovered
+  name, preserving acquisition before initialization.
+- Create and recreate now take `(name, burrow, error)` and retain the supplied
+  name for the new burrow. Recreation checks the existing Simple type before
+  clearing and assigns the new name after successful clearing. Updated the
+  plan and notes; Warren/Bigwig integration remains separate.
+- Full `bazel build -c dbg --cxxopt=-Og //...` and whitespace checks pass.
+  Bazelisk's version lookup required the approved build escalation after
+  sandbox network restrictions blocked it. No runtime tests or commits.
+
+2026-11-18T17:41:59Z
+- Fixed the authorized constructor shell quoting in `src/working.h`. Both
+  mkdir and temporary-file cleanup quote directory names, escape literal
+  single quotes, and use `--`; the `/temp.*` suffix remains unquoted so only
+  the intended filename pattern expands. The separate listing command is
+  unchanged and its unquoted path remains recorded in the improvements list.
+- The user accepts Working's existing temporary-file cleanup on the unlocked
+  Simple path. Updated the plan and notes with that scope and the quoting fix.
+- Full `bazel build -c dbg --cxxopt=-Og //...` and whitespace checks pass.
+  No runtime tests or commits were performed.

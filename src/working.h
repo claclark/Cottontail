@@ -95,12 +95,20 @@ public:
   }
   Working(const std::string &working, bool mkdir)
       : working_(working), temp_counter_(0) {
+    std::string quoted_working = "'";
+    for (char c : working) {
+      if (c == '\'')
+        quoted_working += "'\\''";
+      else
+        quoted_working += c;
+    }
+    quoted_working += "'";
     if (mkdir) {
       // TODO: Replace with direct function calls. Maybe boost can do this?
-      std::string mkdir_command = "/bin/mkdir -p " + working;
+      std::string mkdir_command = "/bin/mkdir -p -- " + quoted_working;
       system(mkdir_command.c_str());
     }
-    std::string cleanup_command = "/bin/rm -f " + working + "/temp.*";
+    std::string cleanup_command = "/bin/rm -f -- " + quoted_working + "/temp.*";
     system(cleanup_command.c_str());
   }
   std::string make_name(const std::string &name) {

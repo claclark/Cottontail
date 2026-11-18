@@ -14,9 +14,8 @@ const std::string HEADER =
     "# DO NOT EDIT DNA - DO NOT EDIT DNA - DO NOT EDIT DNA ";
 }
 
-bool read_dna(std::shared_ptr<Working> working, std::string *dna,
+bool read_dna(const std::string &dna_filename, std::string *dna,
               std::string *error) {
-  std::string dna_filename = working->make_name(DNA_NAME);
   std::fstream in(dna_filename, std::ios::in);
   if (in.fail()) {
     safe_error(error) = "Can't read configuration from: " + dna_filename;
@@ -32,6 +31,11 @@ bool read_dna(std::shared_ptr<Working> working, std::string *dna,
   while (std::getline(in, line))
     *dna += (line + " ");
   return true;
+}
+
+bool read_dna(std::shared_ptr<Working> working, std::string *dna,
+              std::string *error) {
+  return read_dna(working->make_name(DNA_NAME), dna, error);
 }
 
 bool write_dna(std::shared_ptr<Working> working, const std::string &dna,
