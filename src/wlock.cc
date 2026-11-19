@@ -4,7 +4,6 @@
 #include <cstring>
 #include <dirent.h>
 #include <fcntl.h>
-#include <fstream>
 #include <map>
 #include <string>
 #include <sys/file.h>
@@ -75,6 +74,23 @@ int create_lock_file(const std::string &filename, std::string *error) {
   return fd;
 }
 
+int open_pid_file(const std::string &filename, int flags, std::string *error) {
+  int fd = open(filename.c_str(), flags | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK,
+                0666);
+  if (fd < 0) {
+    safe_error(error) = "Cottontail cannot open burrow PID file: " + filename +
+                        ": " + std::strerror(errno);
+    return -1;
+  }
+  struct stat status;
+  if (fstat(fd, &status) != 0 || !S_ISREG(status.st_mode)) {
+    close(fd);
+    safe_error(error) = "Burrow PID file is not a regular file: " + filename;
+    return -1;
+  }
+  return fd;
+}
+
 } // namespace
 
 WLock::~WLock() {
@@ -119,17 +135,40 @@ std::shared_ptr<WLock> WLock::obtain(const std::string &burrow,
   }
 
   std::string pid_filename = the_burrow + "/" + PID_NAME;
+  bool pid_missing = false;
+  if (lstat(pid_filename.c_str(), &status) != 0) {
+    if (errno != ENOENT) {
+      safe_error(error) = "Cottontail cannot inspect burrow PID file: " +
+                          pid_filename + ": " + std::strerror(errno);
+      return nullptr;
+    }
+    pid_missing = true;
+  } else if (!S_ISREG(status.st_mode)) {
+    safe_error(error) = "Burrow PID file is not a regular file: " + pid_filename;
+    return nullptr;
+  }
   if (flock(wlock->fd_, LOCK_EX | LOCK_NB) != 0) {
     if (errno != EWOULDBLOCK && errno != EAGAIN) {
       safe_error(error) = "Cottontail cannot lock burrow: " + the_burrow +
                           ": " + std::strerror(errno);
       return nullptr;
     }
-    if (stat(pid_filename.c_str(), &status) != 0 && errno == ENOENT)
+    if (pid_missing)
       sleep(1);
-    std::ifstream in(pid_filename);
     std::string owner;
-    if (std::getline(in, owner) && owner != "")
+    int fd = open_pid_file(pid_filename, O_RDONLY, nullptr);
+    if (fd >= 0) {
+      char buffer[512];
+      ssize_t count = read(fd, buffer, sizeof(buffer));
+      close(fd);
+      if (count > 0) {
+        owner.assign(buffer, count);
+        auto newline = owner.find('\n');
+        if (newline != std::string::npos)
+          owner.resize(newline);
+      }
+    }
+    if (!owner.empty())
       safe_error(error) = "Cottontail burrow locked by: " + owner;
     else
       safe_error(error) = "Cottontail burrow locked";
@@ -142,10 +181,16 @@ std::shared_ptr<WLock> WLock::obtain(const std::string &burrow,
                         std::string(std::strerror(errno));
     return nullptr;
   }
-  std::ofstream out(pid_filename);
-  out << hostname << "/" << getpid() << "\n";
-  out.close();
-  if (out.fail()) {
+  int fd = open_pid_file(pid_filename, O_WRONLY | O_CREAT, error);
+  if (fd < 0)
+    return nullptr;
+  std::string owner = std::string(hostname) + "/" + std::to_string(getpid()) +
+                      "\n";
+  bool written = ftruncate(fd, 0) == 0 &&
+                 write(fd, owner.data(), owner.size()) ==
+                     static_cast<ssize_t>(owner.size());
+  int closed = close(fd);
+  if (!written || closed != 0) {
     safe_error(error) =
         "Cottontail cannot write burrow owner information: " + pid_filename;
     return nullptr;
@@ -187,8 +232,20 @@ std::shared_ptr<WLock> WLock::create(const std::string &name,
     return nullptr;
   close(fd);
   std::shared_ptr<WLock> wlock = obtain(the_burrow, error);
-  if (wlock != nullptr)
-    wlock->name_ = name;
+  if (wlock == nullptr)
+    return nullptr;
+  // Another creator may have initialized the burrow before we got the lock.
+  if (!directory_entries(the_burrow, &entries, error))
+    return nullptr;
+  for (const auto &entry : entries) {
+    if (entry != LOCK_NAME && entry != PID_NAME) {
+      safe_error(error) =
+          "Cottontail cannot create burrow in nonempty directory: " + the_burrow;
+      return nullptr;
+    }
+  }
+  wlock->name_ = name;
+  wlock->status_ = Status::created;
   return wlock;
 }
 
@@ -218,6 +275,44 @@ std::shared_ptr<WLock> WLock::recreate(const std::string &name,
   std::vector<std::string> entries;
   if (!directory_entries(the_burrow, &entries, error))
     return nullptr;
+  struct stat directory_status;
+  if (stat(the_burrow.c_str(), &directory_status) != 0 ||
+      faccessat(AT_FDCWD, the_burrow.c_str(), W_OK | X_OK, AT_EACCESS) != 0) {
+    safe_error(error) = "Cottontail cannot remove files from burrow: " +
+                        the_burrow + ": " + std::strerror(errno);
+    return nullptr;
+  }
+  // Check all entries before unlinking any burrow data.
+  uid_t user = geteuid();
+  for (const auto &entry : entries) {
+    std::string filename = the_burrow + "/" + entry;
+    if (lstat(filename.c_str(), &status) != 0) {
+      safe_error(error) = "Cottontail cannot inspect burrow entry: " + filename +
+                          ": " + std::strerror(errno);
+      return nullptr;
+    }
+    if (S_ISDIR(status.st_mode)) {
+      safe_error(error) = "Burrow contains subdirectories: " + filename;
+      return nullptr;
+    }
+    if (!S_ISREG(status.st_mode)) {
+      safe_error(error) = "Burrow contains non-regular files: " + filename;
+      return nullptr;
+    }
+    if (entry == LOCK_NAME || entry == PID_NAME)
+      continue;
+    if (!(status.st_mode & (S_IWUSR | S_IWGRP | S_IWOTH)) ||
+        faccessat(AT_FDCWD, filename.c_str(), W_OK, AT_EACCESS) != 0) {
+      safe_error(error) = "Burrow contains read-only files: " + filename;
+      return nullptr;
+    }
+    if ((directory_status.st_mode & S_ISVTX) && user != 0 &&
+        directory_status.st_uid != user && status.st_uid != user) {
+      safe_error(error) = "Burrow contains files that cannot be removed: " +
+                          filename;
+      return nullptr;
+    }
+  }
   for (auto &entry : entries) {
     if (entry == LOCK_NAME || entry == PID_NAME)
       continue;
@@ -229,6 +324,7 @@ std::shared_ptr<WLock> WLock::recreate(const std::string &name,
     }
   }
   wlock->name_ = name;
+  wlock->status_ = Status::recreated;
   return wlock;
 }
 

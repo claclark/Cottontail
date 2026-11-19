@@ -50,20 +50,9 @@ void static_warren(std::shared_ptr<cottontail::Warren> *warren) {
 
 void dynamic_warren(std::shared_ptr<cottontail::Warren> *warren) {
   std::string error;
-  std::string empty_recipe = "";
-  std::string featurizer_name = "hashing";
-  std::shared_ptr<cottontail::Featurizer> featurizer =
-      cottontail::Featurizer::make(featurizer_name, empty_recipe, &error);
-  ASSERT_NE(featurizer, nullptr);
-  std::string tokenizer_name = "ascii";
-  std::shared_ptr<cottontail::Tokenizer> tokenizer =
-      cottontail::Tokenizer::make(tokenizer_name, empty_recipe, &error);
-  ASSERT_NE(tokenizer, nullptr);
-  std::shared_ptr<cottontail::Fluffle> fluffle = cottontail::Fluffle::make();
-  ASSERT_NE(fluffle, nullptr);
   std::shared_ptr<cottontail::Bigwig> bigwig =
-      cottontail::Bigwig::make(nullptr, featurizer, tokenizer, fluffle);
-  ASSERT_NE(bigwig, nullptr);
+      cottontail::Bigwig::make_in_memory("tokenizer:name:ascii", &error);
+  ASSERT_NE(bigwig, nullptr) << error;
   {
     bigwig->start();
     std::shared_ptr<cottontail::Scribe> scribe =

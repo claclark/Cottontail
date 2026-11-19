@@ -40,12 +40,22 @@
   descriptor, closing the descriptor on destruction. Simple remains unlocked;
   recreating Simple is refused. `name()` exposes the type discovered from DNA
   on obtain or supplied to create/recreate; a lock-only burrow without valid
-  DNA has an empty discovered name. The class is implemented independently;
-  Warren/Bigwig/Fluffle integration remains a separate step in `ai/plan.md`.
+  DNA has an empty discovered name. `status()` records obtained, created,
+  recreated, or initialized; successful DNA writing consumes creation readiness.
+  Warren's directory factories, Bigwig's path factories, and consolidation
+  use WLock. Warren opens standalone Hazels directly.
+- Warren's named opener accepts `"simple"`. Its recipe-based creation overload
+  builds Bigwigs, with optional recreation of an existing recognized burrow.
 - `SimpleWarren` is the flat-file Warren implementation reconstructed from DNA
   metadata in a burrow.
 - `Bigwig` is the dynamic Warren backed by `Fiver` shards and `Fluffle` state.
   Meadowlark creation goes through Bigwig.
+  Its private WLock overloads activate an existing burrow or initialize an
+  empty one with a recipe. Warren and Bigwig's public path factories delegate
+  to them. Clones and merge workers share the Fluffle and its lock.
+  Public in-memory creation uses `Bigwig::make_in_memory(recipe, error)`.
+  Hazel merges use the Working owned by WLock. `Bigwig.LockedFactories`
+  covers the factory paths and ownership lifetime.
 - `Fiver` is the mutable/transaction shard format used by Bigwig. Readying a
   working-backed Fiver always serializes a commit artifact, including for a
   write-free transaction or physical text that tokenizes to no annotations.
@@ -182,13 +192,13 @@
 
 ## CLI Surfaces
 
-- `apps/meadowlark.cc`: create/open a meadow, parse `--tsv`, `--jsonl`/`--json`,
-  `--text`, and `--code` inputs, and delegate the typed plan to the public
-  `meadowlark::append_all(...)` library operation. Each input path may be a
+- `apps/meadowlark.cc`: create, recreate, or open a meadow. The CLI parses
+  `--tsv`, `--jsonl`/`--json`, `--text`, and `--code` inputs and calls
+  `meadowlark::append_all(...)` with the typed input list. Each path may be a
   regular file or a recursively walked directory; every discovered file keeps
-  the type of its introducing option. Immediately after
-  `--create`, checked `parameter:value` assignments may precede the first input
-  flag; they are applied through `set_parameter(...)` before ingestion.
+  the type of its introducing option. With `--create` or `--recreate`,
+  `parameter:value` assignments may precede the first input flag. The app
+  applies them through `set_parameter(...)` before ingestion.
 - `apps/forage.cc`: run `query name[:tag] [file ...]`; supports `--key value`
   and `--key=value` parameters and passes file selectors to the shared
   `forage_all(...)` library path.
@@ -226,15 +236,6 @@
   created before ingestion; reruns reopen existing meadows and rely on
   ingestion and consolidation recovery with the same source files and directories.
 - `apps/simple.cc`: build a simple burrow from TREC/MARCO-style corpora.
-- `apps/fiver2hazel.cc`: convert live Fiver shards in a burrow to Hazel shards
-  with `--convert`, merge available Hazel shards with `--merge`, and time the
-  conversion/merge phases. Existing exact per-Fiver Hazels are reused, and
-  intermediate Hazels are preserved after merge. With no mode flags it does
-  both phases.
-- `apps/merge-hazels.cc`: explicitly merge a given ordered list of standalone
-  Hazel files, require that they form a complete sequence, infer the sibling
-  output Hazel name from the input sequence range, and delegate merge validation
-  to `Hazel::merge(...)`.
 - `apps/consolidate.cc`: invoke offline `Bigwig::consolidate(...)` for each
   directory argument, skip regular-file arguments, and stop at the first
   failure. `--verbose` enables timestamped phase descriptions and timings from
@@ -259,9 +260,8 @@
   consumers require no Boost installation or `/usr/local` include/link flags.
   It does not follow symlinked files or directories, including a symlink given
   as the top-level input path.
-- `test/BUILD` contains aggregate `//test:tests` and dedicated
-  `//test:hazel_test`, `//test:optimizer_test`, `//test:nfa_test`,
-  `//test:cgrep_test`, and `//test:cgrep_app_test` targets.
+- `test/BUILD` contains aggregate `//test:tests` and focused targets for
+  erasures, Hazel, the optimizer, NFA, cgrep and its CLI, and SPLADE and its CLI.
 - On 2026-08-23 the user reported that the complete regression suite and
   additional tests pass after the file-oriented forager and empty/tokenless
   Fiver work.
@@ -666,9 +666,10 @@
 
 ## Indexed Strings and Regular Expressions
 
-- N-gram collection creation uses --create ngram[:n], with canonical default
-  recipe five and supported widths one through seven. Token positions are
-  literal bytes except for atomic reserved structural noncharacters; boundary
+- N-gram collection creation uses `--create ngram[:n]` or `--recreate ngram[:n]`.
+  The default width is five, and supported widths are one through seven.
+  Token positions are literal bytes except for atomic reserved structural
+  noncharacters. Boundary
   suffix grams are stored without padding. Existing phrase expansion supplies
   exact positional queries when complete-gram evidence is available.
 - Dictionary-backed short queries, Warren-level phrase/regexp entry points,

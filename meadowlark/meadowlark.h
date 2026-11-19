@@ -22,7 +22,8 @@ struct InputFile {
 bool is_meadow(std::shared_ptr<Warren> warren, std::string *error = nullptr);
 std::shared_ptr<Warren> create_meadow(const std::string &meadow,
                                       const std::string &recipe,
-                                      std::string *error = nullptr);
+                                      std::string *error = nullptr,
+                                      bool recreate = false);
 std::shared_ptr<Warren> create_meadow(const std::string &meadow,
                                       std::string *error = nullptr);
 std::shared_ptr<Warren> create_meadow(std::string *error = nullptr);

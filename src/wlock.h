@@ -10,6 +10,8 @@ namespace cottontail {
 
 class WLock final {
 public:
+  enum class Status { obtained, created, recreated, initialized };
+
   // Existing burrows; legacy Simple burrows remain unlocked.
   static std::shared_ptr<WLock> obtain(const std::string &burrow,
                                        std::string *error = nullptr);
@@ -23,6 +25,9 @@ public:
                                          std::string *error = nullptr);
   std::string name() { return name_; }
   std::shared_ptr<Working> working() { return working_; }
+  Status status() { return status_; }
+  // Consume initialization readiness after successfully writing DNA.
+  void initialized() { status_ = Status::initialized; }
 
   ~WLock();
   WLock(const WLock &) = delete;
@@ -33,6 +38,7 @@ public:
 private:
   WLock(){};
   int fd_ = -1;
+  Status status_ = Status::obtained;
   std::string name_;
   std::shared_ptr<Working> working_;
 };

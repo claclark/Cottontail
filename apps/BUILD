@@ -40,19 +40,6 @@ cc_binary(
 )
 
 cc_binary(
-    name = "fiver2hazel",
-    srcs = [
-      "fiver2hazel.cc",
-    ],
-    deps = [
-      "//src:cottontail",
-    ],
-    linkopts = [
-      "-pthread",
-    ],
-)
-
-cc_binary(
     name = "consolidate",
     srcs = [
       "consolidate.cc",
@@ -110,19 +97,6 @@ cc_binary(
     name = "forage",
     srcs = [
       "forage.cc",
-    ],
-    deps = [
-      "//src:cottontail",
-    ],
-    linkopts = [
-      "-pthread",
-    ],
-)
-
-cc_binary(
-    name = "merge-hazels",
-    srcs = [
-      "merge-hazels.cc",
     ],
     deps = [
       "//src:cottontail",

@@ -10,6 +10,7 @@
 #include "src/fiver.h"
 #include "src/fluffle.h"
 #include "src/warren.h"
+#include "src/wlock.h"
 
 namespace cottontail {
 
@@ -20,23 +21,8 @@ public:
   static std::shared_ptr<Bigwig> make(const std::string &burrow,
                                       const std::string &recipe,
                                       std::string *error = nullptr);
-  static std::shared_ptr<Bigwig>
-  make(std::shared_ptr<Working> working, std::shared_ptr<Featurizer> featurizer,
-       std::shared_ptr<Tokenizer> tokenizer, std::shared_ptr<Fluffle> fluffle,
-       std::string *error = nullptr,
-       std::shared_ptr<Compressor> posting_compressor = nullptr,
-       std::shared_ptr<Compressor> fvalue_compressor = nullptr,
-       std::shared_ptr<Compressor> text_compressor = nullptr);
-  static std::shared_ptr<Bigwig>
-  make(std::shared_ptr<Working> working, std::shared_ptr<Featurizer> featurizer,
-       std::shared_ptr<Tokenizer> tokenizer, std::string *error = nullptr,
-       std::shared_ptr<Fluffle> fluffle = nullptr,
-       std::shared_ptr<Compressor> posting_compressor = nullptr,
-       std::shared_ptr<Compressor> fvalue_compressor = nullptr,
-       std::shared_ptr<Compressor> text_compressor = nullptr) {
-    return make(working, featurizer, tokenizer, fluffle, error,
-                posting_compressor, fvalue_compressor, text_compressor);
-  };
+  static std::shared_ptr<Bigwig> make_in_memory(const std::string &recipe,
+                                                std::string *error = nullptr);
   static bool consolidate(const std::string &burrow,
                           std::string *error = nullptr,
                           bool verbose = false);
@@ -50,6 +36,17 @@ public:
   Bigwig &operator=(Bigwig &&) = delete;
 
 private:
+  friend class Warren;
+  static std::shared_ptr<Bigwig> make(std::shared_ptr<WLock> wlock,
+                                      std::string *error);
+  static std::shared_ptr<Bigwig> make(std::shared_ptr<WLock> wlock,
+                                      const std::string &recipe,
+                                      std::string *error);
+  static bool check_recipe(const std::string &recipe, std::string *error);
+  struct Context;
+  static std::shared_ptr<Bigwig> activate(std::shared_ptr<WLock> wlock,
+                                         const Context &context,
+                                         std::string *error);
   Bigwig(std::shared_ptr<Working> working,
          std::shared_ptr<Featurizer> featurizer,
          std::shared_ptr<Tokenizer> tokenizer, std::shared_ptr<Idx> idx,

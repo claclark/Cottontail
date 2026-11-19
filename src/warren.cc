@@ -6,57 +6,21 @@
 
 #include "src/bigwig.h"
 #include "src/core.h"
-#include "src/dna.h"
 #include "src/hazel.h"
-#include "src/owsla.h"
 #include "src/recipe.h"
 #include "src/simple_warren.h"
-#include "src/stats.h"
-#include "src/working.h"
+#include "src/wlock.h"
 
 namespace cottontail {
 std::shared_ptr<Warren> Warren::make(const std::string &name,
                                      const std::string &burrow,
                                      std::string *error) {
-  std::shared_ptr<Warren> warren;
-  std::string the_burrow;
-  if (burrow == "")
-    the_burrow = DEFAULT_BURROW;
-  else
-    the_burrow = burrow;
-  if (name == "" || name == "simple") {
-    warren = SimpleWarren::make(the_burrow, error);
-    if (warren == nullptr)
-      return nullptr;
-  } else if (name == "bigwig") {
-    warren = Bigwig::make(the_burrow, error);
-    if (warren == nullptr)
-      return nullptr;
-  } else {
-    safe_error(error) = "No Warren named: " + name;
+  if (name != "simple") {
+    safe_error(error) =
+        "The named Warren activation factory supports only Simple burrows";
     return nullptr;
   }
-  warren->start();
-  warren->name_ = name;
-  std::string container_key = "container";
-  std::string container_value;
-  if (!warren->get_parameter(container_key, &container_value, error))
-    return nullptr;
-  warren->default_container_ = container_value;
-  std::string stemmer_key = "stemmer";
-  std::string stemmer_value;
-  if (!warren->get_parameter(stemmer_key, &stemmer_value, error))
-    return nullptr;
-  if (stemmer_value != "") {
-    std::string empty_recipe = "";
-    std::shared_ptr<Stemmer> stemmer =
-        Stemmer::make(stemmer_value, empty_recipe, error);
-    if (stemmer == nullptr)
-      return nullptr;
-    warren->stemmer_ = stemmer;
-  }
-  warren->end();
-  return warren;
+  return SimpleWarren::make(burrow, error);
 }
 
 namespace {
@@ -111,32 +75,40 @@ std::shared_ptr<Warren> single_file_burrow(const std::string &burrow,
   safe_error(error) = "Invalid warren type: " + name;
   return nullptr;
 }
-}
+} // namespace
 
 std::shared_ptr<Warren> Warren::make(const std::string &burrow,
                                      std::string *error) {
   if (is_regular_file(burrow))
     return single_file_burrow(burrow, error);
-  std::string the_burrow;
-  if (burrow == "")
-    the_burrow = DEFAULT_BURROW;
-  else
-    the_burrow = burrow;
-  std::shared_ptr<Working> working = Working::make(the_burrow, error);
-  if (working == nullptr)
+  std::shared_ptr<WLock> wlock = WLock::obtain(burrow, error);
+  if (wlock == nullptr)
     return nullptr;
-  std::string dna;
-  if (!read_dna(working, &dna, error))
+  const std::string name = wlock->name();
+  if (name == "simple")
+    return SimpleWarren::make(wlock->working(), error);
+  if (name == "bigwig")
+    return Bigwig::make(wlock, error);
+  safe_error(error) = name.empty() ? "Burrow has no valid DNA: " + burrow
+                                   : "Invalid warren type: " + name;
+  return nullptr;
+}
+
+std::shared_ptr<Warren> Warren::make(const std::string &name,
+                                     const std::string &recipe,
+                                     const std::string &burrow,
+                                     std::string *error, bool recreate) {
+  if (name != "bigwig") {
+    safe_error(error) = "Cannot create Warren of type: " + name;
     return nullptr;
-  std::map<std::string, std::string> parameters;
-  if (!cook(dna, &parameters, error))
+  }
+  if (!Bigwig::check_recipe(recipe, error))
     return nullptr;
-  std::string name;
-  if (parameters.find("warren") != parameters.end())
-    name = parameters["warren"];
-  else
-    name = "simple";
-  return Warren::make(name, burrow, error);
+  std::shared_ptr<WLock> wlock = recreate ? WLock::recreate(name, burrow, error)
+                                          : WLock::create(name, burrow, error);
+  if (wlock == nullptr)
+    return nullptr;
+  return Bigwig::make(wlock, recipe, error);
 }
 
 void Warren::commit_all(std::vector<std::shared_ptr<Warren>> warrens) {

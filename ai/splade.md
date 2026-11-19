@@ -68,5 +68,5 @@ python3 /data/ssd1/claclark/MARCO-2025/msmarco_passage_eval.py /data/ssd1/clacla
 - MRR@10: **0.3832077477600405**, identical to the baseline's reported value.
   Identical aggregate MRR does not establish identical per-query rankings.
 
-The optimized app and focused tests compiled before this run; the broader
-regression suite for the linked-list change has not yet been reported.
+The optimized app and focused tests compiled before this run. The user's
+later full regression results included passing SPLADE library and CLI targets.

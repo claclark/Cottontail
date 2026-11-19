@@ -342,17 +342,8 @@ The working-directory overload:
 The explicit-filename overload remains a bool-returning writer. Source shard
 discard is no longer part of conversion.
 
-`apps/fiver2hazel` operates on burrow directories. It discovers strict shard
-names of the form `fiver.<number>.<number>` and `hazel.<number>.<number>`,
-ignoring sidecar files. It supports:
-
-```text
-fiver2hazel [--chunk-size bytes] [--convert] [--merge] burrow
-```
-
-With no mode flags, it performs both conversion and merge. Existing exact
-per-Fiver Hazels are reused during conversion, and intermediate Hazels are
-preserved after merge.
+Use `consolidate burrow` to convert and merge a burrow's shards while holding
+its WLock. See [consolidation.md](consolidation.md) for the foreground pipeline.
 
 ## Hazel Merge
 

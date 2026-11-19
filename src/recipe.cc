@@ -241,6 +241,7 @@ bool interpret_option(std::string *recipe, const std::string &option,
       std::sregex_token_iterator(option.begin(), option.end(), sep, -1), {}};
   if (pieces.size() < 2 || pieces.size() > 3) {
     safe_error(error) = "Malformed option: " + option;
+    return false;
   }
   std::map<std::string, std::string>::iterator item =
       parameters.find(pieces[0]);

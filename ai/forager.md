@@ -296,9 +296,10 @@ separate from this structural change.
 
 ## Definition Validation And Legacy Refusal
 
-Before publishing a new definition, the coordinator starts the Warren and runs
-`Forager::check(...)`. Invalid query, tokenizer, stemmer, tag-prefix, or other
-implementation setup must fail before durable metadata is written.
+Before publishing a new definition, the coordinator starts the Warren,
+validates the GCL query, and calls `Forager::check(...)` to validate the
+forager implementation and parameters. These checks run before it writes
+durable metadata.
 
 When parameters are supplied, it then looks up the canonical `(name, tag)`:
 
@@ -314,9 +315,10 @@ The supplied query must exactly match its query, and the concrete
 legacy definitions are errors. This distinction is represented by an overload
 instead of treating an empty parameter map as omission.
 
-The uniqueness check is semantic preflight, not a new cross-process locking
-mechanism. As with the standard Meadowlark commands, users must not
-deliberately race incompatible definitions for the same `(name, tag)`.
+WLock excludes independent opens of the Bigwig directory, including competing
+CLI forage commands. The definition check enforces uniqueness during normal
+operation. A host application sharing an open Bigwig must coordinate
+simultaneous foraging operations itself.
 
 Reader compatibility and writer compatibility are deliberately different. Old
 databases remain queryable and rankable, but new file-oriented writers do not
@@ -577,7 +579,6 @@ This implementation does not:
 - implement file deletion;
 - migrate or rewrite old databases;
 - support extending an old interval-oriented `(name, tag)` layer;
-- add cross-process semantic locking for competing forage commands;
 - remove the general `check(...)` pattern across Cottontail;
 - change the indexed-regular-expression plan;
 - design SQL, Mongo-style, join, or pipeline languages;

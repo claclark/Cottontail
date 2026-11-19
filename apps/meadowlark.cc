@@ -12,9 +12,11 @@
 void usage(std::string program_name) {
   std::cerr << "usage: " << program_name
             << " [--meadow meadow]"
-            << " [--create [ngram[:n]] [parameter:value ...]]"
+            << " [--create|--recreate [ngram[:n]] [parameter:value ...]]"
             << " [--tsv path...] [--jsonl|--json path...]"
-            << " [--text path...] [--code path...]...\n";
+            << " [--text path...] [--code path...]...\n"
+            << "  --recreate clears an existing burrow before creating the "
+               "meadow.\n";
 }
 
 bool parameter_assignment(const std::string &argument, std::string *key,
@@ -52,8 +54,9 @@ int main(int argc, char **argv) {
   }
   if (argc <= 1)
     return 0;
-  bool create =
-      argv[1] == std::string("-c") || argv[1] == std::string("--create");
+  std::string action = argv[1];
+  bool recreate = action == "--recreate";
+  bool create = recreate || action == "-c" || action == "--create";
   std::string recipe;
   std::vector<std::pair<std::string, std::string>> parameters;
   if (create) {
@@ -99,20 +102,6 @@ int main(int argc, char **argv) {
       argv++;
     }
   }
-  std::shared_ptr<cottontail::Warren> warren;
-  if (create)
-    warren = cottontail::meadowlark::create_meadow(meadow, recipe, &error);
-  else
-    warren = cottontail::meadowlark::open_meadow(meadow, &error);
-  if (warren == nullptr) {
-    std::cerr << program_name << ": " << error << "\n";
-    return 1;
-  }
-  for (const auto &parameter : parameters)
-    if (!warren->set_parameter(parameter.first, parameter.second, &error)) {
-      std::cerr << program_name << ": " << error << "\n";
-      return 1;
-    }
   cottontail::meadowlark::InputType input_type =
       cottontail::meadowlark::InputType::NONE;
   bool expecting_file = false;
@@ -182,6 +171,21 @@ int main(int argc, char **argv) {
     usage(program_name);
     return 1;
   }
+  std::shared_ptr<cottontail::Warren> warren;
+  if (create)
+    warren = cottontail::meadowlark::create_meadow(meadow, recipe, &error,
+                                                 recreate);
+  else
+    warren = cottontail::meadowlark::open_meadow(meadow, &error);
+  if (warren == nullptr) {
+    std::cerr << program_name << ": " << error << "\n";
+    return 1;
+  }
+  for (const auto &parameter : parameters)
+    if (!warren->set_parameter(parameter.first, parameter.second, &error)) {
+      std::cerr << program_name << ": " << error << "\n";
+      return 1;
+    }
   if (!cottontail::meadowlark::append_all(warren, inputs, &error)) {
     std::cerr << program_name << ": " << error << "\n";
     return 1;

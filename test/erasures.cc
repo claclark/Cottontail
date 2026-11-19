@@ -334,16 +334,16 @@ TEST(Erasures, LiveMergedAndReopened) {
       std::string error, root = temporary_directory();
       ASSERT_FALSE(root.empty());
       std::string burrow = root + "/live";
-      auto working = cottontail::Working::mkdir(burrow, &error);
-      ASSERT_NE(working, nullptr) << error;
       auto featurizer = cottontail::Featurizer::make("hashing", "", &error);
       auto tokenizer = cottontail::Tokenizer::make("utf8", "", &error);
       auto pc = cottontail::Compressor::make("post", "", &error);
       auto vc = cottontail::Compressor::make(compression, "", &error);
       auto tc = cottontail::Compressor::make(compression, "", &error);
-      auto bigwig = cottontail::Bigwig::make(working, featurizer, tokenizer,
-                                             &error, nullptr, pc, vc, tc);
+      std::string recipe = "idx:posting_compressor:post idx:fvalue_compressor:" +
+                           compression + " txt:compressor:" + compression;
+      auto bigwig = cottontail::Bigwig::make(burrow, recipe, &error);
       ASSERT_NE(bigwig, nullptr) << error;
+      auto working = bigwig->working();
       bigwig->merge(false);
       addr point = featurizer->featurize("point:");
       addr bridge = featurizer->featurize("bridge:");
@@ -418,6 +418,8 @@ TEST(Erasures, LiveMergedAndReopened) {
         warren->end();
       };
       check(bigwig);
+      snapshot.reset();
+      bigwig.reset();
       check(cottontail::Bigwig::make(burrow, &error));
 
       auto names = working->ls("fiver");
@@ -522,16 +524,17 @@ TEST(Erasures, Translation) {
     SCOPED_TRACE(compression);
     std::string error, root = temporary_directory();
     ASSERT_FALSE(root.empty());
-    auto working = cottontail::Working::mkdir(root + "/live", &error);
-    ASSERT_NE(working, nullptr) << error;
+    std::string burrow = root + "/live";
     auto featurizer = cottontail::Featurizer::make("hashing", "", &error);
     auto tokenizer = cottontail::Tokenizer::make("utf8", "", &error);
     auto pc = cottontail::Compressor::make("post", "", &error);
     auto vc = cottontail::Compressor::make(compression, "", &error);
     auto tc = cottontail::Compressor::make(compression, "", &error);
-    auto bigwig = cottontail::Bigwig::make(working, featurizer, tokenizer,
-                                           &error, nullptr, pc, vc, tc);
+    std::string recipe = "idx:posting_compressor:post idx:fvalue_compressor:" +
+                         compression + " txt:compressor:" + compression;
+    auto bigwig = cottontail::Bigwig::make(burrow, recipe, &error);
     ASSERT_NE(bigwig, nullptr) << error;
+    auto working = bigwig->working();
     bigwig->merge(false);
     for (const std::string text :
          {"zero one two three four five six seven eight nine ten eleven "
@@ -612,12 +615,15 @@ TEST(Erasures, Translation) {
       warren->end();
     };
     check(after);
-    check(cottontail::Bigwig::make(root + "/live", &error));
     // The pre-deletion snapshot keeps its original text and empty null hopper.
     for (size_t i = 0; i < ranges.size(); i++)
       EXPECT_EQ(before->txt()->translate(ranges[i].first, ranges[i].second),
                 baseline[i]);
     before->end();
+    before.reset();
+    after.reset();
+    bigwig.reset();
+    check(cottontail::Bigwig::make(burrow, &error));
 
     auto names = working->ls("fiver");
     std::sort(names.begin(), names.end());
@@ -664,10 +670,9 @@ TEST(Erasures, Translation) {
     // Mixed collections must reject the complete request, even when only a
     // different shard carries the erasure and other shards could return text.
     ASSERT_NE(fivers[0]->hazel(&error), nullptr) << error;
-    check(cottontail::Bigwig::make(root + "/live", &error));
-    ASSERT_TRUE(cottontail::Bigwig::consolidate(root + "/live", &error))
-        << error;
-    check(cottontail::Bigwig::make(root + "/live", &error));
+    check(cottontail::Bigwig::make(burrow, &error));
+    ASSERT_TRUE(cottontail::Bigwig::consolidate(burrow, &error)) << error;
+    check(cottontail::Bigwig::make(burrow, &error));
   }
 }
 
@@ -818,11 +823,11 @@ TEST(Erasures, CompressedBlockReclamation) {
 TEST(Erasures, ReclaimedTextPreservesAppendAddress) {
   std::string error, root = temporary_directory();
   ASSERT_FALSE(root.empty());
-  auto working = cottontail::Working::mkdir(root + "/live", &error);
-  auto feat = cottontail::Featurizer::make("hashing", "", &error);
-  auto tok = cottontail::Tokenizer::make("ascii", "", &error);
-  auto bigwig = cottontail::Bigwig::make(working, feat, tok, &error);
+  std::string burrow = root + "/live";
+  auto bigwig =
+      cottontail::Bigwig::make(burrow, "tokenizer:name:ascii", &error);
   ASSERT_NE(bigwig, nullptr) << error;
+  auto working = bigwig->working();
   bigwig->merge(false);
   std::string text;
   for (int i = 0; i < 1026; i++)
@@ -851,7 +856,7 @@ TEST(Erasures, ReclaimedTextPreservesAppendAddress) {
   ASSERT_TRUE(bigwig->ready(&error)) << error;
   bigwig->commit();
   bigwig->start();
-  auto hopper = bigwig->idx()->hopper(feat->featurize("new"));
+  auto hopper = bigwig->idx()->hopper(bigwig->featurizer()->featurize("new"));
   hopper->tau(0, &p, &q);
   EXPECT_EQ(p, 1026);
   EXPECT_EQ(q, 1026);

@@ -1,16 +1,159 @@
 #include "src/bigwig.h"
 
 #include <algorithm>
+#include <cstdlib>
+#include <fstream>
 #include <memory>
 #include <string>
+#include <sys/stat.h>
 #include <thread>
+#include <unistd.h>
 #include <vector>
 
 #include "gtest/gtest.h"
 
 #include "src/cottontail.h"
+#include "src/dna.h"
 
-void basic(bool merge, std::shared_ptr<cottontail::Working> working = nullptr) {
+TEST(Bigwig, LockedFactories) {
+  char directory[] = "/tmp/cottontail-bigwig-lock-XXXXXX";
+  ASSERT_NE(mkdtemp(directory), nullptr);
+  std::string burrow = directory;
+  std::string error;
+  EXPECT_EQ(cottontail::Bigwig::make(burrow, "tokenizer:name:unknown", &error),
+            nullptr);
+  EXPECT_NE(error.find("No Tokenizer named"), std::string::npos);
+  auto bigwig =
+      cottontail::Bigwig::make(burrow, "tokenizer:name:ascii", &error);
+  ASSERT_NE(bigwig, nullptr) << error;
+  EXPECT_EQ(bigwig->tokenizer()->name(), "ascii");
+
+  auto clone = bigwig->clone(&error);
+  ASSERT_NE(clone, nullptr) << error;
+  bigwig.reset();
+  EXPECT_EQ(cottontail::Bigwig::make(burrow, &error), nullptr);
+  EXPECT_NE(error.find("Cottontail burrow locked"), std::string::npos);
+  EXPECT_FALSE(cottontail::Bigwig::consolidate(burrow, &error));
+  EXPECT_NE(error.find("Cottontail burrow locked"), std::string::npos);
+  clone.reset();
+
+  bigwig = cottontail::Bigwig::make(burrow, &error);
+  ASSERT_NE(bigwig, nullptr) << error;
+  EXPECT_EQ(bigwig->tokenizer()->name(), "ascii");
+  EXPECT_EQ(cottontail::Bigwig::make(burrow, "tokenizer:name:utf8", &error),
+            nullptr);
+  bigwig.reset();
+
+  // A pre-WLock burrow acquires its lock files on first activation.
+  for (const char *name : {"burrow.pid", "burrow.lock"})
+    ASSERT_EQ(unlink((burrow + "/" + name).c_str()), 0);
+  bigwig = cottontail::Bigwig::make(burrow, &error);
+  ASSERT_NE(bigwig, nullptr) << error;
+  EXPECT_EQ(bigwig->tokenizer()->name(), "ascii");
+  EXPECT_EQ(cottontail::Bigwig::make(burrow, &error), nullptr);
+  EXPECT_NE(error.find("Cottontail burrow locked"), std::string::npos);
+  bigwig.reset();
+  for (const char *name : {"dna", "burrow.pid", "burrow.lock"})
+    ASSERT_EQ(unlink((burrow + "/" + name).c_str()), 0);
+  EXPECT_EQ(rmdir(directory), 0);
+}
+
+TEST(Bigwig, WarrenFactories) {
+  char directory[] = "/tmp/cottontail-warren-factory-XXXXXX";
+  ASSERT_NE(mkdtemp(directory), nullptr);
+  std::string burrow = directory;
+  std::string error;
+  std::string keep = burrow + "/keep.txt";
+  {
+    std::ofstream out(keep);
+    out << "keep\n";
+    ASSERT_TRUE(out.good());
+  }
+  EXPECT_EQ(cottontail::Warren::make("bigwig", "", burrow, &error, true),
+            nullptr);
+  ASSERT_EQ(unlink(keep.c_str()), 0);
+
+  auto warren = cottontail::Warren::make("bigwig", "tokenizer:name:ascii",
+                                         burrow, &error);
+  ASSERT_NE(warren, nullptr) << error;
+  ASSERT_TRUE(warren->set_default_container("line:", &error)) << error;
+  EXPECT_EQ(cottontail::Warren::make(burrow, &error), nullptr);
+  EXPECT_NE(error.find("Cottontail burrow locked"), std::string::npos);
+  EXPECT_EQ(cottontail::Warren::make("bigwig", "", burrow, &error, true),
+            nullptr);
+  warren.reset();
+
+  EXPECT_EQ(cottontail::Warren::make("bigwig", "", burrow, &error), nullptr);
+  EXPECT_EQ(cottontail::Warren::make("bigwig", burrow, &error), nullptr);
+  EXPECT_EQ(cottontail::Warren::make("simple", burrow, &error), nullptr);
+  EXPECT_EQ(cottontail::Warren::make("bigwig", "tokenizer:name:unknown",
+                                     burrow, &error, true),
+            nullptr);
+
+  std::string blocked = burrow + "/blocked";
+  {
+    std::ofstream out(blocked);
+    ASSERT_TRUE(out.good());
+  }
+  ASSERT_EQ(chmod(blocked.c_str(), 0444), 0);
+  EXPECT_EQ(cottontail::Warren::make("bigwig", "", burrow, &error, true),
+            nullptr);
+  EXPECT_NE(error.find("Burrow contains read-only files"), std::string::npos);
+  ASSERT_EQ(unlink(blocked.c_str()), 0);
+  ASSERT_EQ(mkdir(blocked.c_str(), 0700), 0);
+  EXPECT_EQ(cottontail::Warren::make("bigwig", "", burrow, &error, true),
+            nullptr);
+  EXPECT_NE(error.find("Burrow contains subdirectories"), std::string::npos);
+  ASSERT_EQ(rmdir(blocked.c_str()), 0);
+  ASSERT_EQ(symlink("dna", blocked.c_str()), 0);
+  EXPECT_EQ(cottontail::Warren::make("bigwig", "", burrow, &error, true),
+            nullptr);
+  EXPECT_NE(error.find("Burrow contains non-regular files"), std::string::npos);
+  ASSERT_EQ(unlink(blocked.c_str()), 0);
+
+  std::string pid_file = burrow + "/burrow.pid";
+  ASSERT_EQ(unlink(pid_file.c_str()), 0);
+  ASSERT_EQ(symlink("dna", pid_file.c_str()), 0);
+  EXPECT_EQ(cottontail::Warren::make(burrow, &error), nullptr);
+  EXPECT_NE(error.find("Burrow PID file is not a regular file"),
+            std::string::npos);
+  ASSERT_EQ(unlink(pid_file.c_str()), 0);
+
+  warren = cottontail::Warren::make(burrow, &error);
+  ASSERT_NE(warren, nullptr) << error;
+  EXPECT_EQ(warren->tokenizer()->name(), "ascii");
+  warren->start();
+  EXPECT_EQ(warren->default_container(), "line:");
+  warren->end();
+  warren.reset();
+
+  warren = cottontail::Warren::make("bigwig", "", burrow, &error, true);
+  ASSERT_NE(warren, nullptr) << error;
+  EXPECT_EQ(warren->tokenizer()->name(), "utf8");
+  warren->start();
+  EXPECT_TRUE(warren->default_container().empty());
+  warren->end();
+  warren.reset();
+  for (const char *name : {"dna", "burrow.pid", "burrow.lock"})
+    ASSERT_EQ(unlink((burrow + "/" + name).c_str()), 0);
+  EXPECT_EQ(rmdir(directory), 0);
+}
+
+TEST(Bigwig, DnaPublishFailure) {
+  char directory[] = "/tmp/cottontail-dna-XXXXXX";
+  ASSERT_NE(mkdtemp(directory), nullptr);
+  auto working = cottontail::Working::make(directory);
+  std::string destination = working->make_name(cottontail::DNA_NAME);
+  ASSERT_EQ(mkdir(destination.c_str(), 0700), 0);
+  std::string error;
+  EXPECT_FALSE(cottontail::write_dna(working, "[]", &error));
+  EXPECT_NE(error.find("Can't publish configuration"), std::string::npos);
+  EXPECT_TRUE(working->ls("temp").empty());
+  EXPECT_EQ(rmdir(destination.c_str()), 0);
+  EXPECT_EQ(rmdir(directory), 0);
+}
+
+void basic(bool merge, std::shared_ptr<cottontail::Bigwig> bigwig) {
   const char *hamlet[] = {"To be, or not to be, that is the question:",
                           "Whether 'tis nobler in the mind to suffer",
                           "The slings and arrows of outrageous fortune,",
@@ -22,19 +165,10 @@ void basic(bool merge, std::shared_ptr<cottontail::Working> working = nullptr) {
                           "Devoutly to be wish'd. To die, to sleep;",
                           "To sleep, perchance to dream-ay, there's the rub:",
                           "For in that sleep of death what dreams may come,"};
-  std::shared_ptr<cottontail::Featurizer> featurizer =
-      cottontail::Featurizer::make("hashing", "");
-  ASSERT_NE(featurizer, nullptr);
-  std::shared_ptr<cottontail::Tokenizer> tokenizer =
-      cottontail::Tokenizer::make("ascii", "");
-  ASSERT_NE(tokenizer, nullptr);
+  ASSERT_NE(bigwig, nullptr);
   cottontail::addr p, q, v;
   std::unique_ptr<cottontail::Hopper> hopper;
-  cottontail::addr line = featurizer->featurize("line:");
-  std::shared_ptr<cottontail::Fluffle> fluffle = cottontail::Fluffle::make();
-  std::shared_ptr<cottontail::Bigwig> bigwig =
-      cottontail::Bigwig::make(working, featurizer, tokenizer, fluffle);
-  ASSERT_NE(bigwig, nullptr);
+  cottontail::addr line = bigwig->featurizer()->featurize("line:");
   bigwig->merge(merge);
   ASSERT_TRUE(bigwig->transaction());
   ASSERT_TRUE(bigwig->appender()->append(std::string(hamlet[0]), &p, &q));
@@ -191,10 +325,11 @@ cottontail::addr count_gcl(std::shared_ptr<cottontail::Warren> warren,
 
 TEST(Bigwig, Consolidate) {
   std::string burrow_name = "bigwig.consolidate.burrow";
+  ASSERT_NO_FATAL_FAILURE(basic(
+      false, cottontail::Bigwig::make(burrow_name, "tokenizer:name:ascii")));
   std::shared_ptr<cottontail::Working> working =
-      cottontail::Working::mkdir(burrow_name);
+      cottontail::Working::make(burrow_name);
   ASSERT_NE(working, nullptr);
-  basic(false, working);
   ASSERT_GT(working->ls("fiver").size(), size_t(1));
 
   std::string error;
@@ -217,19 +352,21 @@ TEST(Bigwig, Consolidate) {
 }
 
 TEST(Bigwig, Basic) {
-  basic(false);
-  basic(true);
+  std::string error;
+  EXPECT_EQ(cottontail::Bigwig::make_in_memory("tokenizer", &error), nullptr);
+  for (bool merge : {false, true}) {
+    auto bigwig =
+        cottontail::Bigwig::make_in_memory("tokenizer:name:ascii", &error);
+    ASSERT_NE(bigwig, nullptr) << error;
+    EXPECT_EQ(bigwig->working(), nullptr);
+    EXPECT_EQ(bigwig->tokenizer()->name(), "ascii");
+    ASSERT_NO_FATAL_FAILURE(basic(merge, bigwig));
+  }
 }
 
 TEST(Bigwig, MergePolicyParameters) {
-  std::shared_ptr<cottontail::Featurizer> featurizer =
-      cottontail::Featurizer::make("hashing", "");
-  ASSERT_NE(featurizer, nullptr);
-  std::shared_ptr<cottontail::Tokenizer> tokenizer =
-      cottontail::Tokenizer::make("ascii", "");
-  ASSERT_NE(tokenizer, nullptr);
   std::shared_ptr<cottontail::Bigwig> bigwig =
-      cottontail::Bigwig::make(nullptr, featurizer, tokenizer);
+      cottontail::Bigwig::make_in_memory("tokenizer:name:ascii");
   ASSERT_NE(bigwig, nullptr);
 
   std::string value;
@@ -258,22 +395,13 @@ TEST(Bigwig, MergePolicyParameters) {
 }
 
 TEST(Bigwig, Two) {
-  std::shared_ptr<cottontail::Featurizer> featurizer =
-      cottontail::Featurizer::make("hashing", "");
-  ASSERT_NE(featurizer, nullptr);
-  std::shared_ptr<cottontail::Tokenizer> tokenizer =
-      cottontail::Tokenizer::make("ascii", "");
-  ASSERT_NE(tokenizer, nullptr);
   cottontail::addr p, q;
   std::unique_ptr<cottontail::Hopper> hopper;
-  std::shared_ptr<cottontail::Fluffle> fluffle = cottontail::Fluffle::make();
   std::shared_ptr<cottontail::Bigwig> big =
-      cottontail::Bigwig::make(nullptr, featurizer, tokenizer, fluffle);
-  big->merge(false);
-  std::shared_ptr<cottontail::Bigwig> wig =
-      cottontail::Bigwig::make(nullptr, featurizer, tokenizer, fluffle);
-  wig->merge(false);
+      cottontail::Bigwig::make_in_memory("tokenizer:name:ascii");
   ASSERT_NE(big, nullptr);
+  big->merge(false);
+  std::shared_ptr<cottontail::Warren> wig = big->clone();
   ASSERT_NE(wig, nullptr);
   big->start();
   wig->start();
@@ -363,14 +491,8 @@ TEST(Bigwig, Two) {
 }
 
 TEST(Bigwig, StartedClonePreservesReadView) {
-  std::shared_ptr<cottontail::Featurizer> featurizer =
-      cottontail::Featurizer::make("hashing", "");
-  ASSERT_NE(featurizer, nullptr);
-  std::shared_ptr<cottontail::Tokenizer> tokenizer =
-      cottontail::Tokenizer::make("ascii", "");
-  ASSERT_NE(tokenizer, nullptr);
   std::shared_ptr<cottontail::Bigwig> bigwig =
-      cottontail::Bigwig::make(nullptr, featurizer, tokenizer);
+      cottontail::Bigwig::make_in_memory("tokenizer:name:ascii");
   ASSERT_NE(bigwig, nullptr);
 
   cottontail::addr p, q;
@@ -404,16 +526,10 @@ TEST(Bigwig, StartedClonePreservesReadView) {
 }
 
 void tiger(cottontail::addr n) {
-  std::shared_ptr<cottontail::Featurizer> featurizer =
-      cottontail::Featurizer::make("hashing", "");
-  ASSERT_NE(featurizer, nullptr);
-  std::shared_ptr<cottontail::Tokenizer> tokenizer =
-      cottontail::Tokenizer::make("ascii", "");
-  ASSERT_NE(tokenizer, nullptr);
   std::shared_ptr<cottontail::Bigwig> bigwig =
-      cottontail::Bigwig::make(nullptr, featurizer, tokenizer);
+      cottontail::Bigwig::make_in_memory("tokenizer:name:ascii");
   ASSERT_NE(bigwig, nullptr);
-  cottontail::addr line = featurizer->featurize("line:");
+  cottontail::addr line = bigwig->featurizer()->featurize("line:");
   auto worker = [&](std::string text) {
     std::shared_ptr<cottontail::Warren> warren = bigwig->clone();
     ASSERT_NE(warren, nullptr);
@@ -488,16 +604,10 @@ TEST(Bigwig, Tiger) {
 }
 
 void love(cottontail::addr n) {
-  std::shared_ptr<cottontail::Featurizer> featurizer =
-      cottontail::Featurizer::make("hashing", "");
-  ASSERT_NE(featurizer, nullptr);
-  std::shared_ptr<cottontail::Tokenizer> tokenizer =
-      cottontail::Tokenizer::make("ascii", "");
-  ASSERT_NE(tokenizer, nullptr);
   std::shared_ptr<cottontail::Bigwig> bigwig =
-      cottontail::Bigwig::make(nullptr, featurizer, tokenizer);
+      cottontail::Bigwig::make_in_memory("tokenizer:name:ascii");
   ASSERT_NE(bigwig, nullptr);
-  cottontail::addr line = featurizer->featurize("line:");
+  cottontail::addr line = bigwig->featurizer()->featurize("line:");
   auto append_worker = [&](std::string text) {
     std::shared_ptr<cottontail::Warren> warren = bigwig->clone();
     ASSERT_NE(warren, nullptr);
@@ -577,12 +687,8 @@ TEST(Bigwig, Love) {
 
 TEST(Bigwig, Durable) {
   std::string burrow_name = "bigwig.burrow";
-  {
-    std::shared_ptr<cottontail::Working> working =
-        cottontail::Working::mkdir(burrow_name);
-    ASSERT_NE(working, nullptr);
-    basic(false, working);
-  }
+  ASSERT_NO_FATAL_FAILURE(basic(
+      false, cottontail::Bigwig::make(burrow_name, "tokenizer:name:ascii")));
   std::shared_ptr<cottontail::Bigwig> bigwig =
       cottontail::Bigwig::make(burrow_name);
   ASSERT_NE(bigwig, nullptr);

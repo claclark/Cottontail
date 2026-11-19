@@ -244,24 +244,11 @@ void touch(std::shared_ptr<cottontail::Working> working,
 std::shared_ptr<cottontail::Bigwig>
 make_bigwig(const std::string &burrow, const CompressorProfile &compressors) {
   std::string error;
-  std::shared_ptr<cottontail::Working> working =
-      cottontail::Working::mkdir(burrow, &error);
-  EXPECT_NE(working, nullptr) << error;
-  if (working == nullptr)
-    return nullptr;
-  std::shared_ptr<cottontail::Featurizer> featurizer =
-      cottontail::Featurizer::make("hashing", "", &error, working);
-  EXPECT_NE(featurizer, nullptr) << error;
-  if (featurizer == nullptr)
-    return nullptr;
-  std::shared_ptr<cottontail::Tokenizer> tokenizer =
-      cottontail::Tokenizer::make("utf8", "", &error);
-  EXPECT_NE(tokenizer, nullptr) << error;
-  if (tokenizer == nullptr)
-    return nullptr;
-  std::shared_ptr<cottontail::Bigwig> bigwig = cottontail::Bigwig::make(
-      working, featurizer, tokenizer, &error, nullptr, compressors.posting,
-      compressors.fvalue, compressors.text);
+  std::string recipe = "idx:posting_compressor:" + compressors.posting->name() +
+                       " idx:fvalue_compressor:" + compressors.fvalue->name() +
+                       " txt:compressor:" + compressors.text->name();
+  std::shared_ptr<cottontail::Bigwig> bigwig =
+      cottontail::Bigwig::make(burrow, recipe, &error);
   EXPECT_NE(bigwig, nullptr) << error;
   if (bigwig == nullptr)
     return nullptr;
@@ -608,6 +595,7 @@ void run_hazel_merge_regression(cottontail::addr chunk_size,
   for (auto &hazel : hazels)
     std::remove(working->make_name(hazel).c_str());
 
+  bigwig.reset();
   std::shared_ptr<cottontail::Warren> source = open_started(burrow);
   ASSERT_NE(source, nullptr);
   std::shared_ptr<cottontail::Warren> merged = open_started(standalone_path);
@@ -649,7 +637,6 @@ void run_bigwig_hazel_activation_regression(
   std::shared_ptr<cottontail::Bigwig> source =
       build_bigwig(burrow, filenames, compressors);
   ASSERT_NE(source, nullptr);
-  source->start();
 
   std::shared_ptr<cottontail::Working> working =
       cottontail::Working::make(burrow);
@@ -668,7 +655,11 @@ void run_bigwig_hazel_activation_regression(
   ASSERT_NE(hazel, nullptr) << error;
   fiver->end();
   ASSERT_TRUE(working->remove(fivers.front().name, &error)) << error;
+  source.reset();
 
+  source = build_bigwig(burrow + ".reference", filenames, compressors);
+  ASSERT_NE(source, nullptr);
+  source->start();
   std::shared_ptr<cottontail::Warren> mixed = open_started(burrow);
   ASSERT_NE(mixed, nullptr);
   expect_warrens_eq(source, mixed);

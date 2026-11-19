@@ -17,7 +17,6 @@
 
 #include "meadowlark/forager.h"
 #include "meadowlark/metadata.h"
-#include "src/bigwig.h"
 #include "src/builder.h"
 #include "src/core.h"
 #include "src/json.h"
@@ -44,10 +43,11 @@ const std::string default_recipe =
 
 std::shared_ptr<Warren> create_meadow(const std::string &meadow,
                                       const std::string &recipe,
-                                      std::string *error) {
+                                      std::string *error, bool recreate) {
   std::string the_meadow = meadow == "" ? DEFAULT_MEADOW : meadow;
   std::shared_ptr<Warren> bigwig =
-      Bigwig::make(the_meadow, default_recipe + recipe, error);
+      Warren::make("bigwig", default_recipe + recipe, the_meadow, error,
+                   recreate);
   if (bigwig == nullptr ||
       !bigwig->set_parameter("format", "meadowlark", error))
     return nullptr;

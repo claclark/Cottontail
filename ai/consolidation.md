@@ -16,6 +16,8 @@ benchmarks and subsequent performance work are recorded below.
 
 - `Bigwig::make(...)` and `Bigwig::consolidate(...)` share burrow DNA parsing,
   component construction, parameter loading, and sanitized inventory creation.
+  As of 2026-11-19, the path-based factories and consolidation obtain WLock
+  before that work; consolidation retains it for the complete operation.
   Activation and consolidation remain separate.
 - `Bigwig::consolidate(...)` is an offline operation. Gaps caused by aborted
   commits are allowed. It greedily partitions each consecutive Fiver run into
@@ -60,9 +62,9 @@ three-large-shard microbenchmark.
 
 ### Implemented Experiment Support
 
-- `merge` and `convert` are live Fluffle parameters rather than cached Boolean
-  fields. Lock-held policy checks default both parameters to enabled when
-  absent.
+- Background `merge` and `convert` are live Fluffle parameters. They default
+  to enabled when absent. Hazel conversion also requires a WLock, so
+  in-memory Bigwigs merge Fivers without a size cap for conversion.
 - `merge:no` prevents new merge-action selection. A worker already performing
   an action finishes it, then retires when it next checks policy.
 - `convert:no` disables all three Fiver-to-Hazel selection paths and removes
@@ -73,9 +75,10 @@ three-large-shard microbenchmark.
   merging and conversion, `merge(false)` disables merging without changing
   conversion policy, and `merge(true, false)` enables Fiver-only consolidation
   and calls `try_merge()`.
-- `meadowlark --create` accepts checked `parameter:value` assignments before
-  the first input flag and applies them with `set_parameter(...)` before
-  ingestion, updating both live Fluffle parameters and DNA.
+- Both `meadowlark --create` and `--recreate` accept `parameter:value`
+  assignments before the first input flag. The app applies them with
+  `set_parameter(...)` before ingestion, updating both live Fluffle parameters
+  and DNA.
 
 ### Experiment Results
 

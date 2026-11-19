@@ -12,17 +12,24 @@
 #include "src/simple.h"
 #include "src/stemmer.h"
 #include "src/tokenizer.h"
+#include "src/wlock.h"
 
 namespace cottontail {
 
 std::shared_ptr<Warren> SimpleWarren::make(const std::string &burrow,
                                            std::string *error) {
-  std::string the_burrow = burrow;
-  if (the_burrow == "")
-    the_burrow = DEFAULT_BURROW;
-  std::shared_ptr<Working> working = Working::make(the_burrow, error);
-  if (working == nullptr)
+  std::shared_ptr<WLock> wlock = WLock::obtain(burrow, error);
+  if (wlock == nullptr)
     return nullptr;
+  if (wlock->name() != "simple") {
+    safe_error(error) = "Not a Simple burrow: " + burrow;
+    return nullptr;
+  }
+  return make(wlock->working(), error);
+}
+
+std::shared_ptr<Warren> SimpleWarren::make(std::shared_ptr<Working> working,
+                                           std::string *error) {
   std::string dna;
   if (!read_dna(working, &dna, error))
     return nullptr;

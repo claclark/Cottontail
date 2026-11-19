@@ -10,6 +10,7 @@
 
 #include "src/owsla.h"
 #include "src/warren.h"
+#include "src/wlock.h"
 
 namespace cottontail {
 
@@ -24,6 +25,8 @@ struct Fluffle {
         std::max(2 * std::thread::hardware_concurrency(), (unsigned int)2);
     return fluffle;
   };
+  // Declared first so directory ownership outlives the remaining members.
+  std::shared_ptr<WLock> wlock;
   std::mutex lock;
   size_t workers = 0;
   size_t max_workers;
@@ -34,7 +37,6 @@ struct Fluffle {
   std::vector<HazelMergeRecovery> hazel_merges;
   std::shared_ptr<std::map<std::string, std::string>> parameters;
   std::shared_ptr<OwslaCache> cache;
-  std::shared_ptr<Working> working;
 };
 
 } // namespace cottontail

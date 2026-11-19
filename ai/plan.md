@@ -18,51 +18,62 @@ For the current Meadowlark push, the user makes all commits and runs the
 regression tests. Agent verification is compile/build-only unless the user
 explicitly requests a runtime experiment or test run.
 
-## Current Work: Burrow Locking
+## Completed: Directory Locking
 
-The user authorized a standalone WLock diff on 2026-11-18, before integration
-into Warren/Bigwig. `src/wlock.*` implements three shared-pointer factories:
+Implemented on 2026-11-19. Directory-backed Bigwig activation, creation,
+recreation, and foreground consolidation use `WLock`. A second opener
+fails with an owner diagnostic when available. Clones and background merge
+workers share the Fluffle and keep its lock alive. Standalone Hazel activation
+opens a file directly. Legacy Simple activation remains unlocked.
+
+`src/wlock.*` implements three shared-pointer factories:
 
 - `obtain`: require a directory, acquire a persistent `burrow.lock` with
   nonblocking exclusive `flock`, and write ASCII `hostname/pid` to `burrow.pid`.
+  An existing PID entry must be a regular file. PID opens refuse symlinks.
   On contention, wait one second only if the PID file is absent, then report
   its owner or a generic locked message. A missing lock file requires valid
   DNA before creation; legacy Simple burrows succeed without either lock file.
 - `create(name, burrow, error)`: require a missing target or an empty directory,
   establish the lock file, then obtain it. This operation does not initialize DNA.
-- `recreate(name, burrow, error)`: obtain an existing recognized burrow, refuse
-  Simple, and unlink its entries except `burrow.lock` and `burrow.pid`; a missing
-  target uses `create`. No recursive deletion is performed.
+- `recreate(name, burrow, error)`: obtain an existing recognized burrow and refuse
+  Simple. After ordinary `temp.*` cleanup, check the remaining entries before
+  deletion. Refuse subdirectories, non-regular entries, and read-only files.
+  Preserve `burrow.lock` and `burrow.pid`. A missing target uses `create`.
 
-WLock owns its fd and its Working; destruction closes the fd without deleting
-the lock files. Working is constructed after acquisition, or after identifying
-an unlocked Simple burrow. A pathname-based `read_dna` overload permits legacy
-validation before Working's existing constructor cleanup. Valid DNA uses the
-existing header check and recipe parser; missing or empty Warren names retain
-the historical Simple interpretation. Other type names are not restricted to
-Bigwig. An existing lock file is the new-format burrow marker, including before
-DNA has been initialized.
+WLock owns the descriptor and its Working. It constructs Working after
+acquisition or on the unlocked Simple path. Releasing the descriptor leaves
+the lock and PID files in place. For an older directory, WLock validates DNA
+before creating its first lock file. Valid DNA with a missing or empty Warren
+type is treated as Simple. A lock file identifies a new burrow even before
+DNA initialization. `name()` is empty if that burrow has no valid DNA.
+`create` rechecks directory entries after acquisition to catch a
+competing creator that populated the directory.
 
-WLock also stores the burrow type and exposes `name()`. Obtain discovers it
-from DNA after acquisition (or through the legacy Simple path). An existing
-lock marker without valid DNA still permits acquisition, with an empty name.
-Create and recreate retain the caller-supplied name for the new burrow;
-recreation checks the old type for the Simple prohibition before clearing.
+The WLock-taking Bigwig factories are private, with Warren as a friend.
+Creation requires a lock in `created` or `recreated` state and marks it
+`initialized` after writing DNA. DNA writes check close and rename and clean
+up the temporary file on failure. Direct Bigwig creation and Warren creation
+check the recipe before preparing the directory. Bigwig's public in-memory
+factory is `Bigwig::make_in_memory(recipe, error)`. In-memory Bigwigs skip
+Hazel conversion, so the conversion size cutoff does not exclude Fivers
+from ordinary merges.
 
-The user's pseudocode comparison accepted Working's existing temporary-file
-cleanup, including on the unlocked Simple path. A separately authorized narrow
-fix quotes directory names in Working's constructor shell commands, including
-single-quote escaping and `--`, while retaining glob expansion of `/temp.*`.
+`Warren::make(burrow, error)` detects the storage type. The legacy named
+activation overload accepts `"simple"`. Creation through
+`Warren::make(name, recipe, burrow, error, recreate)` currently supports
+`"bigwig"` and defaults `recreate` to false. An empty burrow path selects
+`the.burrow`. Meadowlark uses `a.meadow` by default and exposes the opt-in
+operation through `--recreate`. See [meadowlark.md](meadowlark.md).
 
-Integration is a separate step requiring authorization: the Fluffle will retain
-WLock, Bigwig factories will use its Working, and the automatic Warren opener
-will preserve standalone Hazel and legacy Simple behavior. The explicit-type
-legacy Warren factory will accept only Simple; a new
-`Warren::create(name, recipe, burrow, error)` entry point is planned. Validate
-creation arguments before clearing a burrow. No current opening or creation
-path uses WLock yet. Verification for this standalone diff is compile/build
-and branch review; the user has not requested heavy runtime testing. The full
-`bazel build -c dbg --cxxopt=-Og //...` passes. No runtime tests were run.
+`consolidate` owns the lock throughout shard recovery, conversion, and merging.
+The superseded `fiver2hazel` and `merge-hazels` tools were removed.
+
+All 60 targets compiled. The user reported basic locking tests working and
+is running broader checks. Coverage includes clone lifetime, old burrow
+activation, bad recipe retries, contention with consolidation, recreation
+preflight, PID symlinks, and failed DNA publication. The agent ran build
+checks only.
 
 ## Completed: Deletions And Text Garbage Collection
 
@@ -135,11 +146,11 @@ The user continues to run regression tests and make commits.
    reclamation and consolidation. Posting-log recovery uses the completed
    output index for reclamation decisions, including recovered feature work.
 
-## Current Checkpoint
+## Completed: Other Implementation Checkpoints
 
-The SSR web demo is ready for the user's commit as of 2026-10-31.
-`apps/ssr-web.py` provides a single raw JSON display with query, next-result,
-and full-document actions, visible cover tags with bold content, an editable
+The SSR web demo in `apps/ssr-web.py` provides a single raw JSON display with
+query, next-result, and full-document actions, visible cover tags with bold
+content, an editable
 default query, and configurable heading information through `--info`.
 Launch instructions are in `ssr-demo/README.md`. Python and embedded JavaScript
 syntax checks pass. The earlier HTTP query/document check and the user's
@@ -159,9 +170,8 @@ Further demo support work needs discussion and authorization.
 The application reorganization is complete as of 2026-09-27. Current utilities
 remain in `apps/`; historical experiments, SPLADE tools, and benchmarks are in
 `expr/`; the paper's TREC-update and JSON-table programs are in `iirj/`.
-Shared `collection.*` and `walk.*` helpers now live in `src/`. All 42 binary
-targets are preserved under their respective packages. The full optimized
-build passes; agent verification did not run regression tests.
+Shared `collection.*` and `walk.*` helpers now live in `src/`. The full
+optimized build passed at the reorganization checkpoint.
 
 The six direct side-effecting assertion cases have been corrected for
 `NDEBUG` builds. Fiver publication and four text-recovery truncations use the
@@ -219,9 +229,9 @@ The user makes commits and runs the broader regression suite. The first SPLADE
 implementation was authorized on 2026-09-29; the user subsequently reported
 all eight regression targets passing and a full MS MARCO run. On 2026-09-30,
 the user authorized the linked-list traversal described below. That follow-up
-is implemented; the user's full run took 529,972 ms with unchanged MRR@10.
-Regression tests for this follow-up remain pending. Further source changes need
-discussion and authorization. Measurements are in [splade.md](splade.md).
+is implemented. The user's full run took 529,972 ms with unchanged MRR@10,
+and subsequent regression results show both SPLADE targets passing.
+Measurements are in [splade.md](splade.md).
 
 The first SPLADE implementation supports ordinary JSON records in the
 same index. The user's data includes `docid`, `raw_text`, and `splade_vector`:
@@ -338,7 +348,7 @@ read epoch. Both narrow corrections compile successfully. The user subsequently
 tested the change in several ways, including against indices dating from 2022,
 newer Hazel/Fiver indices, and a build from scratch, and reports that it looks
 good. The existing 1.3 TB ClimbMix index also booted and passed extensive use
-without observed problems. The commit remains with the user.
+without observed problems.
 
 The broader long-running-server memory discussion remains deferred. Bigwig
 trimming, Hazel text-cache eviction, and service pressure policy are preserved

@@ -94,18 +94,8 @@ int main(int argc, char **argv) {
   for (auto &document : documents)
     docq.push(document);
   std::string burrow = "fiver.burrow";
-  std::shared_ptr<cottontail::Working> working =
-      cottontail::Working::mkdir(burrow);
-  ASSERT_NE(working, nullptr);
-
-  std::shared_ptr<cottontail::Featurizer> featurizer =
-      cottontail::Featurizer::make("hashing", "");
-  ASSERT_NE(featurizer, nullptr);
-  std::shared_ptr<cottontail::Tokenizer> tokenizer =
-      cottontail::Tokenizer::make("ascii", "xml");
-  ASSERT_NE(tokenizer, nullptr);
   std::shared_ptr<cottontail::Bigwig> bigwig =
-      cottontail::Bigwig::make(working, featurizer, tokenizer);
+      cottontail::Bigwig::make(burrow, "tokenizer:name:ascii tokenizer:xml");
   ASSERT_NE(bigwig, nullptr);
 
   bigwig->start();

@@ -27,11 +27,16 @@ public:
   SimpleWarren &operator=(SimpleWarren &&) = delete;
 
 private:
+  friend class Warren;
+  static std::shared_ptr<Warren> make(std::shared_ptr<Working> working,
+                                      std::string *error);
   SimpleWarren(std::shared_ptr<Working> working,
                std::shared_ptr<Featurizer> featurizer,
                std::shared_ptr<Tokenizer> tokenizer, std::shared_ptr<Idx> idx,
                std::shared_ptr<Txt> txt)
-      : Warren(working, featurizer, tokenizer, idx, txt){};
+      : Warren(working, featurizer, tokenizer, idx, txt) {
+    name_ = "simple";
+  }
   std::shared_ptr<Warren> clone_(std::string *error) final;
   bool set_parameter_(const std::string &key, const std::string &value,
                       std::string *error) final;

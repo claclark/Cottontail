@@ -29,6 +29,11 @@ public:
                                       std::string *error = nullptr);
   static std::shared_ptr<Warren> make(const std::string &burrow,
                                       std::string *error = nullptr);
+  static std::shared_ptr<Warren> make(const std::string &name,
+                                      const std::string &recipe,
+                                      const std::string &burrow,
+                                      std::string *error = nullptr,
+                                      bool recreate = false);
   static void commit_all(std::vector<std::shared_ptr<Warren>> warrens);
   Warren(std::shared_ptr<Working> working,
          std::shared_ptr<Featurizer> featurizer,

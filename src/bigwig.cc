@@ -501,7 +501,35 @@ const std::string default_dna = "["
                                 "  warren:\"bigwig\","
                                 "]";
 
-struct BigwigContext {
+bool bigwig_dna(const std::string &recipe, std::string *dna,
+                std::string *error) {
+  *dna = default_dna;
+  std::regex whitespace("\\s+");
+  std::vector<std::string> options{
+      std::sregex_token_iterator(recipe.begin(), recipe.end(), whitespace, -1),
+      {}};
+  for (const auto &option : options)
+    if (!interpret_option(dna, option, error))
+      return false;
+  return true;
+}
+
+std::shared_ptr<Working> bigwig_working(std::shared_ptr<WLock> wlock,
+                                       std::string *error) {
+  if (wlock == nullptr || wlock->working() == nullptr) {
+    safe_error(error) = "Bigwig needs a burrow lock";
+    return nullptr;
+  }
+  if (wlock->name() != "bigwig") {
+    safe_error(error) = "Bigwig cannot open burrow type: " + wlock->name();
+    return nullptr;
+  }
+  return wlock->working();
+}
+
+} // namespace
+
+struct Bigwig::Context {
   std::shared_ptr<Working> working;
   std::shared_ptr<Featurizer> featurizer;
   std::shared_ptr<Tokenizer> tokenizer;
@@ -513,41 +541,41 @@ struct BigwigContext {
   std::string container_query;
   std::string txt_recipe;
   SanitizedInventory inventory;
+
+  bool configure(const std::string &dna, std::string *error,
+                 bool check_featurizer = false);
+  bool load(std::shared_ptr<WLock> wlock, std::string *error);
 };
 
-bool load_bigwig_context(const std::string &burrow, BigwigContext *context,
-                         std::string *error) {
-  if (context == nullptr) {
-    safe_error(error) = "Bigwig needs a context";
-    return false;
-  }
-  std::string the_burrow = burrow;
-  if (the_burrow == "")
-    the_burrow = DEFAULT_BURROW;
-  BigwigContext found;
-  found.working = Working::make(the_burrow, error);
-  if (found.working == nullptr)
-    return false;
-  std::string dna;
-  if (!read_dna(found.working, &dna, error))
-    return false;
+bool Bigwig::Context::configure(const std::string &dna, std::string *error,
+                                 bool check_featurizer) {
   std::map<std::string, std::string> dna_parameters;
   if (!cook(dna, &dna_parameters, error))
     return false;
+  if (dna_parameters["warren"] != "bigwig") {
+    safe_error(error) = "Invalid Bigwig warren type";
+    return false;
+  }
   std::map<std::string, std::string> featurizer_parameters;
   if (!cook(dna_parameters["featurizer"], &featurizer_parameters, error))
     return false;
-  found.featurizer =
-      Featurizer::make(featurizer_parameters["name"],
-                       featurizer_parameters["recipe"], error, found.working);
-  if (found.featurizer == nullptr)
-    return false;
+  if (check_featurizer) {
+    if (!Featurizer::check(featurizer_parameters["name"],
+                           featurizer_parameters["recipe"], error))
+      return false;
+  } else {
+    featurizer =
+        Featurizer::make(featurizer_parameters["name"],
+                         featurizer_parameters["recipe"], error, working);
+    if (featurizer == nullptr)
+      return false;
+  }
   std::map<std::string, std::string> tokenizer_parameters;
   if (!cook(dna_parameters["tokenizer"], &tokenizer_parameters, error))
     return false;
-  found.tokenizer = Tokenizer::make(tokenizer_parameters["name"],
-                                    tokenizer_parameters["recipe"], error);
-  if (found.tokenizer == nullptr)
+  tokenizer = Tokenizer::make(tokenizer_parameters["name"],
+                              tokenizer_parameters["recipe"], error);
+  if (tokenizer == nullptr)
     return false;
   std::map<std::string, std::string> idx_parameters;
   if (!cook(dna_parameters["idx"], &idx_parameters, error))
@@ -555,15 +583,15 @@ bool load_bigwig_context(const std::string &burrow, BigwigContext *context,
   std::map<std::string, std::string> idx_recipe_parameters;
   if (!cook(idx_parameters["recipe"], &idx_recipe_parameters, error))
     return false;
-  found.posting_compressor = Compressor::make(
+  posting_compressor = Compressor::make(
       idx_recipe_parameters["posting_compressor"],
       idx_recipe_parameters["posting_compressor_recipe"], error);
-  if (found.posting_compressor == nullptr)
+  if (posting_compressor == nullptr)
     return false;
-  found.fvalue_compressor = Compressor::make(
+  fvalue_compressor = Compressor::make(
       idx_recipe_parameters["fvalue_compressor"],
       idx_recipe_parameters["fvalue_compressor_recipe"], error);
-  if (found.fvalue_compressor == nullptr)
+  if (fvalue_compressor == nullptr)
     return false;
   std::map<std::string, std::string> txt_parameters;
   if (!cook(dna_parameters["txt"], &txt_parameters, error))
@@ -571,68 +599,109 @@ bool load_bigwig_context(const std::string &burrow, BigwigContext *context,
   std::map<std::string, std::string> txt_recipe_parameters;
   if (!cook(txt_parameters["recipe"], &txt_recipe_parameters, error))
     return false;
-  found.text_compressor =
+  text_compressor =
       Compressor::make(txt_recipe_parameters["compressor"],
                        txt_recipe_parameters["compressor_recipe"], error);
-  if (found.text_compressor == nullptr)
+  if (text_compressor == nullptr)
     return false;
-  found.txt_recipe = txt_parameters["recipe"];
+  txt_recipe = txt_parameters["recipe"];
   if (dna_parameters.find("parameters") != dna_parameters.end()) {
-    if (!cook(dna_parameters["parameters"], &found.parameters, error))
+    if (!cook(dna_parameters["parameters"], &parameters, error))
       return false;
-    auto container_element = found.parameters.find("container");
-    if (container_element != found.parameters.end())
-      found.container_query = container_element->second;
-    auto stemmer_element = found.parameters.find("stemmer");
-    if (stemmer_element != found.parameters.end() &&
+    auto container_element = parameters.find("container");
+    if (container_element != parameters.end())
+      container_query = container_element->second;
+    auto stemmer_element = parameters.find("stemmer");
+    if (stemmer_element != parameters.end() &&
         stemmer_element->second != "") {
-      found.stemmer = Stemmer::make(stemmer_element->second, "", error);
-      if (found.stemmer == nullptr)
+      stemmer = Stemmer::make(stemmer_element->second, "", error);
+      if (stemmer == nullptr)
         return false;
     }
   }
-  if (!sanitize(found.working, &found.inventory, error))
-    return false;
-  *context = found;
   return true;
 }
 
-} // namespace
+bool Bigwig::Context::load(std::shared_ptr<WLock> wlock, std::string *error) {
+  working = bigwig_working(wlock, error);
+  std::string dna;
+  return working != nullptr && read_dna(working, &dna, error) &&
+         configure(dna, error) && sanitize(working, &inventory, error);
+}
+
+bool Bigwig::check_recipe(const std::string &recipe, std::string *error) {
+  std::string dna;
+  Context context;
+  // A featurizer may need the new Working directory to be initialized.
+  return bigwig_dna(recipe, &dna, error) && context.configure(dna, error, true);
+}
+
+std::shared_ptr<Bigwig> Bigwig::make_in_memory(const std::string &recipe,
+                                               std::string *error) {
+  return make(std::shared_ptr<WLock>{}, recipe, error);
+}
 
 std::shared_ptr<Bigwig> Bigwig::make(const std::string &burrow,
                                      const std::string &recipe,
                                      std::string *error) {
-  std::string the_burrow = burrow;
-  if (the_burrow == "")
-    the_burrow = DEFAULT_BURROW;
-  std::shared_ptr<Working> working = Working::mkdir(the_burrow, error);
-  if (working == nullptr)
+  if (!check_recipe(recipe, error))
     return nullptr;
-  std::string dna;
-  if (read_dna(working, &dna)) {
-    safe_error(error) = "Burrow already has cottontail dna";
+  std::shared_ptr<WLock> wlock = WLock::create("bigwig", burrow, error);
+  if (wlock == nullptr)
     return nullptr;
-  }
-  dna = default_dna;
-  std::regex whitespace("\\s+");
-  std::vector<std::string> options{
-      std::sregex_token_iterator(recipe.begin(), recipe.end(), whitespace, -1),
-      {}};
-  for (auto &option : options)
-    if (!interpret_option(&dna, option, error))
+  return make(wlock, recipe, error);
+}
+
+std::shared_ptr<Bigwig> Bigwig::make(std::shared_ptr<WLock> wlock,
+                                     const std::string &recipe,
+                                     std::string *error) {
+  std::shared_ptr<Working> working;
+  if (wlock != nullptr) {
+    working = bigwig_working(wlock, error);
+    if (working == nullptr)
       return nullptr;
+    if (wlock->status() != WLock::Status::created &&
+        wlock->status() != WLock::Status::recreated) {
+      safe_error(error) = "Bigwig needs a newly created or recreated burrow";
+      return nullptr;
+    }
+  }
+  std::string dna;
+  if (!bigwig_dna(recipe, &dna, error))
+    return nullptr;
+  if (wlock == nullptr) {
+    Context context;
+    if (!context.configure(dna, error))
+      return nullptr;
+    return activate(wlock, context, error);
+  }
   if (!write_dna(working, dna, error))
     return nullptr;
-  return make(the_burrow, error);
+  wlock->initialized();
+  return make(wlock, error);
 }
 
 std::shared_ptr<Bigwig> Bigwig::make(const std::string &burrow,
                                      std::string *error) {
-  BigwigContext context;
-  if (!load_bigwig_context(burrow, &context, error))
+  std::shared_ptr<WLock> wlock = WLock::obtain(burrow, error);
+  if (wlock == nullptr)
     return nullptr;
+  return make(wlock, error);
+}
+
+std::shared_ptr<Bigwig> Bigwig::make(std::shared_ptr<WLock> wlock,
+                                     std::string *error) {
+  Context context;
+  if (!context.load(wlock, error))
+    return nullptr;
+  return activate(wlock, context, error);
+}
+
+std::shared_ptr<Bigwig> Bigwig::activate(std::shared_ptr<WLock> wlock,
+                                        const Context &context,
+                                        std::string *error) {
   std::shared_ptr<Fluffle> fluffle = Fluffle::make();
-  fluffle->working = context.working;
+  fluffle->wlock = wlock;
   (*fluffle->parameters) = context.parameters;
   fluffle->hazel_merges = context.inventory.hazel_merges;
   std::vector<std::shared_ptr<Owsla>> visible;
@@ -693,10 +762,10 @@ std::shared_ptr<Bigwig> Bigwig::make(const std::string &burrow,
   bigwig->text_compressor_ = context.text_compressor;
   bigwig->txt_recipe_ = context.txt_recipe;
   if (context.stemmer != nullptr)
-    bigwig->set_stemmer(context.stemmer);
-  if (context.container_query != "")
-    bigwig->set_default_container(context.container_query);
-  bigwig->try_merge();
+    bigwig->stemmer_ = context.stemmer;
+  bigwig->default_container_ = context.container_query;
+  if (!visible.empty())
+    bigwig->try_merge();
   return bigwig;
 }
 
@@ -723,8 +792,11 @@ bool Bigwig::consolidate(const std::string &burrow, std::string *error,
   auto phase_start = SteadyClock::now();
   report("Opening and sanitizing " +
          (burrow == "" ? std::string(DEFAULT_BURROW) : burrow) + "...");
-  BigwigContext context;
-  if (!load_bigwig_context(burrow, &context, error))
+  std::shared_ptr<WLock> wlock = WLock::obtain(burrow, error);
+  if (wlock == nullptr)
+    return false;
+  Context context;
+  if (!context.load(wlock, error))
     return false;
   report("Opening and sanitizing took " + std::to_string(elapsed(phase_start)) +
          " ms");
@@ -945,59 +1017,6 @@ bool Bigwig::consolidate(const std::string &burrow, std::string *error,
   return true;
 }
 
-std::shared_ptr<Bigwig> Bigwig::make(
-    std::shared_ptr<Working> working, std::shared_ptr<Featurizer> featurizer,
-    std::shared_ptr<Tokenizer> tokenizer, std::shared_ptr<Fluffle> fluffle,
-    std::string *error, std::shared_ptr<Compressor> posting_compressor,
-    std::shared_ptr<Compressor> fvalue_compressor,
-    std::shared_ptr<Compressor> text_compressor) {
-  if (working != nullptr) {
-    std::string dna;
-    if (read_dna(working, &dna, error)) {
-      safe_error(error) = "Burrow already has cottontail dna";
-      return nullptr;
-    }
-  }
-  if (featurizer == nullptr) {
-    safe_error(error) = "Bigwig needs a featurizer (got nullptr)";
-    return nullptr;
-  }
-  if (tokenizer == nullptr) {
-    safe_error(error) = "Bigwig needs a tokenizer (got nullptr)";
-    return nullptr;
-  }
-  std::shared_ptr<Bigwig> bigwig = std::shared_ptr<Bigwig>(
-      new Bigwig(working, featurizer, tokenizer, nullptr, nullptr));
-  assert(bigwig != nullptr);
-  bigwig->fiver_ = nullptr;
-  if (fluffle == nullptr)
-    bigwig->fluffle_ = Fluffle::make();
-  else
-    bigwig->fluffle_ = fluffle;
-  bigwig->fluffle_->working = working;
-  std::shared_ptr<Compressor> null_compressor = nullptr;
-  if (posting_compressor == nullptr || fvalue_compressor == nullptr ||
-      text_compressor == nullptr)
-    null_compressor = Compressor::make("null", "");
-  if (posting_compressor == nullptr)
-    bigwig->posting_compressor_ = null_compressor;
-  else
-    bigwig->posting_compressor_ = posting_compressor;
-  if (fvalue_compressor == nullptr)
-    bigwig->fvalue_compressor_ = null_compressor;
-  else
-    bigwig->fvalue_compressor_ = fvalue_compressor;
-  if (text_compressor == nullptr)
-    bigwig->text_compressor_ = null_compressor;
-  else
-    bigwig->text_compressor_ = text_compressor;
-  bigwig->posting_factory_ = SimplePostingFactory::make(
-      bigwig->posting_compressor_, bigwig->fvalue_compressor_);
-  if (working != nullptr && !write_dna(working, bigwig->recipe(), error))
-    return nullptr;
-  return bigwig;
-}
-
 void Bigwig::merge(bool on, bool convert) {
   if (on)
     set_parameter("convert", okay(convert));
@@ -1015,6 +1034,7 @@ std::shared_ptr<Warren> Bigwig::clone_(std::string *error) {
   bigwig->fvalue_compressor_ = fvalue_compressor_;
   bigwig->posting_factory_ = posting_factory_;
   bigwig->text_compressor_ = text_compressor_;
+  bigwig->txt_recipe_ = txt_recipe_;
   bigwig->default_container_ = default_container_;
   if (stemmer_ != nullptr) {
     std::shared_ptr<cottontail::Stemmer> the_stemmer =
@@ -1165,6 +1185,11 @@ bool fluffle_parameter_enabled(std::shared_ptr<Fluffle> fluffle,
   return parameter == fluffle->parameters->end() || okay(parameter->second);
 }
 
+bool fiver_conversion_enabled(const std::shared_ptr<Fluffle> &fluffle) {
+  return fluffle->wlock != nullptr &&
+         fluffle_parameter_enabled(fluffle, "convert");
+}
+
 bool find_sequence(const std::vector<bool> &a, size_t *start, size_t *end) {
   size_t best_len = 0;
   size_t best_start = 0;
@@ -1247,7 +1272,7 @@ bool find_tiny_fiver_run(std::shared_ptr<Fluffle> fluffle, size_t *start,
 
 bool find_smallest_fiver_pair(std::shared_ptr<Fluffle> fluffle, size_t *start,
                               size_t *end) {
-  bool convert = fluffle_parameter_enabled(fluffle, "convert");
+  bool convert = fiver_conversion_enabled(fluffle);
   bool found = false;
   size_t best = 0;
   addr best_sum = 0;
@@ -1280,7 +1305,7 @@ bool find_smallest_fiver_pair(std::shared_ptr<Fluffle> fluffle, size_t *start,
 
 bool find_stranded_fiver_conversion(std::shared_ptr<Fluffle> fluffle,
                                     size_t *start, size_t *end) {
-  if (!fluffle_parameter_enabled(fluffle, "convert"))
+  if (!fiver_conversion_enabled(fluffle))
     return false;
   if (fluffle->warrens.size() >= 2) {
     auto warren = fluffle->warrens[0];
@@ -1313,7 +1338,7 @@ bool find_stranded_fiver_conversion(std::shared_ptr<Fluffle> fluffle,
 
 bool find_oldest_large_fiver_conversion(std::shared_ptr<Fluffle> fluffle,
                                         size_t *start, size_t *end) {
-  if (!fluffle_parameter_enabled(fluffle, "convert"))
+  if (!fiver_conversion_enabled(fluffle))
     return false;
   for (size_t i = 0; i < fluffle->warrens.size(); i++) {
     auto warren = fluffle->warrens[i];
@@ -1391,7 +1416,7 @@ bool find_hazel_action(std::shared_ptr<Fluffle> fluffle, size_t *start,
 
 bool find_lone_fiver_cleanup(std::shared_ptr<Fluffle> fluffle, size_t *start,
                              size_t *end) {
-  if (!fluffle_parameter_enabled(fluffle, "convert"))
+  if (!fiver_conversion_enabled(fluffle))
     return false;
   bool found_fiver = false;
   bool fiver_eligible = false;
@@ -1512,7 +1537,8 @@ bool prepare_hazel_recoveries(std::shared_ptr<Fluffle> fluffle,
         recovery.target.end == action.end)
       continue;
     if (hazel_recovery_conflicts(recovery, action)) {
-      if (!remove_hazel_merge_segments(fluffle->working, recovery, error))
+      if (!remove_hazel_merge_segments(fluffle->wlock->working(), recovery,
+                                       error))
         return false;
     } else {
       hazel_merges.push_back(recovery);
@@ -1528,7 +1554,7 @@ bool validate_hazel_action(
     std::vector<std::shared_ptr<Hazel>> *hazels, std::string *destination,
     std::shared_ptr<std::map<std::string, std::string>> *parameters,
     std::string *error) {
-  if (fluffle == nullptr || fluffle->working == nullptr || selected.size() < 2)
+  if (fluffle == nullptr || fluffle->wlock == nullptr || selected.size() < 2)
     return false;
   if (hazels != nullptr)
     hazels->clear();
@@ -1557,7 +1583,7 @@ bool validate_hazel_action(
       hazels->push_back(hazel);
   }
   if (destination != nullptr)
-    *destination = fluffle->working->make_name(
+    *destination = fluffle->wlock->working()->make_name(
         hazel_default_name(sequence_start, sequence_end));
   if (parameters != nullptr) {
     *parameters = std::make_shared<std::map<std::string, std::string>>();

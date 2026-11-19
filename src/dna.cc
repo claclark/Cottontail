@@ -1,5 +1,8 @@
 #include "src/dna.h"
 
+#include <cerrno>
+#include <cstdio>
+#include <cstring>
 #include <fstream>
 #include <memory>
 #include <string>
@@ -50,7 +53,18 @@ bool write_dna(std::shared_ptr<Working> working, const std::string &dna,
   out << HEADER << "\n";
   out << dna;
   out.close();
-  std::rename(temp_filename.c_str(), dna_filename.c_str());
+  if (out.fail()) {
+    std::remove(temp_filename.c_str());
+    safe_error(error) = "Can't finish writing configuration to: " + temp_filename;
+    return false;
+  }
+  if (std::rename(temp_filename.c_str(), dna_filename.c_str()) != 0) {
+    int rename_error = errno;
+    std::remove(temp_filename.c_str());
+    safe_error(error) = "Can't publish configuration to: " + dna_filename +
+                        ": " + std::strerror(rename_error);
+    return false;
+  }
   return true;
 }
 

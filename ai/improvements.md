@@ -10,6 +10,8 @@ Deletion merge semantics, deletion-aware translation, and Hazel text garbage
 collection are complete as of 2026-11-13 and have been removed from this list.
 The implementation and TREC update/deletion verification are recorded in
 `ai/hazel.md` and the completed section of `ai/plan.md`.
+Directory locking is complete. The factories, lifecycle rules, and
+verification coverage are recorded in [the completed plan](plan.md#completed-directory-locking).
 
 ## Warren Memory Trimming
 
@@ -67,13 +69,12 @@ The implementation and TREC update/deletion verification are recorded in
   requested burrow. Join all activation tasks before serving requests, preserve
   command-line collection order, and report activation or GCL-validation errors
   after the join.
-- Implement parallel activation together with the planned "burrow is already
-  open" mechanism. Opening should use canonical burrow identity and an atomic
-  get-or-open operation: one caller performs activation, concurrent callers wait
-  for it, and later callers reuse the existing open dynamic state.
-- Do not reject repeated burrow arguments. They should reuse the existing
-  Fluffle rather than create independent Fluffles that can concurrently merge
-  the same directory. Callers may receive separate Warren views where required.
+- An optional in-process get-or-open operation could let repeated arguments
+  reuse an existing Fluffle. It would need canonical burrow identity and
+  coordination so one caller activates the burrow and concurrent callers wait
+  for it. Today a separate activation of an already-open Bigwig encounters
+  lock contention. Callers with an active Bigwig can use `clone()` for
+  additional views.
 - Give each Bigwig the total number of distinct Bigwigs active in the process.
   This is workload context, not a caller-selected merge-thread count. Repeated
   arguments and additional Warren views do not increase the total.
@@ -98,8 +99,8 @@ The implementation and TREC update/deletion verification are recorded in
 - The gate need not hold the Fluffle mutex across commit calls that acquire that
   mutex themselves. A flag plus waiting mechanism avoids recursive locking and
   preserves parallel, expensive `ready()` work while serializing only the fast
-  publication phase. Cross-process exclusion remains the separate
-  directory-locking question below.
+  publication phase. This gate is for views sharing an open Bigwig.
+  WLock already excludes independent openers of the directory.
 
 ## Restartable Builder for Static Shards
 
@@ -140,18 +141,10 @@ follow-ups are:
   one. The `@` record and `:type:` field convention already permits unknown
   types to be inspected or ignored without global component registration.
 
-## Directory-level locking
+## Vocabulary Featurizer Replacement
 
-- The standalone `WLock` class is implemented as of 2026-11-18. Its persistent
-  `burrow.lock` provides exclusion and `burrow.pid` records ASCII host/pid
-  diagnostics. The fd closes with the object; neither file is removed on
-  release, and no manual stale-lock cleanup is needed.
-- Integration remains pending: one Fluffle retains WLock across its Bigwigs
-  and merge workers; opening, creation, recreation, and offline consolidation
-  must acquire it before Working cleanup or shard sanitization. Simple keeps
-  its legacy unlocked behavior. The agreed scope is in `ai/plan.md`.
-- Preserve existing shard sanitization and restartable merge recovery after
-  acquisition; locking does not replace them.
+- Replace the legacy vocabulary featurizer in a separate design pass. Its
+  destructor can write `vocab` after its Bigwig releases the burrow lock.
 
 ## Working File Operations
 

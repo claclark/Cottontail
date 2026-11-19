@@ -18,12 +18,7 @@ using Results = std::map<std::string, std::vector<std::string>>;
 class Splade : public ::testing::Test {
 protected:
   void SetUp() override {
-    auto featurizer = cottontail::Featurizer::make("hashing", "");
-    auto tokenizer = cottontail::Tokenizer::make("utf8", "");
-    ASSERT_NE(featurizer, nullptr);
-    ASSERT_NE(tokenizer, nullptr);
-    warren = cottontail::Bigwig::make(nullptr, featurizer, tokenizer,
-                                    cottontail::Fluffle::make(), &error);
+    warren = cottontail::Bigwig::make_in_memory("", &error);
     ASSERT_NE(warren, nullptr) << error;
     warren->merge(false);
   }

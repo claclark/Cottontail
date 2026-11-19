@@ -99,34 +99,12 @@ std::map<std::string, std::map<std::string, cottontail::fval>> invert_qrels(
 std::shared_ptr<cottontail::Warren>
 make_warren(bool compress, std::string *error) {
   std::string burrow = "trec.burrow";
-  std::shared_ptr<cottontail::Working> working =
-      cottontail::Working::mkdir(burrow, error);
-  if (working == nullptr)
-    return nullptr;
-  std::shared_ptr<cottontail::Featurizer> featurizer =
-      cottontail::Featurizer::make("hashing", "", error);
-  if (featurizer == nullptr)
-    return nullptr;
-  std::shared_ptr<cottontail::Tokenizer> tokenizer =
-      cottontail::Tokenizer::make("ascii", "xml", error);
-  if (tokenizer == nullptr)
-    return nullptr;
-  auto posting_compressor =
-      cottontail::Compressor::make(compress ? "post" : "null", "", error);
-  if (posting_compressor == nullptr)
-    return nullptr;
-  auto value_compressor =
-      cottontail::Compressor::make(compress ? "zlib" : "null", "", error);
-  if (value_compressor == nullptr)
-    return nullptr;
-  auto text_compressor =
-      cottontail::Compressor::make(compress ? "zlib" : "null", "", error);
-  if (text_compressor == nullptr)
-    return nullptr;
+  std::string recipe = "tokenizer:name:ascii tokenizer:xml";
+  if (compress)
+    recipe += " idx:posting_compressor:post idx:fvalue_compressor:zlib"
+              " txt:compressor:zlib";
   std::shared_ptr<cottontail::Bigwig> bigwig =
-      cottontail::Bigwig::make(working, featurizer, tokenizer, error, nullptr,
-                              posting_compressor, value_compressor,
-                              text_compressor);
+      cottontail::Bigwig::make(burrow, recipe, error);
   if (bigwig == nullptr)
     return nullptr;
   bigwig->start();

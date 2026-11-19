@@ -386,9 +386,10 @@ in a fresh started read epoch.
 `Warren::commit_all(...)` currently publishes its already-readied Fivers
 sequentially. A read epoch starting during that short window can observe a
 proper subset, usually worker data before the final source or forager marker.
-Recovery still resolves the coordinated set, and ordinary Meadowlark command
-use does not overlap operations this way. A publication gate for newly starting
-readers is recorded as a possible improvement in `ai/improvements.md`.
+Recovery still resolves the coordinated set. WLock excludes separate opens
+of the Bigwig directory. The visibility window applies to views that share
+one open Bigwig. A publication gate for those views is recorded as a possible
+improvement in `ai/improvements.md`.
 
 Any future file adapter must preserve the same contract: an explicit typed
 metadata record, a canonical `/` identity, a local `//`, a filename feature on
@@ -424,10 +425,19 @@ the user reports that the complete regression suite and additional tests pass.
 The user also verified current MS MARCO construction and ranking and continued
 to query older indices successfully.
 
-## Create-Time Warren Parameters
+## Creation And Recreation
+
+`--create` accepts a missing target or an empty directory. `--recreate` can
+also clear an existing recognized burrow. Simple burrows are ineligible.
+Recreation takes the burrow lock, runs the usual `temp.*` cleanup, and checks
+the rest of the directory before deleting files. The checks reject
+subdirectories, non-regular entries, and
+read-only files. The lock and PID files stay in place. With no `--meadow`
+argument, the target is `a.meadow`.
 
 The Meadowlark command accepts Warren parameter assignments immediately after
-`--create` and before the first input flag:
+`--create` or `--recreate` and the optional tokenizer specification, before
+the first input flag:
 
 ```text
 meadowlark --create convert:no --tsv collection.tsv

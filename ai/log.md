@@ -1130,3 +1130,103 @@
   Simple path. Updated the plan and notes with that scope and the quoting fix.
 - Full `bazel build -c dbg --cxxopt=-Og //...` and whitespace checks pass.
   No runtime tests or commits were performed.
+
+2026-11-19T00:18:09Z
+- Integrated WLock into the two Bigwig path-based factories without changing
+  `warren.*`. Added WLock overloads for activation and recipe initialization;
+  the path wrappers obtain/create and delegate. Initialization requires an
+  empty directory apart from `burrow.lock` and `burrow.pid`, then writes DNA
+  and activates using the same lock and Working. No implicit recreation.
+- The Fluffle retains WLock through clones and detached merge workers. Its
+  lock member is declared before the remaining state so it is destroyed last.
+  The existing Working member and component-based/in-memory factory remain
+  unchanged. Consolidation shares the locked context loader and retains a
+  local WLock throughout the offline operation.
+- Added `Bigwig.LockedFactories` covering the overloads and path wrappers,
+  clone ownership, contention/release, nonempty initialization refusal, recipe
+  preservation, and consolidation contention. Reopening waits for any retiring
+  background worker. Updated the plan, notes, and consolidation/locking records.
+  The Warren factory rewrite remains the next planned step, including removal
+  of its preliminary Working cleanup before locking.
+- Full `bazel build -c dbg --cxxopt=-Og //...` passes; the aggregate test binary
+  also recompiles after the final test review. Whitespace checks pass. No
+  runtime tests or commits were performed.
+
+2026-11-19T00:24:13Z
+- Replaced Bigwig's directory-rescan helper with WLock lifecycle status, as
+  requested. WLock records obtained, created, recreated, or initialized;
+  recipe initialization accepts only created/recreated and calls `initialized()`
+  immediately after successful DNA writing, before activation. A rejected
+  recipe leaves creation readiness available for retry.
+- Removed `empty_bigwig_burrow` and its directory-scanning includes. Extended
+  `Bigwig.LockedFactories` to cover creation/recreation readiness, retry after
+  recipe rejection, and refusal to initialize the same lock twice. Updated
+  the plan and notes. Warren integration remains the next step.
+- Full `bazel build -c dbg --cxxopt=-Og //...` and whitespace checks pass.
+  No runtime tests or commits were performed.
+
+2026-11-19T00:43:32Z
+- The component-based Bigwig factory now accepts a nullable burrow path.
+  A path goes through WLock creation before Working cleanup and DNA writing.
+  A null path builds in memory and can use a supplied Fluffle. Removed the
+  separate Fluffle Working member and routed Hazel merge file operations
+  through WLock's Working.
+- WLock checks emptiness under the acquired lock before returning created
+  status. Updated the TREC demo, dynamic experiment, and affected tests to
+  pass paths and release active Bigwigs before reopening. The mixed-shard
+  regression compares against a separate reference burrow.
+- The full debug build and whitespace checks pass. Runtime tests remain with
+  the user.
+
+2026-11-19T01:08:17Z
+- Removed the two component-taking Bigwig factories. The TREC example,
+  dynamic experiment, and disk-backed fixtures now create Bigwigs from recipes.
+  The WLock-and-recipe overload constructs in-memory Bigwigs when passed a
+  null WLock. In-memory fixtures now use that overload and clone shared views.
+- Bigwig clones retain the configured text wrapper. Malformed recipe options
+  return an error, and empty Bigwigs skip the startup merge worker.
+- The full debug build and whitespace checks pass. Runtime tests remain with
+  the user.
+
+2026-11-19T18:05:11Z
+- Warren dispatches directory activation through WLock and opens standalone
+  Hazels directly. The named legacy opener accepts Simple only. Subtypes load
+  their own name, container, and stemmer.
+- Added recipe-based Warren creation for Bigwig, with an optional recreation
+  flag defaulting to false. Type and recipe checks precede WLock creation or
+  recreation. Added coverage for lock contention, refusal to clear ordinary
+  directories, preservation on invalid recipes, and successful recreation.
+- The full debug build and whitespace checks pass. Runtime tests remain with
+  the user.
+
+2026-11-19T18:51:01Z
+- Background merge selection requires a WLock for Fiver-to-Hazel conversion.
+  It uses the same condition when checking whether large Fivers can merge,
+  allowing in-memory Fivers to keep merging at any size.
+
+2026-11-19T19:06:10Z
+- Added `meadowlark --recreate` as an alternative to `--create`. Meadowlark
+  passes the flag to Warren's creation factory. The CLI parses input arguments
+  and walks input paths before creating or recreating the meadow.
+
+2026-11-19T20:18:17Z
+- Added recreation preflight after locking and temporary-file cleanup. It
+  checks all remaining entries before deleting burrow contents. PID files
+  must be regular files, and PID opens refuse symlinks.
+- Removed the `fiver2hazel` and `merge-hazels` sources and targets. Bigwig's
+  WLock-taking factories are private to Bigwig and Warren. In-memory
+  callers use `Bigwig::make_in_memory`.
+- DNA writes now report close and rename failures and remove temporary
+  files on those failures. Extended factory and DNA failure coverage.
+
+2026-11-19T20:29:53Z
+- Direct Bigwig creation checks the recipe before creating lock files.
+  Extended `Bigwig.LockedFactories` to cover retrying with a corrected recipe.
+
+2026-11-19T20:40:16Z
+- Moved directory locking to the completed section of the plan. Updated
+  Meadowlark creation, forage concurrency, and consolidation notes to match
+  the locked paths. Kept same-process commit visibility and vocabulary
+  replacement in the improvements list.
+- Refreshed the CLI and test inventory and recorded the subsequent passing
+  SPLADE regression targets. Documentation only.
