@@ -96,7 +96,7 @@ public:
   }
   inline std::unique_ptr<Hopper> hopper_from_gcl(const std::string &query,
                                                  std::string *error = nullptr) {
-    return gcl::hopper(query, this, error);
+    return hopper_from_gcl_(query, error);
   }
   inline bool set_parameter(const std::string &key, const std::string &value,
                             std::string *error = nullptr) {
@@ -131,6 +131,10 @@ protected:
 private:
   virtual std::string recipe_() { return ""; };
   virtual std::shared_ptr<Warren> clone_(std::string *error);
+  virtual std::unique_ptr<Hopper> hopper_from_gcl_(const std::string &query,
+                                                   std::string *error) {
+    return gcl::hopper(query, this, error);
+  }
   virtual void start_(){};
   virtual void end_(){};
   virtual void trim_memory_(){};

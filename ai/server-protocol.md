@@ -177,11 +177,12 @@ is destroyed. The last reference closes the socket.
 ## Connection failure
 
 If the connection drops, the shared `Connection` enters a permanent failed
-state. Calls that can report an error fail with a message that the server
-connection was lost. `txt.translate` returns an empty string. Hopper seeks
-return the `EmptyHopper` results above, even if a previous seek result was
-cached. These calls use the failed state locally. If the connection drops
-before a `commit` reply arrives, the transaction may already have committed.
+state. Calls that need the connection and have an error output report the
+lost server. `txt.translate` returns an empty string. Hopper seeks that
+need the connection return the `EmptyHopper` results above. Cached seek
+results, cached `ready` votes, and client-local hoppers can still be used.
+If the connection drops before a `commit` reply arrives, the transaction
+may already have committed.
 
 On disconnect, the server aborts any outstanding transaction, releases the
 remaining hoppers, ends any active read snapshot, and drops the session

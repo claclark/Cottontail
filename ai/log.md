@@ -1255,3 +1255,28 @@
 
 2026-11-20T18:31:17Z
 - Log a UTC startup timestamp in `meadowlark.log` before binding the listener.
+
+2026-11-20T20:05:39Z
+- Implemented the version 0 server protocol on the existing loopback
+  listener. Each RPC session runs concurrently with its own Warren clone,
+  hoppers, and transaction.
+- Added `RemoteWarren::make(port, error)` with a local tokenizer and
+  featurizer built from the greeting DNA. Burrow-path activation and
+  discovery remain a separate step.
+- Compiled all 60 Bazel targets. A scratch Meadowlark smoke test covered
+  concurrent sessions, HTTP inspection, commit and erasure, exact packed
+  values, hopper lifetime, and disconnect cleanup.
+
+2026-11-20T20:16:48Z
+- Restored the core hopper cache and local universal hopper. A remote
+  seek that needs a failed connection returns the empty-hopper sentinel.
+
+2026-11-20T20:22:59Z
+- Restored the core transaction lifecycle and its cached `ready` votes.
+  The Warren GCL dispatch hook is the only remaining core change for the
+  remote client.
+
+2026-11-20T20:26:39Z
+- Added the standalone `//test:remote_warren_test` target for concurrent
+  loopback sessions, snapshot and commit behavior, exact annotation values,
+  hopper lifetime, and connection loss. The target compiled.

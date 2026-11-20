@@ -11,10 +11,12 @@
 #include <future>
 #include <iomanip>
 #include <iostream>
+#include <map>
 #include <memory>
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <thread>
 
 #include <arpa/inet.h>
 #include <fcntl.h>
@@ -24,7 +26,9 @@
 #include <sys/time.h>
 #include <unistd.h>
 
+#include "meadowlark/remote_protocol.h"
 #include "src/core.h"
+#include "src/dna.h"
 #include "src/json.h"
 #include "src/warren.h"
 #include "src/wlock.h"
@@ -32,6 +36,8 @@
 namespace cottontail {
 namespace meadowlark {
 namespace {
+
+using namespace remote_protocol;
 
 class Descriptor {
 public:
@@ -124,27 +130,13 @@ ssize_t receive(int fd, char *buffer, size_t size) {
   return count;
 }
 
-void send_response(int fd, std::string_view status, std::string_view type,
+void send_response(Socket &socket, std::string_view status, std::string_view type,
                    const std::string &body) {
   std::ostringstream header;
   header << "HTTP/1.1 " << status << "\r\nContent-Type: " << type
          << "\r\nContent-Length: " << body.size()
          << "\r\nConnection: close\r\nCache-Control: no-store\r\n\r\n";
-  std::string response = header.str() + body;
-#ifdef MSG_NOSIGNAL
-  constexpr int flags = MSG_NOSIGNAL;
-#else
-  constexpr int flags = 0;
-#endif
-  size_t offset = 0;
-  while (offset < response.size()) {
-    ssize_t count =
-        send(fd, response.data() + offset, response.size() - offset, flags);
-    if (count > 0)
-      offset += count;
-    else if (count == 0 || errno != EINTR)
-      return;
-  }
+  socket.write_bytes(header.str() + body);
 }
 
 std::string html_escape(std::string_view text) {
@@ -284,25 +276,258 @@ std::string page(Warren *warren, const std::string &query) {
   return html.str();
 }
 
-void serve_connection(int fd, Warren *warren) {
-  const timeval timeout{5, 0};
-  setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
-  setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
-#ifdef SO_NOSIGPIPE
-  int no_sigpipe = 1;
-  setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &no_sigpipe, sizeof(no_sigpipe));
-#endif
-  char first;
-  // A leading NUL selects the reserved ClientWarren protocol.
-  if (receive(fd, &first, 1) != 1 || first == '\0')
+json result(json value) { return {{"response", std::move(value)}}; }
+
+json failure(const std::string &error) { return {{"error", error}}; }
+
+json outcome(bool success, const std::string &error) {
+  return success ? result(true)
+                 : failure(error.empty() ? "Warren operation failed" : error);
+}
+
+class Session {
+public:
+  explicit Session(std::shared_ptr<Warren> warren) : warren_(std::move(warren)) {}
+  ~Session() {
+    warren_->abort();
+    hoppers_.clear();
+    warren_->end();
+  }
+
+  json dispatch(const json &request) {
+    auto component = string_field(request, "component");
+    auto method = string_field(request, "method");
+    if (component == nullptr || method == nullptr)
+      return failure("Expected component and method");
+    if (*component == "warren")
+      return warren_request(*method, request);
+    if (*component == "hopper")
+      return hopper_request(*method, request);
+    if (*component == "idx" || *component == "txt") {
+      if (!warren_->started())
+        return failure("Warren has not been started");
+      return *component == "idx" ? idx_request(*method, request)
+                                  : txt_request(*method, request);
+    }
+    if (*component == "appender" || *component == "annotator")
+      return write_request(*component, *method, request);
+    return failure("Unknown component");
+  }
+
+private:
+  json add_hopper(std::unique_ptr<Hopper> hopper, const std::string &error) {
+    if (hopper == nullptr)
+      return outcome(false, error);
+    std::string handle = std::to_string(next_hopper_++);
+    hoppers_.emplace(handle, std::move(hopper));
+    return {{"hopper", handle}};
+  }
+
+  json warren_request(const std::string &method, const json &request) {
+    if (method == "started")
+      return result(warren_->started());
+    if (method == "start") {
+      if (warren_->started())
+        return failure("Warren is already started");
+      warren_->start();
+      return result(true);
+    }
+    if (method == "end") {
+      warren_->end();
+      return result(true);
+    }
+    std::string error;
+    if (method == "hopper_from_gcl") {
+      auto query = string_field(request, "query");
+      if (query == nullptr)
+        return failure("Expected a GCL query");
+      if (!warren_->started())
+        return failure("Warren has not been started");
+      return add_hopper(warren_->hopper_from_gcl(*query, &error), error);
+    }
+    if (method == "transaction")
+      return outcome(warren_->transaction(&error), error);
+    if (method == "ready") {
+      if (!warren_->transacting())
+        return failure("Warren has no open transaction");
+      readied_ = true;
+      vote_ = warren_->ready(&error);
+      return outcome(vote_, error);
+    }
+    if (method == "commit") {
+      if (!warren_->transacting() || !vote_)
+        return failure("Commit requires a successful ready");
+      warren_->commit();
+    } else if (method == "abort") {
+      warren_->abort();
+    } else {
+      return failure("Unknown Warren method");
+    }
+    readied_ = vote_ = false;
+    return result(true);
+  }
+
+  json idx_request(const std::string &method, const json &request) {
+    auto idx = warren_->idx();
+    if (idx == nullptr)
+      return failure("Warren has no index");
+    if (method == "vocab")
+      return result(std::to_string(idx->vocab()));
+    addr feature;
+    if (!addr_field(request, "feature", &feature))
+      return failure("Expected a feature address");
+    if (method == "hopper")
+      return add_hopper(idx->hopper(feature), "Could not create index hopper");
+    if (method == "count")
+      return result(std::to_string(idx->count(feature)));
+    return failure("Unknown index method");
+  }
+
+  json txt_request(const std::string &method, const json &request) {
+    auto txt = warren_->txt();
+    if (txt == nullptr)
+      return failure("Warren has no text");
+    if (method == "tokens")
+      return result(std::to_string(txt->tokens()));
+    addr p, q;
+    if (method == "range")
+      return result(txt->range(&p, &q) ? interval(p, q) : json());
+    if (method == "translate") {
+      if (!addr_field(request, "p", &p) || !addr_field(request, "q", &q))
+        return failure("Expected p and q addresses");
+      return result(txt->translate(p, q));
+    }
+    return failure("Unknown text method");
+  }
+
+  json write_request(const std::string &component, const std::string &method,
+                     const json &request) {
+    if (!warren_->transacting() || readied_)
+      return failure("Write requires an open transaction before ready");
+    std::string error;
+    addr p, q;
+    if (component == "appender") {
+      if (method != "append")
+        return failure("Unknown appender method");
+      auto text = string_field(request, "text");
+      auto appender = warren_->appender();
+      if (text == nullptr || appender == nullptr)
+        return failure("Append requires text and a writable Warren");
+      if (!appender->append(*text, &p, &q, &error))
+        return outcome(false, error);
+      return result(interval(p, q));
+    }
+    auto annotator = warren_->annotator();
+    if (annotator == nullptr)
+      return failure("Warren has no annotator");
+    if (!addr_field(request, "p", &p) || !addr_field(request, "q", &q) ||
+        p < 0 || p > q || q == maxfinity)
+      return failure("Expected an interval of token addresses");
+    if (method == "erase")
+      return outcome(annotator->erase(p, q, &error), error);
+    if (method == "annotate") {
+      addr feature, value = 0;
+      if (!addr_field(request, "feature", &feature) ||
+          (request.contains("v") && !addr_field(request, "v", &value)))
+        return failure("Expected a feature and optional annotation value");
+      return outcome(annotator->annotate(feature, p, q, value, &error), error);
+    }
+    return failure("Unknown annotator method");
+  }
+
+  json hopper_request(const std::string &method, const json &request) {
+    auto handle = string_field(request, "hopper");
+    if (method == "complete") {
+      if (handle != nullptr)
+        hoppers_.erase(*handle);
+      return {};
+    }
+    addr k;
+    if (handle == nullptr || !addr_field(request, "k", &k))
+      return failure("Expected a hopper handle and a seek address");
+    auto entry = hoppers_.find(*handle);
+    Hopper &hopper = entry == hoppers_.end() ? empty_ : *entry->second;
+    if (method == "L")
+      return result(std::to_string(hopper.L(k)));
+    if (method == "R")
+      return result(std::to_string(hopper.R(k)));
+    addr p, q;
+    fval value;
+    if (method == "tau")
+      hopper.tau(k, &p, &q, &value);
+    else if (method == "rho")
+      hopper.rho(k, &p, &q, &value);
+    else if (method == "uat")
+      hopper.uat(k, &p, &q, &value);
+    else if (method == "ohr")
+      hopper.ohr(k, &p, &q, &value);
+    else
+      return failure("Unknown hopper method");
+    return result(interval(p, q, fval2addr(value)));
+  }
+
+  std::shared_ptr<Warren> warren_;
+  std::map<std::string, std::unique_ptr<Hopper>> hoppers_;
+  size_t next_hopper_ = 1;
+  EmptyHopper empty_;
+  bool readied_ = false;
+  bool vote_ = false;
+};
+
+void serve_rpc(std::unique_ptr<Socket> client, std::shared_ptr<Warren> warren,
+               std::shared_ptr<const json> hello) {
+  try {
+    json request;
+    if (!client->read(&request) || !greeting(request) ||
+        !client->write(*hello) || !client->timeout(0))
+      return;
+    Session session(std::move(warren));
+    while (client->read(&request)) {
+      json reply = session.dispatch(request);
+      if (reply.is_null())
+        continue;
+      try {
+        if (!client->write(reply))
+          return;
+      } catch (const json::type_error &) {
+        if (!client->write(failure("Response contains invalid UTF-8")))
+          return;
+      }
+    }
+  } catch (const std::exception &exception) {
+    std::cerr << "Meadowlark session failed: " << exception.what() << '\n';
+  }
+}
+
+void serve_connection(std::unique_ptr<Socket> client,
+                      const std::shared_ptr<Warren> &warren,
+                      const std::shared_ptr<const json> &hello) {
+  int fd = client->fd();
+  if (!client->configure())
     return;
+  char first;
+  if (receive(fd, &first, 1) != 1)
+    return;
+  if (first == '\0') {
+    if (warren != nullptr) {
+      std::string error;
+      auto session = warren->clone(&error);
+      if (session != nullptr)
+        std::thread(serve_rpc, std::move(client), std::move(session), hello)
+            .detach();
+      else
+        std::cerr << "Meadowlark session could not clone Warren: " << error
+                  << '\n';
+    }
+    return;
+  }
   std::string header(1, first);
   constexpr size_t header_limit = 16 * 1024;
   while (header.find("\r\n\r\n") == std::string::npos) {
     char buffer[2048];
     size_t available = std::min(sizeof(buffer), header_limit - header.size());
     if (available == 0) {
-      send_response(fd, "431 Request Header Fields Too Large", "text/plain",
+      send_response(*client, "431 Request Header Fields Too Large", "text/plain",
                     "HTTP request header is too large.\n");
       return;
     }
@@ -315,21 +540,23 @@ void serve_connection(int fd, Warren *warren) {
   std::string method, target, version;
   if (!(request >> method >> target >> version) || method != "GET" ||
       (version != "HTTP/1.1" && version != "HTTP/1.0")) {
-    send_response(fd, "400 Bad Request", "text/plain", "Expected an HTTP GET.\n");
+    send_response(*client, "400 Bad Request", "text/plain",
+                  "Expected an HTTP GET.\n");
     return;
   }
   if (target != "/" && !target.starts_with("/?q=")) {
-    send_response(fd, "404 Not Found", "text/plain", "Not found.\n");
+    send_response(*client, "404 Not Found", "text/plain", "Not found.\n");
     return;
   }
   std::string query;
   if (target.starts_with("/?q=") &&
       !decode_query(std::string_view(target).substr(4), &query)) {
-    send_response(fd, "400 Bad Request", "text/plain",
+    send_response(*client, "400 Bad Request", "text/plain",
                   "Invalid query encoding.\n");
     return;
   }
-  send_response(fd, "200 OK", "text/html; charset=utf-8", page(warren, query));
+  send_response(*client, "200 OK", "text/html; charset=utf-8",
+                page(warren.get(), query));
 }
 
 struct Activation {
@@ -339,6 +566,11 @@ struct Activation {
 
 bool serve(int listener, std::shared_ptr<WLock> wlock, std::string *error) {
   using namespace std::chrono_literals;
+  std::string dna;
+  if (!read_dna(wlock->working(), &dna, error))
+    return false;
+  auto hello = std::make_shared<const json>(
+      json{{"protocol", protocol}, {"version", version}, {"dna", std::move(dna)}});
   auto activation = std::async(std::launch::async, [wlock]() {
     Activation result;
     result.warren = Warren::local(wlock, &result.error);
@@ -364,15 +596,15 @@ bool serve(int listener, std::shared_ptr<WLock> wlock, std::string *error) {
       safe_error(error) = "Meadowlark listener failed";
       return false;
     }
-    Descriptor client(accept(listener, nullptr, nullptr));
-    if (client.get() < 0) {
+    std::unique_ptr<Socket> client(new Socket(accept(listener, nullptr, nullptr)));
+    if (client->fd() < 0) {
       if (errno == EINTR || errno == ECONNABORTED)
         continue;
       safe_error(error) = "Cannot accept Meadowlark connection: " +
                           std::string(std::strerror(errno));
       return false;
     }
-    serve_connection(client.get(), warren.get());
+    serve_connection(std::move(client), warren, hello);
   }
 }
 

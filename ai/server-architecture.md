@@ -86,9 +86,11 @@ releases its hoppers and read snapshot, and exits its thread. The server
 continues listening. A completed commit stands even if its reply was lost.
 
 Once the client detects a broken socket, the shared connection stays
-failed. Calls with an error channel report the lost server. Translation
-returns an empty string, and hopper seeks return their empty-hopper
-sentinels. A subsequent activation can establish a new session through
-normal discovery. If the server died, the OS releases its lock and a new
-server can replace the stale endpoint. The new session starts with its
-own Warren and hopper handles.
+failed. Calls that need the connection and have an error output report
+the lost server. Translation returns an empty string. Remote hopper
+seeks that need the connection return empty-hopper sentinels. Cached seek
+results, cached `ready` votes, and client-local hoppers remain usable.
+A subsequent activation can establish a new session through normal
+discovery. If the server died, the OS releases its lock and a new server
+can replace the stale endpoint. The new session starts with its own
+Warren and hopper handles.

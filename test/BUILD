@@ -9,6 +9,7 @@ cc_test(
         "hazel.cc",
         "nfa.cc",
         "optimizer.cc",
+        "remote_warren.cc",
         "splade.cc",
     ]) + glob(["**/*.h"]),
     deps = [
@@ -47,6 +48,17 @@ cc_test(
     name = "splade_test",
     size = "small",
     srcs = ["splade.cc"],
+    deps = [
+        "//src:cottontail",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "remote_warren_test",
+    size = "small",
+    srcs = ["remote_warren.cc"],
+    tags = ["requires-network"],
     deps = [
         "//src:cottontail",
         "@googletest//:gtest_main",
