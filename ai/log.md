@@ -1230,3 +1230,8 @@
   replacement in the improvements list.
 - Refreshed the CLI and test inventory and recorded the subsequent passing
   SPLADE regression targets. Documentation only.
+
+2026-11-20T16:06:32Z
+- Moved completed milestones and their verification notes from `ai/plan.md`
+  to `ai/completed.md`. Added the rule for future checkpoints and updated
+  the references in the improvements list and repository notes.

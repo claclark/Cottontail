@@ -9,9 +9,8 @@ Especially don't do these things without discussion and approval from the user.
 Deletion merge semantics, deletion-aware translation, and Hazel text garbage
 collection are complete as of 2026-11-13 and have been removed from this list.
 The implementation and TREC update/deletion verification are recorded in
-`ai/hazel.md` and the completed section of `ai/plan.md`.
-Directory locking is complete. The factories, lifecycle rules, and
-verification coverage are recorded in [the completed plan](plan.md#completed-directory-locking).
+[hazel.md](hazel.md) and [completed.md](completed.md#deletions-and-text-garbage-collection).
+The directory-locking checkpoint is also in [completed.md](completed.md#directory-locking).
 
 ## Warren Memory Trimming
 

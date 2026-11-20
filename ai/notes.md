@@ -17,6 +17,7 @@
 - `test/`: Bazel C++ tests. `//test:tests` is the aggregate target;
   focused targets cover Hazel, the optimizer, NFA, cgrep, SPLADE, and CLI cases.
 - `ai/`: agent-facing architecture notes, plans, logs, and progress notes.
+  `ai/completed.md` records completed milestones and their verification.
   `ai/consolidation.md` is the completed Bigwig/Hazel consolidation checkpoint;
   `ai/memory.md` is the deferred Warren memory-trimming design checkpoint.
   `ai/splade.md` records user-run SPLADE performance and effectiveness baselines.
