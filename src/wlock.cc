@@ -98,6 +98,47 @@ WLock::~WLock() {
     close(fd_);
 }
 
+WLock::Status WLock::status() {
+  std::lock_guard<std::mutex> lock(status_mutex_);
+  return status_;
+}
+
+void WLock::initialized() {
+  std::lock_guard<std::mutex> lock(status_mutex_);
+  if (status_ == Status::created || status_ == Status::recreated)
+    status_ = Status::initialized;
+}
+
+bool WLock::begin_activation(std::string *error) {
+  std::lock_guard<std::mutex> lock(status_mutex_);
+  switch (status_) {
+  case Status::obtained:
+  case Status::initialized:
+    status_ = Status::activating;
+    return true;
+  case Status::created:
+  case Status::recreated:
+    safe_error(error) = "Burrow must be initialized before activation";
+    break;
+  case Status::activating:
+    safe_error(error) = "Burrow activation is already in progress";
+    break;
+  case Status::activated:
+    safe_error(error) = "Burrow lock has already activated a Warren";
+    break;
+  case Status::failed:
+    safe_set(error) = activation_error_;
+    break;
+  }
+  return false;
+}
+
+void WLock::finish_activation(const std::string &error) {
+  std::lock_guard<std::mutex> lock(status_mutex_);
+  activation_error_ = error;
+  status_ = error.empty() ? Status::activated : Status::failed;
+}
+
 std::shared_ptr<WLock> WLock::obtain(const std::string &burrow,
                                      std::string *error) {
   std::string the_burrow = burrow == "" ? DEFAULT_BURROW : burrow;

@@ -1235,3 +1235,10 @@
 - Moved completed milestones and their verification notes from `ai/plan.md`
   to `ai/completed.md`. Added the rule for future checkpoints and updated
   the references in the improvements list and repository notes.
+
+2026-11-20T17:28:21Z
+- Added `Warren::local(wlock, error)` for local activation with a caller-held
+  lock. Directory factories share the activation path. WLock serializes the
+  activation claim and caches the original error on failure.
+- Added regression coverage for single activation, a sticky error after DNA
+  is restored, and reopening with a fresh lock. All 60 targets compiled.

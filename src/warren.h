@@ -21,6 +21,7 @@
 namespace cottontail {
 
 class Stats;
+class WLock;
 
 class Warren : public Committable {
 public:
@@ -29,6 +30,9 @@ public:
                                       std::string *error = nullptr);
   static std::shared_ptr<Warren> make(const std::string &burrow,
                                       std::string *error = nullptr);
+  // Activate a directory burrow with a caller-held lock.
+  static std::shared_ptr<Warren> local(std::shared_ptr<WLock> wlock,
+                                       std::string *error = nullptr);
   static std::shared_ptr<Warren> make(const std::string &name,
                                       const std::string &recipe,
                                       const std::string &burrow,

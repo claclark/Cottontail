@@ -1,6 +1,7 @@
 #include "src/bigwig.h"
 
 #include <algorithm>
+#include <cstdio>
 #include <cstdlib>
 #include <fstream>
 #include <memory>
@@ -133,6 +134,50 @@ TEST(Bigwig, WarrenFactories) {
   warren->start();
   EXPECT_TRUE(warren->default_container().empty());
   warren->end();
+  warren.reset();
+  for (const char *name : {"dna", "burrow.pid", "burrow.lock"})
+    ASSERT_EQ(unlink((burrow + "/" + name).c_str()), 0);
+  EXPECT_EQ(rmdir(directory), 0);
+}
+
+TEST(Bigwig, LocalActivation) {
+  char directory[] = "/tmp/cottontail-warren-local-XXXXXX";
+  ASSERT_NE(mkdtemp(directory), nullptr);
+  std::string burrow = directory;
+  std::string error;
+  auto warren = cottontail::Warren::make("bigwig", "", burrow, &error);
+  ASSERT_NE(warren, nullptr) << error;
+  warren.reset();
+
+  auto lock = cottontail::WLock::obtain(burrow, &error);
+  ASSERT_NE(lock, nullptr) << error;
+  EXPECT_EQ(lock->status(), cottontail::WLock::Status::obtained);
+  warren = cottontail::Warren::local(lock, &error);
+  ASSERT_NE(warren, nullptr) << error;
+  EXPECT_EQ(lock->status(), cottontail::WLock::Status::activated);
+  EXPECT_EQ(warren->working(), lock->working());
+  EXPECT_EQ(cottontail::Warren::local(lock, &error), nullptr);
+  EXPECT_NE(error.find("already activated"), std::string::npos);
+  warren.reset();
+  EXPECT_EQ(cottontail::Warren::local(lock, &error), nullptr);
+  lock.reset();
+
+  lock = cottontail::WLock::obtain(burrow, &error);
+  ASSERT_NE(lock, nullptr) << error;
+  std::string dna = lock->working()->make_name(cottontail::DNA_NAME);
+  std::string saved_dna = dna + ".saved";
+  ASSERT_EQ(std::rename(dna.c_str(), saved_dna.c_str()), 0);
+  ASSERT_EQ(cottontail::Warren::local(lock, &error), nullptr);
+  EXPECT_EQ(lock->status(), cottontail::WLock::Status::failed);
+  EXPECT_NE(error.find("Can't read configuration"), std::string::npos);
+  ASSERT_EQ(std::rename(saved_dna.c_str(), dna.c_str()), 0);
+  std::string repeated_error;
+  EXPECT_EQ(cottontail::Warren::local(lock, &repeated_error), nullptr);
+  EXPECT_EQ(repeated_error, error);
+  lock.reset();
+
+  warren = cottontail::Warren::make(burrow, &error);
+  ASSERT_NE(warren, nullptr) << error;
   warren.reset();
   for (const char *name : {"dna", "burrow.pid", "burrow.lock"})
     ASSERT_EQ(unlink((burrow + "/" + name).c_str()), 0);

@@ -2,6 +2,7 @@
 #define COTTONTAIL_SRC_WLOCK_H_
 
 #include <memory>
+#include <mutex>
 #include <string>
 
 #include "src/working.h"
@@ -10,7 +11,15 @@ namespace cottontail {
 
 class WLock final {
 public:
-  enum class Status { obtained, created, recreated, initialized };
+  enum class Status {
+    obtained,
+    created,
+    recreated,
+    initialized,
+    activating,
+    activated,
+    failed
+  };
 
   // Existing burrows; legacy Simple burrows remain unlocked.
   static std::shared_ptr<WLock> obtain(const std::string &burrow,
@@ -25,9 +34,9 @@ public:
                                          std::string *error = nullptr);
   std::string name() { return name_; }
   std::shared_ptr<Working> working() { return working_; }
-  Status status() { return status_; }
+  Status status();
   // Consume initialization readiness after successfully writing DNA.
-  void initialized() { status_ = Status::initialized; }
+  void initialized();
 
   ~WLock();
   WLock(const WLock &) = delete;
@@ -36,9 +45,14 @@ public:
   WLock &operator=(WLock &&) = delete;
 
 private:
+  friend class Warren;
+  bool begin_activation(std::string *error);
+  void finish_activation(const std::string &error);
   WLock(){};
   int fd_ = -1;
+  std::mutex status_mutex_;
   Status status_ = Status::obtained;
+  std::string activation_error_;
   std::string name_;
   std::shared_ptr<Working> working_;
 };

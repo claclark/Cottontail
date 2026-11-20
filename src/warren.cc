@@ -1,11 +1,13 @@
 #include "src/warren.h"
 
+#include <exception>
 #include <fstream>
 #include <map>
 #include <sys/stat.h>
 
 #include "src/bigwig.h"
 #include "src/core.h"
+#include "src/dna.h"
 #include "src/hazel.h"
 #include "src/recipe.h"
 #include "src/simple_warren.h"
@@ -82,15 +84,44 @@ std::shared_ptr<Warren> Warren::make(const std::string &burrow,
   if (is_regular_file(burrow))
     return single_file_burrow(burrow, error);
   std::shared_ptr<WLock> wlock = WLock::obtain(burrow, error);
-  if (wlock == nullptr)
+  return wlock == nullptr ? nullptr : local(wlock, error);
+}
+
+std::shared_ptr<Warren> Warren::local(std::shared_ptr<WLock> wlock,
+                                      std::string *error) {
+  if (wlock == nullptr) {
+    safe_error(error) = "Warren local activation needs a burrow lock";
     return nullptr;
-  const std::string name = wlock->name();
-  if (name == "simple")
-    return SimpleWarren::make(wlock->working(), error);
-  if (name == "bigwig")
-    return Bigwig::make(wlock, error);
-  safe_error(error) = name.empty() ? "Burrow has no valid DNA: " + burrow
-                                   : "Invalid warren type: " + name;
+  }
+  if (!wlock->begin_activation(error))
+    return nullptr;
+
+  std::string activation_error;
+  std::shared_ptr<Warren> warren;
+  try {
+    const std::string name = wlock->name();
+    if (name == "simple")
+      warren = SimpleWarren::make(wlock->working(), &activation_error);
+    else if (name == "bigwig")
+      warren = Bigwig::make(wlock, &activation_error);
+    else if (name.empty())
+      safe_error(&activation_error) =
+          "Burrow has no valid DNA: " + wlock->working()->make_name(DNA_NAME);
+    else
+      safe_error(&activation_error) = "Invalid warren type: " + name;
+  } catch (const std::exception &exception) {
+    safe_error(&activation_error) =
+        "Warren activation failed: " + std::string(exception.what());
+  }
+
+  if (warren != nullptr) {
+    wlock->finish_activation("");
+    return warren;
+  }
+  if (activation_error.empty())
+    safe_error(&activation_error) = "Warren activation failed";
+  wlock->finish_activation(activation_error);
+  safe_set(error) = activation_error;
   return nullptr;
 }
 

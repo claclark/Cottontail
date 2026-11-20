@@ -41,12 +41,13 @@
   descriptor, closing the descriptor on destruction. Simple remains unlocked;
   recreating Simple is refused. `name()` exposes the type discovered from DNA
   on obtain or supplied to create/recreate; a lock-only burrow without valid
-  DNA has an empty discovered name. `status()` records obtained, created,
-  recreated, or initialized; successful DNA writing consumes creation readiness.
+  DNA has an empty discovered name. `status()` tracks preparation and the
+  single activation attempt. A failed handle retains its activation error.
   Warren's directory factories, Bigwig's path factories, and consolidation
   use WLock. Warren opens standalone Hazels directly.
 - Warren's named opener accepts `"simple"`. Its recipe-based creation overload
   builds Bigwigs, with optional recreation of an existing recognized burrow.
+  `Warren::local(wlock, error)` activates with a caller-held lock.
 - `SimpleWarren` is the flat-file Warren implementation reconstructed from DNA
   metadata in a burrow.
 - `Bigwig` is the dynamic Warren backed by `Fiver` shards and `Fluffle` state.

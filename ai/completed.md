@@ -4,6 +4,20 @@ Record completed milestones here, with links to implementation notes and the
 verification performed. Keep upcoming work in [plan.md](plan.md) and dated
 activity in [log.md](log.md).
 
+## Local Warren Activation
+
+`Warren::local(wlock, error)` activates a directory burrow with a caller-held
+lock. Path-based Warren and Bigwig factories use the same local activation
+path. This lets a future server acquire the lock, publish its listener
+address, and then activate using the same handle.
+
+Each obtained or initialized WLock can claim one activation. The claim moves
+the handle to `activating` under its status mutex. Success sets `activated`.
+Failure sets `failed` and saves the error for any later call with that handle.
+`Bigwig.LocalActivation` covers a caller-held lock, rejection of a second
+activation, and a cached error after the underlying problem has been fixed.
+All 60 targets compiled. The agent did not run the runtime cases.
+
 ## Directory Locking
 
 Implemented on 2026-11-19. Directory-backed Bigwig activation, creation,

@@ -678,15 +678,15 @@ std::shared_ptr<Bigwig> Bigwig::make(std::shared_ptr<WLock> wlock,
   if (!write_dna(working, dna, error))
     return nullptr;
   wlock->initialized();
-  return make(wlock, error);
+  return std::static_pointer_cast<Bigwig>(Warren::local(wlock, error));
 }
 
 std::shared_ptr<Bigwig> Bigwig::make(const std::string &burrow,
                                      std::string *error) {
   std::shared_ptr<WLock> wlock = WLock::obtain(burrow, error);
-  if (wlock == nullptr)
+  if (wlock == nullptr || bigwig_working(wlock, error) == nullptr)
     return nullptr;
-  return make(wlock, error);
+  return std::static_pointer_cast<Bigwig>(Warren::local(wlock, error));
 }
 
 std::shared_ptr<Bigwig> Bigwig::make(std::shared_ptr<WLock> wlock,
