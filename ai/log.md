@@ -1242,3 +1242,16 @@
   activation claim and caches the original error on failure.
 - Added regression coverage for single activation, a sticky error after DNA
   is restored, and reopening with a fresh lock. All 60 targets compiled.
+
+2026-11-20T18:22:32Z
+- Added the directly launched `meadowlark --server` mode. It binds to
+  IPv4 loopback, publishes the URL before local Warren activation, and
+  appends startup output to `meadowlark.log`.
+- Added a browser inspect page with the CLI's 24-match limit and snippet
+  formatting. HTTP requests are served one at a time. A leading NUL
+  selects the reserved ClientWarren protocol and closes the connection
+  until that protocol is implemented.
+- All 60 targets compiled. Runtime verification remains with the user.
+
+2026-11-20T18:31:17Z
+- Log a UTC startup timestamp in `meadowlark.log` before binding the listener.

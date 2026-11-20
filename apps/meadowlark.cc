@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "meadowlark/meadowlark.h"
+#include "meadowlark/server.h"
 #include "src/tokenizer.h"
 #include "src/walk.h"
 
@@ -15,6 +16,7 @@ void usage(std::string program_name) {
             << " [--create|--recreate [ngram[:n]] [parameter:value ...]]"
             << " [--tsv path...] [--jsonl|--json path...]"
             << " [--text path...] [--code path...]...\n"
+            << "       " << program_name << " [--meadow meadow] --server\n"
             << "  --recreate clears an existing burrow before creating the "
                "meadow.\n";
 }
@@ -55,6 +57,18 @@ int main(int argc, char **argv) {
   if (argc <= 1)
     return 0;
   std::string action = argv[1];
+  if (action == "--server") {
+    if (argc != 2) {
+      usage(program_name);
+      return 1;
+    }
+    if (!cottontail::meadowlark::server(meadow.empty() ? "a.meadow" : meadow,
+                                       &error)) {
+      std::cerr << program_name << ": " << error << "\n";
+      return 1;
+    }
+    return 0;
+  }
   bool recreate = action == "--recreate";
   bool create = recreate || action == "-c" || action == "--create";
   std::string recipe;
