@@ -12,6 +12,8 @@
 namespace cottontail {
 namespace meadowlark {
 
+extern const std::string DEFAULT_MEADOW;
+
 enum class InputType { NONE, TSV, JSONL, TEXT, CODE };
 
 struct InputFile {

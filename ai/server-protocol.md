@@ -27,10 +27,19 @@ greeting for version 0.
 {"protocol":"meadowlark","version":0}
 ```
 
-The server greeting also includes `dna`, a JSON string containing the
-burrow's DNA. Opening by burrow path uses local `dna` for server discovery
-and launch. An endpoint-only client connects to a running server and
-gets its configuration from the greeting.
+The server greeting includes `dna`, a JSON string containing the burrow's
+DNA, `session`, an opaque identifier for this connection's Warren, and
+`started`, a Boolean giving its read state. The Warren factory reads local
+`dna` to decide whether to activate a server. `RemoteWarren` gets its
+configuration from the greeting, whether it discovers the endpoint from
+the burrow or gets the port directly. The server sends the reply once the
+session Warren is ready.
+
+To clone a Warren, the client opens a new connection and adds `clone_of`
+to its greeting, with the source Warren's `session` identifier as the
+value. An unknown or closed source returns an error and closes the new
+connection. Each successful clone gets its own session ID and uses the
+`started` value from the cloned Warren.
 
 An invalid greeting ends negotiation and closes the connection.
 
@@ -67,16 +76,21 @@ represented as UTF-8 text, the server returns an error.
 
 ## Warren operations
 
-For each connection, the server clones its original Warren. That Warren
-is unstarted and may be any supported Warren type. A new connection,
-including one opened by `ClientWarren::clone()`, begins with an independent,
-unstarted session.
+A greeting without `clone_of` clones the server's original, unstarted
+Warren. A greeting with `clone_of` calls `Warren::clone()` on the source
+session's Warren, serialized with that session's requests and cleanup.
+The Warren implementation determines the inherited state. A started
+Bigwig clone inherits the source read snapshot.
 
-The ClientWarren constructs a local `Tokenizer` that matches the server's
-Warren using the tokenizer name and recipe in the returned `dna`. Callers
-use it to process text returned by `txt.translate`. The returned `dna`
-also contains the featurizer recipe. The legacy `VocabFeaturizer` depends
-on a separate file and is outside version 0 client support.
+The client constructs a local `Tokenizer` from the greeting DNA to process
+text returned by `txt.translate`. It also initializes the legacy default
+container and local stemmer from the `container` and `stemmer` parameters.
+The featurizer proxy uses the session Warren's server-side featurizer.
+Its methods can be called before `warren.start`. The labels use the same
+UTF-8 string encoding as other text.
+
+The client reads Warren parameters from the `parameters` block in the
+greeting DNA. This is a read-only copy of the server configuration.
 
 `warren.start` establishes the session's read snapshot, `warren.end`
 ends it, and `warren.started` reports whether it is active. The client
@@ -95,6 +109,9 @@ checks these preconditions before calling into Warren.
 | `warren` | `started` | | Boolean |
 | `warren` | `transaction`, `ready`, `commit`, `abort` | | `true` |
 | `warren` | `hopper_from_gcl` | `query` | Hopper handle |
+| `featurizer` | `name`, `recipe` | | String |
+| `featurizer` | `featurize` | `label` | Feature as an `addr` |
+| `featurizer` | `translate` | `feature` | String |
 | `idx` | `hopper` | `feature` | Hopper handle |
 | `idx` | `count` | `feature` | Count as an `addr` |
 | `idx` | `vocab` | | Vocabulary size as an `addr` |
@@ -181,6 +198,8 @@ state. Calls that need the connection and have an error output report the
 lost server. `txt.translate` returns an empty string. Hopper seeks that
 need the connection return the `EmptyHopper` results above. Cached seek
 results, cached `ready` votes, and client-local hoppers can still be used.
+A failed featurizer call produces `null_feature` for `featurize` or an
+empty string for the string-valued methods.
 If the connection drops before a `commit` reply arrives, the transaction
 may already have committed.
 

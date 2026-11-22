@@ -14,16 +14,23 @@ used to start the server. A configuration change takes the burrow lock
 before updating `dna`. With server activation disabled, `Warren::make`
 opens the local Warren in the usual way.
 
-For server activation, `Warren::make(burrow)` reads the configuration and
-looks for the endpoint in `meadowlark.url`. It uses the ClientWarren
-greeting to confirm the connection. When the burrow is already locked and
-the endpoint is absent or stale, it retries discovery briefly so a
-starting server has time to publish its URL. If a server needs to be
-started, the client releases any discovery lock it holds, launches the
-configured command as a detached process, and waits for a usable session.
-Connection and startup waits are bounded. Opening by endpoint connects
-directly to a running server. An operator can start a server explicitly
-with `meadowlark --meadow BURROW --server`.
+`meadowlark --meadow BURROW --config` replaces the entire `server` block
+with an enabled command for the invoking executable and selected meadow.
+Both paths are absolute and retain their symlinks. A bare invocation
+name is resolved through `PATH`. The library `config` function uses
+`DEFAULT_MEADOW` for an empty meadow and searches `PATH` for `meadowlark`
+when the executable is empty. It verifies the replacement DNA before
+publishing it.
+
+For server activation, `Warren::make(burrow)` clears any stale
+`meadowlark.url` while it holds the burrow lock, releases the lock, and
+launches the configured command as a detached process. If another process
+holds the lock, the factory proceeds to discovery. Both paths call
+`RemoteWarren::make(burrow)`, which reads the loopback endpoint from
+`meadowlark.url` and retries once after one second if it cannot read a
+valid endpoint. The client connects, sends its greeting, and waits for
+the server's reply. Opening by port connects directly to the listener.
+An operator can start the server with `meadowlark --meadow BURROW --server`.
 
 The server takes the existing burrow lock before publishing an endpoint.
 Concurrent launches can race to acquire it. The winner keeps the lock for
@@ -34,9 +41,10 @@ determines ownership.
 The server opens the listener and atomically publishes its loopback URL
 before activating the Warren, which can take much longer. It activates
 locally through `Warren::local(wlock)`, bypassing server discovery and
-launch. A published URL identifies the listener. A completed greeting
-establishes a usable Warren session. The server appends stdout and stderr
-to `meadowlark.log`, beginning each run with a startup timestamp.
+launch. RPC session threads wait for activation to finish before replying
+to the greeting. HTTP inspection can show the loading page in the
+meantime. The server appends stdout and stderr to `meadowlark.log`,
+beginning each run with a startup timestamp.
 
 ## Sessions and concurrency
 
@@ -47,17 +55,22 @@ server hands the persistent connection to a session thread. Different
 sessions can run concurrently, while requests within one session run in
 order.
 
-Each session clones the server's original, unstarted Warren through the
-Warren interface. The client's `start()` takes a read snapshot and
-`end()` releases it. `ClientWarren::clone()` opens another connection
-with its own unstarted Warren. Write transactions belong to the session
-and use the underlying Warren's `transaction`, `ready`, `commit`, and
-`abort` operations.
+A fresh session clones the server's original, unstarted Warren. The
+client's `start()` takes a read snapshot and `end()` releases it.
+`RemoteWarren::clone()` opens another connection and supplies the source
+session ID in the greeting. The server uses a table of live sessions to
+find that Warren and calls its `clone()` while holding the source session
+mutex. The new session has its own connection and inherits the read state
+of the local clone. For a started Bigwig, this includes the read snapshot.
+Write transactions belong to the session and use the underlying Warren's
+`transaction`, `ready`, `commit`, and `abort` operations.
 
-`ClientWarren` forwards the supported operations and constructs a local
-tokenizer from the server's DNA in the greeting. Callers use that tokenizer
-to work with translated text locally. Higher-level operations can use the
-same connection when the work belongs on the server.
+`ClientWarren` constructs a local tokenizer and stemmer from the server's
+DNA in the greeting, and reads the legacy default container from the same
+configuration. Its featurizer proxy calls the session Warren's featurizer
+on the server, so the burrow owns the mapping between labels and feature
+addresses. Higher-level operations can use the same connection when the
+work belongs on the server.
 
 ## Connection and hopper ownership
 
@@ -81,9 +94,10 @@ is used by one caller at a time.
 
 ## Disconnect and recovery
 
-When a client disconnects, the session aborts any outstanding transaction,
-releases its hoppers and read snapshot, and exits its thread. The server
-continues listening. A completed commit stands even if its reply was lost.
+When a client disconnects, the server removes its session ID from the live
+table. The session aborts any outstanding transaction, releases its
+hoppers and read snapshot, and exits its thread. The server continues
+listening. A completed commit stands even if its reply was lost.
 
 Once the client detects a broken socket, the shared connection stays
 failed. Calls that need the connection and have an error output report
@@ -94,3 +108,16 @@ A subsequent activation can establish a new session through normal
 discovery. If the server died, the OS releases its lock and a new server
 can replace the stale endpoint. The new session starts with its own
 Warren and hopper handles.
+
+## Shutdown
+
+The CLI exposes shutdown as `meadowlark --meadow BURROW --shutdown`.
+
+`meadowlark::shutdown(burrow)` succeeds when it can acquire and release
+the burrow lock. If the lock is held, it reads the host and PID from
+`burrow.pid` and verifies the local process arguments against the
+configured `server.command`. On Linux it uses a PID file descriptor to
+send `SIGTERM` to that process. It then tries the lock immediately and
+once a second for up to ten seconds. A verification failure or a lock
+that remains held produces an error.
+Legacy Simple burrows lack the lock guarantee used by shutdown.

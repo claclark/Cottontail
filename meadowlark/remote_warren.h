@@ -1,6 +1,8 @@
 #ifndef COTTONTAIL_MEADOWLARK_REMOTE_WARREN_H_
 #define COTTONTAIL_MEADOWLARK_REMOTE_WARREN_H_
 
+#include <map>
+
 #include "src/warren.h"
 
 namespace cottontail::meadowlark {
@@ -11,14 +13,18 @@ class Connection;
 
 class RemoteWarren final : public Warren {
 public:
+  static std::shared_ptr<RemoteWarren> make(const std::string &burrow,
+                                            std::string *error = nullptr);
   static std::shared_ptr<RemoteWarren> make(int port,
                                             std::string *error = nullptr);
 
 private:
+  static std::shared_ptr<RemoteWarren>
+  make(int port, const std::string &clone_of, std::string *error);
   RemoteWarren(int port,
                std::shared_ptr<remote_protocol::Connection> connection,
-               std::shared_ptr<Featurizer> featurizer,
-               std::shared_ptr<Tokenizer> tokenizer);
+               std::shared_ptr<Tokenizer> tokenizer,
+               std::map<std::string, std::string> parameters, bool started);
 
   std::shared_ptr<Warren> clone_(std::string *error) final;
   std::unique_ptr<Hopper> hopper_from_gcl_(const std::string &query,
@@ -36,6 +42,7 @@ private:
 
   int port_;
   std::shared_ptr<remote_protocol::Connection> connection_;
+  const std::map<std::string, std::string> parameters_;
 };
 
 } // namespace cottontail::meadowlark

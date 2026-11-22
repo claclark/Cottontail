@@ -16,7 +16,8 @@ void usage(std::string program_name) {
             << " [--create|--recreate [ngram[:n]] [parameter:value ...]]"
             << " [--tsv path...] [--jsonl|--json path...]"
             << " [--text path...] [--code path...]...\n"
-            << "       " << program_name << " [--meadow meadow] --server\n"
+            << "       " << program_name
+            << " [--meadow meadow] (--config|--server|--shutdown)\n"
             << "  --recreate clears an existing burrow before creating the "
                "meadow.\n";
 }
@@ -57,13 +58,25 @@ int main(int argc, char **argv) {
   if (argc <= 1)
     return 0;
   std::string action = argv[1];
-  if (action == "--server") {
+  if (action == "--config" || action == "--server" || action == "--shutdown") {
     if (argc != 2) {
       usage(program_name);
       return 1;
     }
-    if (!cottontail::meadowlark::server(meadow.empty() ? "a.meadow" : meadow,
-                                       &error)) {
+    if (meadow.empty())
+      meadow = cottontail::meadowlark::DEFAULT_MEADOW;
+    bool success;
+    if (action == "--config") {
+      std::string executable =
+          cottontail::meadowlark::server_path(program_name, &error);
+      success = !executable.empty() &&
+                cottontail::meadowlark::config(meadow, executable, &error);
+    } else if (action == "--server") {
+      success = cottontail::meadowlark::server(meadow, &error);
+    } else {
+      success = cottontail::meadowlark::shutdown(meadow, &error);
+    }
+    if (!success) {
       std::cerr << program_name << ": " << error << "\n";
       return 1;
     }

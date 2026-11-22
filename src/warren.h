@@ -42,10 +42,11 @@ public:
   Warren(std::shared_ptr<Working> working,
          std::shared_ptr<Featurizer> featurizer,
          std::shared_ptr<Tokenizer> tokenizer, std::shared_ptr<Idx> idx,
-         std::shared_ptr<Txt> txt)
+         std::shared_ptr<Txt> txt, bool started = false)
       : default_container_(std::string("")),
         stemmer_(std::make_shared<NullStemmer>()), working_(working),
-        featurizer_(featurizer), tokenizer_(tokenizer), idx_(idx), txt_(txt){};
+        featurizer_(featurizer), tokenizer_(tokenizer), idx_(idx), txt_(txt),
+        started_(started){};
   inline std::string name() { return name_; }
   inline std::string recipe() { return recipe_(); }
   inline void start() {

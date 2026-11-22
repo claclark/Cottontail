@@ -1280,3 +1280,51 @@
 - Added the standalone `//test:remote_warren_test` target for concurrent
   loopback sessions, snapshot and commit behavior, exact annotation values,
   hopper lifetime, and connection loss. The target compiled.
+
+2026-11-20T21:08:54Z
+- Wired server activation into `Warren::make(burrow)`. The factory
+  releases the burrow lock before launching the configured command.
+  `RemoteWarren` discovers the loopback endpoint, waits for the greeting,
+  and exposes read-only parameters from the returned DNA.
+- RPC sessions accepted during startup wait for the shared Warren
+  activation. HTTP inspection queries use a separate clone. Extended the
+  loopback test to open through `open_meadow()` and check read-only
+  parameters. All 61 targets compiled.
+
+2026-11-21T19:16:39Z
+- Added `meadowlark::shutdown` to the server lifecycle. It verifies the
+  local lock owner's command, sends `SIGTERM` through a Linux PID file
+  descriptor, and waits up to ten seconds to acquire the burrow lock.
+  All 61 targets compiled.
+
+2026-11-21T19:34:19Z
+- Initialized the remote client's legacy container and local stemmer from
+  greeting DNA. Featurizer calls now use the session Warren's server-side
+  featurizer. Added coverage for legacy configuration, feature-label
+  round trips, and disconnected featurizer calls to the loopback test.
+  All 61 targets compiled.
+
+2026-11-21T19:37:45Z
+- Added an optional contention result to `WLock::obtain`. Warren
+  activation, server startup, and shutdown use it for control flow.
+
+2026-11-21T19:48:24Z
+- Added `meadowlark --shutdown` to the CLI and usage. The Meadowlark
+  target compiled.
+
+2026-11-21T20:07:07Z
+- Added `meadowlark --config` and the server configuration function. They
+  replace the server block under the burrow lock, retaining absolute
+  paths with symlinks and checking the DNA before publication.
+  All 61 targets compiled.
+
+2026-11-21T20:18:02Z
+- Added session IDs and clone negotiation to the server greeting.
+  Remote clones call `Warren::clone` on the source session and inherit its
+  started state and read snapshot. The loopback test checks snapshot
+  inheritance across a commit. All 61 targets compiled.
+
+2026-11-22T13:42:54Z
+- Extended the RemoteWarren test to exercise every version 0 RPC.
+  It verifies hopper release and started state on the wire and checks
+  both aborting and committing an erasure. The focused target compiled.

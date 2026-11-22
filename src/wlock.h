@@ -22,8 +22,10 @@ public:
   };
 
   // Existing burrows; legacy Simple burrows remain unlocked.
+  // busy is true when another process or file descriptor holds the lock.
   static std::shared_ptr<WLock> obtain(const std::string &burrow,
-                                       std::string *error = nullptr);
+                                       std::string *error = nullptr,
+                                       bool *busy = nullptr);
   // A missing target or an existing empty directory.
   static std::shared_ptr<WLock> create(const std::string &name,
                                        const std::string &burrow,

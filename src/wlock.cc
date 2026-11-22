@@ -140,7 +140,9 @@ void WLock::finish_activation(const std::string &error) {
 }
 
 std::shared_ptr<WLock> WLock::obtain(const std::string &burrow,
-                                     std::string *error) {
+                                     std::string *error, bool *busy) {
+  if (busy != nullptr)
+    *busy = false;
   std::string the_burrow = burrow == "" ? DEFAULT_BURROW : burrow;
   struct stat status;
   if (stat(the_burrow.c_str(), &status) != 0 || !S_ISDIR(status.st_mode)) {
@@ -194,6 +196,8 @@ std::shared_ptr<WLock> WLock::obtain(const std::string &burrow,
                           ": " + std::strerror(errno);
       return nullptr;
     }
+    if (busy != nullptr)
+      *busy = true;
     if (pid_missing)
       sleep(1);
     std::string owner;

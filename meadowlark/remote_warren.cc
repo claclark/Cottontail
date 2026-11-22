@@ -1,9 +1,13 @@
 #include "meadowlark/remote_warren.h"
 
 #include <cerrno>
+#include <charconv>
+#include <chrono>
 #include <cstring>
+#include <fstream>
 #include <map>
 #include <mutex>
+#include <thread>
 #include <utility>
 
 #include <arpa/inet.h>
@@ -12,7 +16,9 @@
 #include <sys/socket.h>
 
 #include "meadowlark/remote_protocol.h"
+#include "src/dna.h"
 #include "src/recipe.h"
+#include "src/stemmer.h"
 
 namespace cottontail::meadowlark {
 namespace {
@@ -20,6 +26,26 @@ namespace {
 void report_error(std::string *error, const std::string &message) {
   if (error != nullptr)
     safe_error(error) = message;
+}
+
+int endpoint_port(const std::string &filename) {
+  std::ifstream input(filename);
+  std::string url, extra;
+  if (!(input >> url) || input >> extra)
+    return 0;
+  constexpr std::string_view prefix = "http://127.0.0.1:";
+  std::string_view number(url);
+  if (!number.starts_with(prefix) || !number.ends_with('/'))
+    return 0;
+  number.remove_prefix(prefix.size());
+  number.remove_suffix(1);
+  int port;
+  auto end = number.data() + number.size();
+  auto result = std::from_chars(number.data(), end, port);
+  if (result.ec != std::errc() || result.ptr != end || port <= 0 ||
+      port > UINT16_MAX)
+    return 0;
+  return port;
 }
 
 bool connect_loopback(int fd, int port) {
@@ -59,8 +85,10 @@ namespace remote_protocol {
 
 class Connection {
 public:
-  explicit Connection(std::unique_ptr<Socket> socket)
-      : socket_(std::move(socket)) {}
+  Connection(std::unique_ptr<Socket> socket, std::string session)
+      : socket_(std::move(socket)), session_(std::move(session)) {}
+
+  const std::string &session() const { return session_; }
 
   bool check(std::string *error) {
     std::lock_guard<std::mutex> lock(mutex_);
@@ -124,6 +152,7 @@ private:
 
   std::mutex mutex_;
   std::unique_ptr<Socket> socket_;
+  const std::string session_;
 };
 
 } // namespace remote_protocol
@@ -193,6 +222,36 @@ std::unique_ptr<Hopper> make_hopper(std::shared_ptr<Connection> connection,
                            : std::make_unique<RemoteHopper>(
                                  std::move(connection), std::move(*handle));
 }
+
+class RemoteFeaturizer final : public Featurizer {
+public:
+  explicit RemoteFeaturizer(std::shared_ptr<Connection> connection)
+      : connection_(std::move(connection)) {}
+
+private:
+  std::string request_text(const char *method, json arguments = {}) {
+    json result =
+        connection_->request("featurizer", method, std::move(arguments));
+    auto text = result.get_ptr<std::string *>();
+    return text == nullptr ? std::string() : std::move(*text);
+  }
+
+  std::string name_() final { return request_text("name"); }
+  std::string recipe_() final { return request_text("recipe"); }
+  addr featurize_(const char *key, addr length) final {
+    if (key == nullptr || length < 0)
+      return null_feature;
+    json result = connection_->request("featurizer", "featurize",
+                                       {{"label", std::string(key, length)}});
+    addr feature;
+    return decode_addr(result, &feature) ? feature : null_feature;
+  }
+  std::string translate_(addr feature) final {
+    return request_text("translate", {{"feature", std::to_string(feature)}});
+  }
+
+  std::shared_ptr<Connection> connection_;
+};
 
 class RemoteIdx final : public Idx {
 public:
@@ -291,7 +350,28 @@ private:
 
 } // namespace
 
+std::shared_ptr<RemoteWarren> RemoteWarren::make(const std::string &burrow,
+                                                 std::string *error) {
+  const std::string &directory = burrow.empty() ? DEFAULT_BURROW : burrow;
+  std::string filename = directory + "/meadowlark.url";
+  int port = endpoint_port(filename);
+  if (port == 0) {
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+    port = endpoint_port(filename);
+  }
+  if (port == 0) {
+    report_error(error, "Cannot find a Meadowlark loopback URL in " + filename);
+    return nullptr;
+  }
+  return make(port, error);
+}
+
 std::shared_ptr<RemoteWarren> RemoteWarren::make(int port, std::string *error) {
+  return make(port, "", error);
+}
+
+std::shared_ptr<RemoteWarren>
+RemoteWarren::make(int port, const std::string &clone_of, std::string *error) {
   if (port <= 0 || port > UINT16_MAX) {
     report_error(error, "Invalid Meadowlark server port");
     return nullptr;
@@ -304,11 +384,24 @@ std::shared_ptr<RemoteWarren> RemoteWarren::make(int port, std::string *error) {
     return nullptr;
   }
   json hello = {{"protocol", protocol}, {"version", version}};
+  if (!clone_of.empty())
+    hello["clone_of"] = clone_of;
   json reply;
   if (!socket->write_bytes(std::string_view("\0", 1)) ||
-      !socket->write(hello) || !socket->read(&reply) || !greeting(reply) ||
-      !socket->timeout(0)) {
+      !socket->write(hello) || !socket->timeout(0) || !socket->read(&reply)) {
     report_error(error, "Meadowlark server greeting failed on port " +
+                            std::to_string(port));
+    return nullptr;
+  }
+  if (auto message = string_field(reply, "error")) {
+    report_error(error, *message);
+    return nullptr;
+  }
+  auto session = string_field(reply, "session");
+  auto started = reply.find("started");
+  if (!greeting(reply) || session == nullptr || session->empty() ||
+      started == reply.end() || !started->is_boolean()) {
+    report_error(error, "Invalid Meadowlark server greeting on port " +
                             std::to_string(port));
     return nullptr;
   }
@@ -324,35 +417,56 @@ std::shared_ptr<RemoteWarren> RemoteWarren::make(int port, std::string *error) {
     return nullptr;
   }
   auto tokenizer = Tokenizer::make(name, recipe, &detail);
-  if (tokenizer == nullptr ||
-      !name_and_recipe(parameters, "featurizer", &name, &recipe, &detail)) {
+  if (tokenizer == nullptr) {
     report_error(error, detail);
     return nullptr;
   }
-  auto featurizer = Featurizer::make(name, recipe, &detail);
-  if (featurizer == nullptr) {
+  std::map<std::string, std::string> warren_parameters;
+  auto settings = parameters.find("parameters");
+  if (settings != parameters.end() &&
+      !cook(settings->second, &warren_parameters, &detail)) {
     report_error(error, detail);
     return nullptr;
   }
-  return std::shared_ptr<RemoteWarren>(
-      new RemoteWarren(port, std::make_shared<Connection>(std::move(socket)),
-                       std::move(featurizer), std::move(tokenizer)));
+  std::shared_ptr<Stemmer> stemmer;
+  auto stemmer_name = warren_parameters.find("stemmer");
+  if (stemmer_name != warren_parameters.end() &&
+      !stemmer_name->second.empty()) {
+    stemmer = Stemmer::make(stemmer_name->second, "", &detail);
+    if (stemmer == nullptr) {
+      report_error(error, detail);
+      return nullptr;
+    }
+  }
+  auto warren = std::shared_ptr<RemoteWarren>(new RemoteWarren(
+      port, std::make_shared<Connection>(std::move(socket), *session),
+      std::move(tokenizer), std::move(warren_parameters),
+      started->get<bool>()));
+  if (stemmer != nullptr)
+    warren->stemmer_ = std::move(stemmer);
+  return warren;
 }
 
 RemoteWarren::RemoteWarren(int port, std::shared_ptr<Connection> connection,
-                           std::shared_ptr<Featurizer> featurizer,
-                           std::shared_ptr<Tokenizer> tokenizer)
-    : Warren(nullptr, std::move(featurizer), std::move(tokenizer),
-             std::make_shared<RemoteIdx>(connection),
-             std::make_shared<RemoteTxt>(connection)),
-      port_(port), connection_(std::move(connection)) {
+                           std::shared_ptr<Tokenizer> tokenizer,
+                           std::map<std::string, std::string> parameters,
+                           bool started)
+    : Warren(nullptr, std::make_shared<RemoteFeaturizer>(connection),
+             std::move(tokenizer), std::make_shared<RemoteIdx>(connection),
+             std::make_shared<RemoteTxt>(connection), started),
+      port_(port), connection_(std::move(connection)),
+      parameters_(std::move(parameters)) {
   name_ = "remote";
+  auto container = parameters_.find("container");
+  if (container != parameters_.end())
+    default_container_ = container->second;
   appender_ = std::make_shared<RemoteAppender>(connection_);
   annotator_ = std::make_shared<RemoteAnnotator>(connection_);
 }
 
 std::shared_ptr<Warren> RemoteWarren::clone_(std::string *error) {
-  return connection_->check(error) ? make(port_, error) : nullptr;
+  return connection_->check(error) ? make(port_, connection_->session(), error)
+                                   : nullptr;
 }
 
 std::unique_ptr<Hopper> RemoteWarren::hopper_from_gcl_(const std::string &query,
@@ -375,14 +489,16 @@ void RemoteWarren::commit_() {
 }
 void RemoteWarren::abort_() { connection_->acknowledge("warren", "abort", {}); }
 
-bool RemoteWarren::get_parameter_(const std::string &, std::string *,
-                                  std::string *error) {
-  report_error(error, "Parameters are unavailable on a RemoteWarren");
-  return false;
+bool RemoteWarren::get_parameter_(const std::string &key, std::string *value,
+                                  std::string *) {
+  auto setting = parameters_.find(key);
+  if (value != nullptr)
+    *value = setting == parameters_.end() ? "" : setting->second;
+  return true;
 }
 bool RemoteWarren::set_parameter_(const std::string &, const std::string &,
                                   std::string *error) {
-  report_error(error, "Parameters are unavailable on a RemoteWarren");
+  report_error(error, "RemoteWarren parameters are read-only");
   return false;
 }
 

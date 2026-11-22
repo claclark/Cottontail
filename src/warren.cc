@@ -1,10 +1,16 @@
 #include "src/warren.h"
 
+#include <cerrno>
+#include <cstring>
 #include <exception>
 #include <fstream>
 #include <map>
+#include <fcntl.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
+#include "meadowlark/remote_warren.h"
 #include "src/bigwig.h"
 #include "src/core.h"
 #include "src/dna.h"
@@ -77,14 +83,100 @@ std::shared_ptr<Warren> single_file_burrow(const std::string &burrow,
   safe_error(error) = "Invalid warren type: " + name;
   return nullptr;
 }
+
+bool launch_server(const std::string &directory, const std::string &command,
+                   std::string *error) {
+  std::string logfile = directory + "/meadowlark.log";
+  const char *log_name = logfile.c_str();
+  const char *launch_command = command.c_str();
+  pid_t child = fork();
+  if (child < 0) {
+    safe_error(error) = "Cannot launch Meadowlark server: " +
+                        std::string(std::strerror(errno));
+    return false;
+  }
+  if (child == 0) {
+    if (setsid() < 0)
+      _exit(1);
+    int output = open(log_name, O_WRONLY | O_CREAT | O_APPEND | O_NOFOLLOW |
+                                    O_NONBLOCK,
+                      0666);
+    struct stat status;
+    if (output < 0 || fstat(output, &status) != 0 || !S_ISREG(status.st_mode) ||
+        dup2(output, STDOUT_FILENO) < 0 || dup2(output, STDERR_FILENO) < 0)
+      _exit(1);
+    if (output > STDERR_FILENO)
+      close(output);
+    int input = open("/dev/null", O_RDONLY);
+    if (input < 0 || dup2(input, STDIN_FILENO) < 0)
+      _exit(1);
+    if (input != STDIN_FILENO)
+      close(input);
+    // Reap the launcher now and let the detached server outlive this caller.
+    pid_t server = fork();
+    if (server != 0)
+      _exit(server < 0 ? 1 : 0);
+    execl("/bin/sh", "sh", "-c", launch_command, static_cast<char *>(nullptr));
+    constexpr char message[] = "Cannot execute Meadowlark server command\n";
+    write(STDERR_FILENO, message, sizeof(message) - 1);
+    _exit(127);
+  }
+  int status;
+  pid_t waited;
+  do {
+    waited = waitpid(child, &status, 0);
+  } while (waited < 0 && errno == EINTR);
+  if (waited == child && WIFEXITED(status) && WEXITSTATUS(status) == 0)
+    return true;
+  safe_error(error) = "Cannot start Meadowlark server for " + directory +
+                      " (log: " + logfile + ")";
+  return false;
+}
 } // namespace
 
 std::shared_ptr<Warren> Warren::make(const std::string &burrow,
                                      std::string *error) {
   if (is_regular_file(burrow))
     return single_file_burrow(burrow, error);
-  std::shared_ptr<WLock> wlock = WLock::obtain(burrow, error);
-  return wlock == nullptr ? nullptr : local(wlock, error);
+  const std::string &directory = burrow.empty() ? DEFAULT_BURROW : burrow;
+  std::string lock_error;
+  bool busy;
+  auto wlock = WLock::obtain(directory, &lock_error, &busy);
+  if (wlock == nullptr && !busy) {
+    safe_set(error) = lock_error;
+    return nullptr;
+  }
+  std::string dna, dna_error;
+  std::map<std::string, std::string> parameters;
+  if (read_dna(directory + "/" + DNA_NAME, &dna, &dna_error) &&
+      cook(dna, &parameters, &dna_error) && parameters.contains("server")) {
+    std::map<std::string, std::string> server;
+    if (!cook(parameters.at("server"), &server, error))
+      return nullptr;
+    if (okay(server["active"])) {
+      if (wlock != nullptr) {
+        const std::string &command = server["command"];
+        if (command.empty()) {
+          safe_error(error) = "Meadowlark server command is missing for " +
+                              directory;
+          return nullptr;
+        }
+        std::string endpoint = directory + "/meadowlark.url";
+        if (unlink(endpoint.c_str()) != 0 && errno != ENOENT) {
+          safe_error(error) = "Cannot remove stale Meadowlark URL: " + endpoint;
+          return nullptr;
+        }
+        wlock.reset();
+        if (!launch_server(directory, command, error))
+          return nullptr;
+      }
+      return meadowlark::RemoteWarren::make(directory, error);
+    }
+  }
+  if (wlock != nullptr)
+    return local(wlock, error);
+  safe_set(error) = lock_error;
+  return nullptr;
 }
 
 std::shared_ptr<Warren> Warren::local(std::shared_ptr<WLock> wlock,
