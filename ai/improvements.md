@@ -12,6 +12,14 @@ The implementation and TREC update/deletion verification are recorded in
 [hazel.md](hazel.md) and [completed.md](completed.md#deletions-and-text-garbage-collection).
 The directory-locking checkpoint is also in [completed.md](completed.md#directory-locking).
 
+## Meadowlark Server Access
+
+- Before serving requests or returning burrow DNA, verify that the caller
+  has the filesystem access needed to open the same meadow locally. Honor
+  access granted through groups and ACLs.
+- Consider Unix-domain peer credentials for checking burrow access on
+  local RPC connections.
+
 ## Warren Memory Trimming
 
 - Long-running services over large ClimbMix indexes need a way to release

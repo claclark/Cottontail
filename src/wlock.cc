@@ -11,6 +11,7 @@
 #include <unistd.h>
 #include <vector>
 
+#include "meadowlark/server.h"
 #include "src/core.h"
 #include "src/dna.h"
 #include "src/recipe.h"
@@ -340,14 +341,18 @@ std::shared_ptr<WLock> WLock::recreate(const std::string &name,
       safe_error(error) = "Burrow contains subdirectories: " + filename;
       return nullptr;
     }
-    if (!S_ISREG(status.st_mode)) {
+    const bool server_socket =
+        entry == meadowlark::SERVER_SOCKET_NAME && S_ISSOCK(status.st_mode);
+    if (!S_ISREG(status.st_mode) && !server_socket) {
       safe_error(error) = "Burrow contains non-regular files: " + filename;
       return nullptr;
     }
     if (entry == LOCK_NAME || entry == PID_NAME)
       continue;
-    if (!(status.st_mode & (S_IWUSR | S_IWGRP | S_IWOTH)) ||
-        faccessat(AT_FDCWD, filename.c_str(), W_OK, AT_EACCESS) != 0) {
+    // A socket's mode governs connections. Unlink uses the directory mode.
+    if (!server_socket &&
+        (!(status.st_mode & (S_IWUSR | S_IWGRP | S_IWOTH)) ||
+         faccessat(AT_FDCWD, filename.c_str(), W_OK, AT_EACCESS) != 0)) {
       safe_error(error) = "Burrow contains read-only files: " + filename;
       return nullptr;
     }

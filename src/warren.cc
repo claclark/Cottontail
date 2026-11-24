@@ -11,6 +11,7 @@
 #include <unistd.h>
 
 #include "meadowlark/remote_warren.h"
+#include "meadowlark/server.h"
 #include "src/bigwig.h"
 #include "src/core.h"
 #include "src/dna.h"
@@ -161,11 +162,8 @@ std::shared_ptr<Warren> Warren::make(const std::string &burrow,
                               directory;
           return nullptr;
         }
-        std::string endpoint = directory + "/meadowlark.url";
-        if (unlink(endpoint.c_str()) != 0 && errno != ENOENT) {
-          safe_error(error) = "Cannot remove stale Meadowlark URL: " + endpoint;
+        if (!meadowlark::check_server_owner(directory + "/" + DNA_NAME, error))
           return nullptr;
-        }
         wlock.reset();
         if (!launch_server(directory, command, error))
           return nullptr;

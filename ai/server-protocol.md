@@ -6,9 +6,8 @@ covers startup, ownership, and concurrency. [Server architecture](server-archite
 
 ## Connection and greeting
 
-The Meadowlark loopback listener uses the first byte to select the
-protocol for the life of the connection. A ClientWarren sends a single
-`0x00` byte. HTTP inspection uses the same listener.
+ClientWarren connects to the burrow's `meadowlark.sock` Unix domain socket
+and sends a single `0x00` byte to begin the protocol.
 
 After the initial byte, each request or reply is a single-line UTF-8 JSON
 object terminated by a literal LF byte (`0x0a`). A newline inside a string
@@ -31,8 +30,7 @@ The server greeting includes `dna`, a JSON string containing the burrow's
 DNA, `session`, an opaque identifier for this connection's Warren, and
 `started`, a Boolean giving its read state. The Warren factory reads local
 `dna` to decide whether to activate a server. `RemoteWarren` gets its
-configuration from the greeting, whether it discovers the endpoint from
-the burrow or gets the port directly. The server sends the reply once the
+configuration from the greeting. The server sends the reply once the
 session Warren is ready.
 
 To clone a Warren, the client opens a new connection and adds `clone_of`

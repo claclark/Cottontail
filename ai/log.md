@@ -1328,3 +1328,12 @@
 - Extended the RemoteWarren test to exercise every version 0 RPC.
   It verifies hopper release and started state on the wire and checks
   both aborting and committing an erasure. The focused target compiled.
+
+2026-11-24T17:07:06Z
+- Replaced Meadowlark's loopback listener and HTTP inspection with Warren
+  RPC on `meadowlark.sock`. Session threads check the leading NUL before
+  negotiating version 0. Startup removes the legacy `meadowlark.url`.
+- Require the effective UID to match the owner of `dna` for server startup.
+  Recreation can remove a stale Meadowlark socket under the burrow lock.
+- Updated the remote Warren tests and server documentation. All 61 Bazel
+  targets compiled. Runtime verification remains with the user.

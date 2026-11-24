@@ -4,6 +4,8 @@
 #include <string>
 #include <string_view>
 
+#include <sys/un.h>
+
 #include "src/core.h"
 #include "src/nlohmann.h"
 
@@ -12,6 +14,9 @@ namespace cottontail::meadowlark::remote_protocol {
 constexpr char protocol[] = "meadowlark";
 constexpr int version = 0;
 constexpr int handshake_timeout = 5;
+
+bool local_address(const std::string &path, sockaddr_un *address,
+                   std::string *error = nullptr);
 
 class Socket {
 public:

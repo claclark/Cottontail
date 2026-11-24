@@ -9,7 +9,6 @@
 #include <string>
 #include <thread>
 
-#include <arpa/inet.h>
 #include <signal.h>
 #include <sys/socket.h>
 #include <sys/wait.h>
@@ -22,6 +21,7 @@
 #include "meadowlark/server.h"
 #include "src/dna.h"
 #include "src/recipe.h"
+#include "src/wlock.h"
 
 namespace {
 
@@ -46,9 +46,8 @@ bool create_server_meadow(const std::string &meadow, std::string *error) {
 class TestServer {
 public:
   bool start() {
-    const char *tmp = std::getenv("TEST_TMPDIR");
-    std::string directory =
-        std::string(tmp == nullptr ? "/tmp" : tmp) + "/remote-warren-XXXXXX";
+    // Bazel's TEST_TMPDIR can be longer than a Unix socket address.
+    std::string directory = "/tmp/remote-warren-XXXXXX";
     if (mkdtemp(directory.data()) == nullptr)
       return false;
     directory_ = directory;
@@ -56,9 +55,15 @@ public:
     child_ = fork();
     if (child_ == 0) {
       std::string error;
-      if (create_server_meadow(meadow_, &error) &&
-          cottontail::meadowlark::server(meadow_, &error))
-        _exit(0);
+      if (create_server_meadow(meadow_, &error)) {
+        std::ofstream legacy(meadow_ + "/meadowlark.url");
+        legacy << "http://127.0.0.1:12345/\n";
+        legacy.close();
+        if (!legacy)
+          error = "Cannot write legacy Meadowlark URL";
+        else if (cottontail::meadowlark::server(meadow_, &error))
+          _exit(0);
+      }
       std::fprintf(stderr, "%s\n", error.c_str());
       _exit(1);
     }
@@ -70,22 +75,17 @@ public:
     auto deadline = std::chrono::steady_clock::now() + 5s;
     *error = "Server has not published an endpoint";
     do {
-      if (std::filesystem::exists(meadow_ + "/meadowlark.url"))
+      if (std::filesystem::is_socket(socket_path()))
         return cottontail::meadowlark::open_meadow(meadow_, error);
       std::this_thread::sleep_for(20ms);
     } while (std::chrono::steady_clock::now() < deadline);
     return nullptr;
   }
 
-  int port() const {
-    std::ifstream endpoint(meadow_ + "/meadowlark.url");
-    std::string url;
-    int port;
-    if (endpoint >> url &&
-        std::sscanf(url.c_str(), "http://127.0.0.1:%d/", &port) == 1 &&
-        port > 0 && port <= UINT16_MAX)
-      return port;
-    return 0;
+  const std::string &meadow() const { return meadow_; }
+
+  std::string socket_path() const {
+    return meadow_ + "/" + cottontail::meadowlark::SERVER_SOCKET_NAME;
   }
 
   void stop() {
@@ -121,19 +121,20 @@ void expect_seek(cottontail::Hopper &hopper, Seek seek, addr k, addr expected_p,
   EXPECT_EQ(value, expected_value);
 }
 
-void check_wire_lifecycle(int port) {
+void check_wire_lifecycle(const std::string &path) {
+  using cottontail::meadowlark::remote_protocol::local_address;
   using cottontail::meadowlark::remote_protocol::Socket;
-  ASSERT_GT(port, 0);
-  Socket socket(::socket(AF_INET, SOCK_STREAM, 0));
-  ASSERT_GE(socket.fd(), 0);
-  ASSERT_TRUE(socket.configure());
-  sockaddr_in address{};
-  address.sin_family = AF_INET;
-  address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-  address.sin_port = htons(static_cast<uint16_t>(port));
-  ASSERT_EQ(::connect(socket.fd(), reinterpret_cast<sockaddr *>(&address),
-                      sizeof(address)),
-            0);
+  sockaddr_un address;
+  ASSERT_TRUE(local_address(path, &address));
+  auto connect = [&](Socket &socket) {
+    return socket.fd() >= 0 && socket.configure() &&
+           ::connect(socket.fd(), reinterpret_cast<sockaddr *>(&address),
+                     sizeof(address)) == 0;
+  };
+  Socket invalid(::socket(AF_UNIX, SOCK_STREAM, 0));
+  ASSERT_TRUE(connect(invalid));
+  Socket socket(::socket(AF_UNIX, SOCK_STREAM, 0));
+  ASSERT_TRUE(connect(socket));
   json reply;
   auto exchange = [&](const json &request) {
     return socket.write(request) && socket.read(&reply);
@@ -141,6 +142,9 @@ void check_wire_lifecycle(int port) {
   ASSERT_TRUE(socket.write_bytes(std::string_view("\0", 1)));
   ASSERT_TRUE(exchange({{"protocol", "meadowlark"}, {"version", 0}}));
   ASSERT_TRUE(reply.contains("session")) << reply;
+  ASSERT_TRUE(invalid.write_bytes("G"));
+  char byte;
+  EXPECT_EQ(recv(invalid.fd(), &byte, 1, 0), 0);
 
   const json started = {{"component", "warren"}, {"method", "started"}};
   ASSERT_TRUE(exchange(started));
@@ -261,7 +265,7 @@ TEST(RemoteWarren, SessionsAndDisconnect) {
   expect_seek(*packed, &Hopper::ohr, p, p, q, payload);
   EXPECT_EQ(packed->L(q), p);
   EXPECT_EQ(packed->R(p), q);
-  check_wire_lifecycle(server.port());
+  check_wire_lifecycle(server.socket_path());
 
   server.stop();
   addr cached_p, cached_q;
@@ -275,6 +279,23 @@ TEST(RemoteWarren, SessionsAndDisconnect) {
   EXPECT_NE(error.find("connection lost"), std::string::npos) << error;
   EXPECT_EQ(featurizer->featurize("probe:remote"), cottontail::null_feature);
   EXPECT_TRUE(featurizer->translate(short_feature).empty());
+}
+
+TEST(RemoteWarren, RecreateWithStaleSocket) {
+  TestServer server;
+  ASSERT_TRUE(server.start());
+  std::string error;
+  ASSERT_NE(server.connect(&error), nullptr) << error;
+  EXPECT_FALSE(std::filesystem::exists(server.meadow() + "/meadowlark.url"));
+  EXPECT_EQ(cottontail::WLock::recreate("bigwig", server.meadow(), &error),
+            nullptr);
+  EXPECT_TRUE(std::filesystem::is_socket(server.socket_path()));
+  server.stop();
+  ASSERT_TRUE(std::filesystem::is_socket(server.socket_path()));
+  ASSERT_NE(cottontail::WLock::recreate("bigwig", server.meadow(), &error),
+            nullptr)
+      << error;
+  EXPECT_FALSE(std::filesystem::exists(server.socket_path()));
 }
 
 TEST(RemoteWarren, EraseAndAbort) {

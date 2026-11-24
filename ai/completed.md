@@ -38,7 +38,8 @@ opens a file directly. Legacy Simple activation remains unlocked.
   establish the lock file, then obtain it. This operation does not initialize DNA.
 - `recreate(name, burrow, error)`: obtain an existing recognized burrow and refuse
   Simple. After ordinary `temp.*` cleanup, check the remaining entries before
-  deletion. Refuse subdirectories, non-regular entries, and read-only files.
+  deletion. Refuse subdirectories, non-regular entries other than the reserved
+  `meadowlark.sock` socket, and read-only regular files.
   Preserve `burrow.lock` and `burrow.pid`. A missing target uses `create`.
 
 WLock owns the descriptor and its Working. It constructs Working after

@@ -4,7 +4,6 @@
 #include <cerrno>
 #include <charconv>
 #include <chrono>
-#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
@@ -18,17 +17,14 @@
 #include <memory>
 #include <mutex>
 #include <random>
-#include <sstream>
 #include <string>
 #include <string_view>
 #include <thread>
 
-#include <arpa/inet.h>
 #include <fcntl.h>
 #include <poll.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
-#include <sys/time.h>
 #include <unistd.h>
 #ifdef __linux__
 #include <signal.h>
@@ -40,7 +36,6 @@
 #include "meadowlark/remote_protocol.h"
 #include "src/core.h"
 #include "src/dna.h"
-#include "src/json.h"
 #include "src/recipe.h"
 #include "src/warren.h"
 #include "src/wlock.h"
@@ -100,37 +95,20 @@ bool redirect_log(const std::string &filename, std::string *error) {
   return true;
 }
 
-bool listen_local(int listener, std::string *url, std::string *error) {
-  sockaddr_in address{};
-  address.sin_family = AF_INET;
-  address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-  socklen_t size = sizeof(address);
-  sockaddr *socket_address = reinterpret_cast<sockaddr *>(&address);
-  if (listener < 0 || bind(listener, socket_address, size) != 0 ||
-      listen(listener, SOMAXCONN) != 0 ||
-      getsockname(listener, socket_address, &size) != 0) {
-    safe_error(error) = "Cannot listen on loopback: " +
-                        std::string(std::strerror(errno));
-    return false;
+bool remove_stale_socket(const std::string &path, std::string *error) {
+  struct stat status;
+  if (lstat(path.c_str(), &status) == 0) {
+    if (!S_ISSOCK(status.st_mode)) {
+      safe_error(error) = "Meadowlark socket path is not a socket: " + path;
+      return false;
+    }
+    if (unlink(path.c_str()) == 0)
+      return true;
   }
-  *url = "http://127.0.0.1:" + std::to_string(ntohs(address.sin_port)) + "/";
-  return true;
-}
-
-bool publish_url(Working &working, const std::string &filename,
-                 const std::string &url, std::string *error) {
-  std::string temporary = working.make_temp("url");
-  std::ofstream output(temporary);
-  if (!output) {
-    safe_error(error) = "Cannot write server URL: " + temporary;
-    return false;
-  }
-  output << url << "\n";
-  output.close();
-  if (output && std::rename(temporary.c_str(), filename.c_str()) == 0)
+  if (errno == ENOENT)
     return true;
-  std::remove(temporary.c_str());
-  safe_error(error) = "Cannot publish server URL: " + filename;
+  safe_error(error) = "Cannot clear Meadowlark socket path: " + path + ": " +
+                      std::strerror(errno);
   return false;
 }
 
@@ -140,155 +118,6 @@ ssize_t receive(int fd, char *buffer, size_t size) {
     count = recv(fd, buffer, size, 0);
   } while (count < 0 && errno == EINTR);
   return count;
-}
-
-void send_response(Socket &socket, std::string_view status, std::string_view type,
-                   const std::string &body) {
-  std::ostringstream header;
-  header << "HTTP/1.1 " << status << "\r\nContent-Type: " << type
-         << "\r\nContent-Length: " << body.size()
-         << "\r\nConnection: close\r\nCache-Control: no-store\r\n\r\n";
-  socket.write_bytes(header.str() + body);
-}
-
-std::string html_escape(std::string_view text) {
-  std::string escaped;
-  for (char ch : text)
-    switch (ch) {
-    case '&':
-      escaped += "&amp;";
-      break;
-    case '<':
-      escaped += "&lt;";
-      break;
-    case '>':
-      escaped += "&gt;";
-      break;
-    case '"':
-      escaped += "&quot;";
-      break;
-    default:
-      escaped += ch;
-    }
-  return escaped;
-}
-
-int hex_digit(char ch) {
-  if (ch >= '0' && ch <= '9')
-    return ch - '0';
-  if (ch >= 'A' && ch <= 'F')
-    return ch - 'A' + 10;
-  if (ch >= 'a' && ch <= 'f')
-    return ch - 'a' + 10;
-  return -1;
-}
-
-bool decode_query(std::string_view encoded, std::string *query) {
-  for (size_t i = 0; i < encoded.size(); i++) {
-    char ch = encoded[i];
-    if (ch == '+') {
-      *query += ' ';
-    } else if (ch == '%') {
-      if (encoded.size() - i < 3)
-        return false;
-      int high = hex_digit(encoded[i + 1]), low = hex_digit(encoded[i + 2]);
-      if (high < 0 || low < 0 || (high == 0 && low == 0))
-        return false;
-      *query += static_cast<char>(16 * high + low);
-      i += 2;
-    } else {
-      *query += ch;
-    }
-  }
-  return true;
-}
-
-class ReadEpoch {
-public:
-  explicit ReadEpoch(Warren &warren) : warren_(warren) { warren_.start(); }
-  ~ReadEpoch() { warren_.end(); }
-  ReadEpoch(const ReadEpoch &) = delete;
-  ReadEpoch &operator=(const ReadEpoch &) = delete;
-
-private:
-  Warren &warren_;
-};
-
-std::string inspect(Warren &original, const std::string &query) {
-  std::string error;
-  auto warren = original.clone(&error);
-  if (warren == nullptr)
-    return error;
-  ReadEpoch epoch(*warren);
-  auto hopper = warren->hopper_from_gcl(query, &error);
-  if (hopper == nullptr)
-    return error;
-  auto txt = warren->txt();
-  auto snippet = [&txt](addr p, addr q) {
-    std::string text = txt->translate(p, q);
-    std::replace(text.begin(), text.end(), '\n', ' ');
-    std::replace(text.begin(), text.end(), '\r', ' ');
-    return json_translate(text);
-  };
-  constexpr addr window = 128;
-  std::ostringstream matches;
-  addr p, q, next = minfinity + 1;
-  fval value;
-  for (unsigned i = 0; i < 24; i++) {
-    hopper->tau(next, &p, &q, &value);
-    if (p >= maxfinity)
-      break;
-    matches << "(" << p << "," << q << ")";
-    addr annotation = fval2addr(value);
-    if (annotation != 0)
-      matches << annotation;
-    matches << ": ";
-    if (q - p <= window)
-      matches << snippet(p, q);
-    else
-      matches << snippet(p, p + window / 2) << "... "
-              << snippet(q - window / 2, q);
-    matches << "\n";
-    next = p + 1;
-  }
-  std::string result = matches.str();
-  return result.empty() ? "No matches." : result;
-}
-
-std::string page(Warren *warren, const std::string &query) {
-  std::ostringstream html;
-  html << R"HTML(<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Meadowlark Inspect</title>
-<style>
-  body { max-width: 900px; margin: 3rem auto; padding: 0 1.5rem;
-         font: 16px/1.5 system-ui, sans-serif; }
-  form { display: flex; gap: .6rem; align-items: baseline; }
-  input { flex: 1; min-width: 0; font: inherit; padding: .35em; }
-  button { font: inherit; }
-  pre { padding: 1rem; background: #f4f4f4; white-space: pre-wrap;
-        overflow-wrap: anywhere; }
-</style>
-)HTML";
-  if (warren == nullptr) {
-    html << "<meta http-equiv=\"refresh\" content=\"2\">\n"
-         << "</head><body><h1>Meadowlark Inspect</h1>"
-         << "<p>Loading Warren…</p>";
-  } else {
-    html << "</head><body><h1>Meadowlark Inspect</h1>\n"
-         << "<form action=\"/\" method=\"get\">"
-         << "<label for=\"q\">GCL query</label>"
-         << "<input id=\"q\" name=\"q\" autocomplete=\"off\" autofocus value=\""
-         << html_escape(query)
-         << "\"><button type=\"submit\">Run</button></form>\n";
-    if (!query.empty())
-      html << "<pre>" << html_escape(inspect(*warren, query)) << "</pre>\n";
-  }
-  html << "</body></html>\n";
-  return html.str();
 }
 
 json result(json value) { return {{"response", std::move(value)}}; }
@@ -572,8 +401,10 @@ void serve_rpc(std::unique_ptr<Socket> client,
   std::shared_ptr<Session> session;
   std::string session_id;
   try {
+    char first;
     json request;
-    if (!client->read(&request) || !greeting(request))
+    if (!client->configure() || receive(client->fd(), &first, 1) != 1 ||
+        first != '\0' || !client->read(&request) || !greeting(request))
       return;
     std::shared_ptr<Warren> warren;
     std::string error;
@@ -628,60 +459,6 @@ void serve_rpc(std::unique_ptr<Socket> client,
     session->close();
 }
 
-void serve_connection(std::unique_ptr<Socket> client,
-                      const std::shared_ptr<Warren> &warren,
-                      const std::shared_future<Activation> &activation,
-                      const std::shared_ptr<const json> &hello,
-                      const std::shared_ptr<Sessions> &sessions) {
-  int fd = client->fd();
-  if (!client->configure())
-    return;
-  char first;
-  if (receive(fd, &first, 1) != 1)
-    return;
-  if (first == '\0') {
-    std::thread(serve_rpc, std::move(client), activation, hello, sessions)
-        .detach();
-    return;
-  }
-  std::string header(1, first);
-  constexpr size_t header_limit = 16 * 1024;
-  while (header.find("\r\n\r\n") == std::string::npos) {
-    char buffer[2048];
-    size_t available = std::min(sizeof(buffer), header_limit - header.size());
-    if (available == 0) {
-      send_response(*client, "431 Request Header Fields Too Large", "text/plain",
-                    "HTTP request header is too large.\n");
-      return;
-    }
-    ssize_t count = receive(fd, buffer, available);
-    if (count <= 0)
-      return;
-    header.append(buffer, count);
-  }
-  std::istringstream request(header.substr(0, header.find("\r\n")));
-  std::string method, target, version;
-  if (!(request >> method >> target >> version) || method != "GET" ||
-      (version != "HTTP/1.1" && version != "HTTP/1.0")) {
-    send_response(*client, "400 Bad Request", "text/plain",
-                  "Expected an HTTP GET.\n");
-    return;
-  }
-  if (target != "/" && !target.starts_with("/?q=")) {
-    send_response(*client, "404 Not Found", "text/plain", "Not found.\n");
-    return;
-  }
-  std::string query;
-  if (target.starts_with("/?q=") &&
-      !decode_query(std::string_view(target).substr(4), &query)) {
-    send_response(*client, "400 Bad Request", "text/plain",
-                  "Invalid query encoding.\n");
-    return;
-  }
-  send_response(*client, "200 OK", "text/html; charset=utf-8",
-                page(warren.get(), query));
-}
-
 bool serve(int listener, std::shared_ptr<WLock> wlock, std::string *error) {
   using namespace std::chrono_literals;
   std::string dna;
@@ -723,7 +500,8 @@ bool serve(int listener, std::shared_ptr<WLock> wlock, std::string *error) {
                           std::string(std::strerror(errno));
       return false;
     }
-    serve_connection(std::move(client), warren, activation, hello, sessions);
+    std::thread(serve_rpc, std::move(client), activation, hello, sessions)
+        .detach();
   }
 }
 
@@ -831,6 +609,21 @@ bool config(const std::string &meadow, const std::string &executable,
   return write_dna(wlock->working(), updated, error);
 }
 
+bool check_server_owner(const std::string &dna, std::string *error) {
+  struct stat status;
+  if (stat(dna.c_str(), &status) != 0) {
+    safe_error(error) = "Cannot inspect Meadowlark DNA: " + dna + ": " +
+                        std::strerror(errno);
+    return false;
+  }
+  if (status.st_uid != geteuid()) {
+    safe_error(error) = "Meadowlark server must start as the owner of " + dna +
+                        " (UID " + std::to_string(status.st_uid) + ")";
+    return false;
+  }
+  return true;
+}
+
 bool server(const std::string &burrow, std::string *error) {
   // Keep the lock from taking a descriptor that log redirection replaces.
   if (!ensure_output_stream(STDOUT_FILENO, error) ||
@@ -846,24 +639,45 @@ bool server(const std::string &burrow, std::string *error) {
     return false;
   }
   auto working = wlock->working();
-  if (!redirect_log(working->make_name("meadowlark.log"), error))
+  if (wlock->name() == "simple") {
+    safe_error(error) = "Cannot serve a legacy Simple burrow";
+    return false;
+  }
+  if (!check_server_owner(working->make_name(DNA_NAME), error) ||
+      !redirect_log(working->make_name("meadowlark.log"), error))
     return false;
   const std::time_t started_at = std::time(nullptr);
   std::tm utc{};
   if (gmtime_r(&started_at, &utc) != nullptr)
     std::cerr << std::put_time(&utc, "%Y-%m-%dT%H:%M:%SZ") << ' ';
   std::cerr << "Meadowlark server starting\n";
-  std::string url_file = working->make_name("meadowlark.url");
+  const std::string path = working->make_name(SERVER_SOCKET_NAME);
+  sockaddr_un address;
+  if (!local_address(path, &address, error))
+    return false;
+  const std::string url_file = working->make_name("meadowlark.url");
   if (unlink(url_file.c_str()) != 0 && errno != ENOENT) {
-    safe_error(error) = "Cannot remove stale Meadowlark URL: " + url_file;
+    safe_error(error) = "Cannot remove legacy Meadowlark URL: " + url_file +
+                        ": " + std::strerror(errno);
     return false;
   }
-  Descriptor listener(socket(AF_INET, SOCK_STREAM, 0));
-  std::string url;
-  if (!listen_local(listener.get(), &url, error) ||
-      !publish_url(*working, url_file, url, error))
+  if (!remove_stale_socket(path, error))
     return false;
-  std::cerr << "Meadowlark server listening at " << url << "\n";
+  Descriptor listener(socket(AF_UNIX, SOCK_STREAM, 0));
+  if (listener.get() < 0 || fcntl(listener.get(), F_SETFD, FD_CLOEXEC) != 0 ||
+      bind(listener.get(), reinterpret_cast<sockaddr *>(&address),
+           sizeof(address)) != 0) {
+    safe_error(error) = "Cannot bind Meadowlark socket: " + path + ": " +
+                        std::strerror(errno);
+    return false;
+  }
+  if (listen(listener.get(), SOMAXCONN) != 0) {
+    safe_error(error) = "Cannot listen on Meadowlark socket: " + path + ": " +
+                        std::strerror(errno);
+    unlink(path.c_str());
+    return false;
+  }
+  std::cerr << "Meadowlark server listening at " << path << "\n";
   bool success = false;
   try {
     success = serve(listener.get(), wlock, error);
@@ -871,7 +685,7 @@ bool server(const std::string &burrow, std::string *error) {
     safe_error(error) =
         "Meadowlark server failed: " + std::string(exception.what());
   }
-  unlink(url_file.c_str());
+  unlink(path.c_str());
   return success;
 }
 

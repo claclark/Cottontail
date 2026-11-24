@@ -15,13 +15,11 @@ class RemoteWarren final : public Warren {
 public:
   static std::shared_ptr<RemoteWarren> make(const std::string &burrow,
                                             std::string *error = nullptr);
-  static std::shared_ptr<RemoteWarren> make(int port,
-                                            std::string *error = nullptr);
 
 private:
   static std::shared_ptr<RemoteWarren>
-  make(int port, const std::string &clone_of, std::string *error);
-  RemoteWarren(int port,
+  make(const std::string &path, const std::string &clone_of, std::string *error);
+  RemoteWarren(const std::string &path,
                std::shared_ptr<remote_protocol::Connection> connection,
                std::shared_ptr<Tokenizer> tokenizer,
                std::map<std::string, std::string> parameters, bool started);
@@ -40,7 +38,7 @@ private:
   bool get_parameter_(const std::string &key, std::string *value,
                       std::string *error) final;
 
-  int port_;
+  const std::string path_;
   std::shared_ptr<remote_protocol::Connection> connection_;
   const std::map<std::string, std::string> parameters_;
 };

@@ -1,21 +1,20 @@
 #include "meadowlark/remote_warren.h"
 
 #include <cerrno>
-#include <charconv>
 #include <chrono>
 #include <cstring>
-#include <fstream>
+#include <filesystem>
 #include <map>
 #include <mutex>
 #include <thread>
 #include <utility>
 
-#include <arpa/inet.h>
 #include <fcntl.h>
 #include <poll.h>
 #include <sys/socket.h>
 
 #include "meadowlark/remote_protocol.h"
+#include "meadowlark/server.h"
 #include "src/dna.h"
 #include "src/recipe.h"
 #include "src/stemmer.h"
@@ -28,35 +27,12 @@ void report_error(std::string *error, const std::string &message) {
     safe_error(error) = message;
 }
 
-int endpoint_port(const std::string &filename) {
-  std::ifstream input(filename);
-  std::string url, extra;
-  if (!(input >> url) || input >> extra)
-    return 0;
-  constexpr std::string_view prefix = "http://127.0.0.1:";
-  std::string_view number(url);
-  if (!number.starts_with(prefix) || !number.ends_with('/'))
-    return 0;
-  number.remove_prefix(prefix.size());
-  number.remove_suffix(1);
-  int port;
-  auto end = number.data() + number.size();
-  auto result = std::from_chars(number.data(), end, port);
-  if (result.ec != std::errc() || result.ptr != end || port <= 0 ||
-      port > UINT16_MAX)
-    return 0;
-  return port;
-}
-
-bool connect_loopback(int fd, int port) {
+bool connect_local(int fd, const sockaddr_un &address) {
   int flags = fcntl(fd, F_GETFL);
   if (flags < 0 || fcntl(fd, F_SETFL, flags | O_NONBLOCK) != 0)
     return false;
-  sockaddr_in address{};
-  address.sin_family = AF_INET;
-  address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-  address.sin_port = htons(static_cast<uint16_t>(port));
-  if (connect(fd, reinterpret_cast<sockaddr *>(&address), sizeof(address)) !=
+  if (connect(fd, reinterpret_cast<const sockaddr *>(&address),
+              sizeof(address)) !=
       0) {
     if (errno != EINPROGRESS)
       return false;
@@ -353,35 +329,40 @@ private:
 std::shared_ptr<RemoteWarren> RemoteWarren::make(const std::string &burrow,
                                                  std::string *error) {
   const std::string &directory = burrow.empty() ? DEFAULT_BURROW : burrow;
-  std::string filename = directory + "/meadowlark.url";
-  int port = endpoint_port(filename);
-  if (port == 0) {
-    std::this_thread::sleep_for(std::chrono::seconds(1));
-    port = endpoint_port(filename);
-  }
-  if (port == 0) {
-    report_error(error, "Cannot find a Meadowlark loopback URL in " + filename);
+  std::error_code failure;
+  auto path = std::filesystem::absolute(
+      std::filesystem::path(directory) / SERVER_SOCKET_NAME, failure);
+  if (failure) {
+    report_error(error, "Cannot resolve Meadowlark socket in " + directory +
+                            ": " + failure.message());
     return nullptr;
   }
-  return make(port, error);
-}
-
-std::shared_ptr<RemoteWarren> RemoteWarren::make(int port, std::string *error) {
-  return make(port, "", error);
+  return make(path.string(), "", error);
 }
 
 std::shared_ptr<RemoteWarren>
-RemoteWarren::make(int port, const std::string &clone_of, std::string *error) {
-  if (port <= 0 || port > UINT16_MAX) {
-    report_error(error, "Invalid Meadowlark server port");
+RemoteWarren::make(const std::string &path, const std::string &clone_of,
+                   std::string *error) {
+  sockaddr_un address;
+  if (!local_address(path, &address, error))
     return nullptr;
-  }
-  std::unique_ptr<Socket> socket(new Socket(::socket(AF_INET, SOCK_STREAM, 0)));
-  if (socket->fd() < 0 || !socket->configure() ||
-      !connect_loopback(socket->fd(), port)) {
-    report_error(error, "Cannot connect to Meadowlark server on port " +
-                            std::to_string(port) + ": " + std::strerror(errno));
-    return nullptr;
+  std::unique_ptr<Socket> socket;
+  bool retry = clone_of.empty();
+  for (;;) {
+    socket = std::make_unique<Socket>(::socket(AF_UNIX, SOCK_STREAM, 0));
+    if (socket->fd() >= 0 && socket->configure() &&
+        connect_local(socket->fd(), address))
+      break;
+    int failure = errno;
+    if (!retry || (failure != ENOENT && failure != ECONNREFUSED &&
+                   failure != EAGAIN)) {
+      report_error(error, "Cannot connect to Meadowlark socket: " + path +
+                              ": " + std::strerror(failure));
+      return nullptr;
+    }
+    retry = false;
+    socket.reset();
+    std::this_thread::sleep_for(std::chrono::seconds(1));
   }
   json hello = {{"protocol", protocol}, {"version", version}};
   if (!clone_of.empty())
@@ -389,8 +370,7 @@ RemoteWarren::make(int port, const std::string &clone_of, std::string *error) {
   json reply;
   if (!socket->write_bytes(std::string_view("\0", 1)) ||
       !socket->write(hello) || !socket->timeout(0) || !socket->read(&reply)) {
-    report_error(error, "Meadowlark server greeting failed on port " +
-                            std::to_string(port));
+    report_error(error, "Meadowlark server greeting failed: " + path);
     return nullptr;
   }
   if (auto message = string_field(reply, "error")) {
@@ -401,8 +381,7 @@ RemoteWarren::make(int port, const std::string &clone_of, std::string *error) {
   auto started = reply.find("started");
   if (!greeting(reply) || session == nullptr || session->empty() ||
       started == reply.end() || !started->is_boolean()) {
-    report_error(error, "Invalid Meadowlark server greeting on port " +
-                            std::to_string(port));
+    report_error(error, "Invalid Meadowlark server greeting: " + path);
     return nullptr;
   }
   auto dna = string_field(reply, "dna");
@@ -439,7 +418,7 @@ RemoteWarren::make(int port, const std::string &clone_of, std::string *error) {
     }
   }
   auto warren = std::shared_ptr<RemoteWarren>(new RemoteWarren(
-      port, std::make_shared<Connection>(std::move(socket), *session),
+      path, std::make_shared<Connection>(std::move(socket), *session),
       std::move(tokenizer), std::move(warren_parameters),
       started->get<bool>()));
   if (stemmer != nullptr)
@@ -447,14 +426,15 @@ RemoteWarren::make(int port, const std::string &clone_of, std::string *error) {
   return warren;
 }
 
-RemoteWarren::RemoteWarren(int port, std::shared_ptr<Connection> connection,
+RemoteWarren::RemoteWarren(const std::string &path,
+                           std::shared_ptr<Connection> connection,
                            std::shared_ptr<Tokenizer> tokenizer,
                            std::map<std::string, std::string> parameters,
                            bool started)
     : Warren(nullptr, std::make_shared<RemoteFeaturizer>(connection),
              std::move(tokenizer), std::make_shared<RemoteIdx>(connection),
              std::make_shared<RemoteTxt>(connection), started),
-      port_(port), connection_(std::move(connection)),
+      path_(path), connection_(std::move(connection)),
       parameters_(std::move(parameters)) {
   name_ = "remote";
   auto container = parameters_.find("container");
@@ -465,7 +445,7 @@ RemoteWarren::RemoteWarren(int port, std::shared_ptr<Connection> connection,
 }
 
 std::shared_ptr<Warren> RemoteWarren::clone_(std::string *error) {
-  return connection_->check(error) ? make(port_, connection_->session(), error)
+  return connection_->check(error) ? make(path_, connection_->session(), error)
                                    : nullptr;
 }
 

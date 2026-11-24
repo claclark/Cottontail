@@ -2,12 +2,25 @@
 
 #include <cerrno>
 #include <charconv>
+#include <cstring>
 #include <fcntl.h>
 #include <sys/socket.h>
 #include <sys/time.h>
 #include <unistd.h>
 
 namespace cottontail::meadowlark::remote_protocol {
+
+bool local_address(const std::string &path, sockaddr_un *address,
+                   std::string *error) {
+  if (path.size() >= sizeof(address->sun_path)) {
+    safe_error(error) = "Meadowlark socket path is too long: " + path;
+    return false;
+  }
+  *address = {};
+  address->sun_family = AF_UNIX;
+  std::memcpy(address->sun_path, path.c_str(), path.size() + 1);
+  return true;
+}
 
 Socket::~Socket() { close(); }
 

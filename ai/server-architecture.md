@@ -1,8 +1,8 @@
 # Meadowlark Server Architecture
 
 The Meadowlark server owns a local Warren and makes its read and write
-operations available through `ClientWarren`. A single loopback TCP listener
-serves both browser inspection and the persistent ClientWarren protocol.
+operations available through `ClientWarren`. It listens on the Unix domain
+socket `meadowlark.sock` inside the burrow. Use `fluffy` to inspect the burrow.
 The wire format and version 0 operation set are defined in the companion
 specification. [Server protocol](server-protocol.md)
 
@@ -22,15 +22,15 @@ name is resolved through `PATH`. The library `config` function uses
 when the executable is empty. It verifies the replacement DNA before
 publishing it.
 
-For server activation, `Warren::make(burrow)` clears any stale
-`meadowlark.url` while it holds the burrow lock, releases the lock, and
-launches the configured command as a detached process. If another process
-holds the lock, the factory proceeds to discovery. Both paths call
-`RemoteWarren::make(burrow)`, which reads the loopback endpoint from
-`meadowlark.url` and retries once after one second if it cannot read a
-valid endpoint. The client connects, sends its greeting, and waits for
-the server's reply. Opening by port connects directly to the listener.
-An operator can start the server with `meadowlark --meadow BURROW --server`.
+To start a server, `Warren::make(burrow)` checks that the process's effective
+UID matches the owner of `dna`, releases the burrow lock, and launches the
+configured command as a detached process. A direct start with
+`meadowlark --meadow BURROW --server` makes the same ownership check.
+If another process holds the lock, the factory proceeds to discovery.
+Both paths call `RemoteWarren::make(burrow)`, which connects to the socket
+and retries once after one second if the endpoint is missing, refuses the
+connection, or has a full backlog. The client sends its greeting and waits
+for the server's reply. The ownership check governs server startup.
 
 The server takes the existing burrow lock before publishing an endpoint.
 Concurrent launches can race to acquire it. The winner keeps the lock for
@@ -38,22 +38,18 @@ the lifetime of the server, and candidates that find the lock held exit
 quietly. `burrow.pid` provides diagnostics. The OS lock on `burrow.lock`
 determines ownership.
 
-The server opens the listener and atomically publishes its loopback URL
-before activating the Warren, which can take much longer. It activates
-locally through `Warren::local(wlock)`, bypassing server discovery and
-launch. RPC session threads wait for activation to finish before replying
-to the greeting. HTTP inspection can show the loading page in the
-meantime. The server appends stdout and stderr to `meadowlark.log`,
-beginning each run with a startup timestamp.
+Under the lock, the server removes the legacy `meadowlark.url` file and
+any stale `meadowlark.sock` socket. It starts listening before activating
+the Warren locally through `Warren::local(wlock)`. RPC session threads wait
+for activation to finish before replying to the greeting. The server
+appends stdout and stderr to `meadowlark.log`, beginning each run with a
+startup timestamp.
 
 ## Sessions and concurrency
 
-The first byte selects the protocol for the life of the socket. The
-listener handles an HTTP inspection request inline and closes that
-connection. A leading `0x00` selects the ClientWarren protocol. The
-server hands the persistent connection to a session thread. Different
-sessions can run concurrently, while requests within one session run in
-order.
+The server hands each connection to a session thread. The thread requires
+a leading `0x00` byte before reading the ClientWarren greeting. Different
+sessions can run concurrently, while requests within one session run in order.
 
 A fresh session clones the server's original, unstarted Warren. The
 client's `start()` takes a read snapshot and `end()` releases it.
@@ -105,9 +101,10 @@ the lost server. Translation returns an empty string. Remote hopper
 seeks that need the connection return empty-hopper sentinels. Cached seek
 results, cached `ready` votes, and client-local hoppers remain usable.
 A subsequent activation can establish a new session through normal
-discovery. If the server died, the OS releases its lock and a new server
-can replace the stale endpoint. The new session starts with its own
-Warren and hopper handles.
+discovery. If the server died, the OS releases its lock. A new server can
+replace the stale socket, and recreation can remove that socket after
+obtaining the lock. The new session starts with its own Warren and hopper
+handles.
 
 ## Shutdown
 
