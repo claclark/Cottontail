@@ -15,6 +15,7 @@ cc_library(
     deps = [
         "@nlohmann_json//:json",
     ],
+    implementation_deps = ["//third_party/efsw"],
     linkopts = [
         "-lz",
         "-lpthread",

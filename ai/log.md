@@ -1337,3 +1337,13 @@
   Recreation can remove a stale Meadowlark socket under the burrow lock.
 - Updated the remote Warren tests and server documentation. All 61 Bazel
   targets compiled. Runtime verification remains with the user.
+
+2026-11-24T18:02:33Z
+- Vendored efsw 1.6.3 and added it as a private Cottontail build dependency.
+  Bazel builds the static library with the native backend for the target OS.
+  All 62 targets compiled on Linux, and a sample using `efsw::FileWatcher`
+  linked against the archive.
+
+2026-11-24T18:06:37Z
+- Added `//test:filewatcher_test` to report recursive efsw callbacks during
+  concurrent file creation and deletion. The target compiled.

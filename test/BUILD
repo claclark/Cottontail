@@ -6,6 +6,7 @@ cc_test(
     srcs = glob(["**/*.cc"], exclude = [
         "cgrep.cc",
         "erasures.cc",
+        "filewatcher.cc",
         "hazel.cc",
         "nfa.cc",
         "optimizer.cc",
@@ -31,6 +32,16 @@ cc_test(
         "test0.txt",
         "tokenless.txt",
         "test.qrels",
+    ],
+)
+
+cc_test(
+    name = "filewatcher_test",
+    size = "small",
+    srcs = ["filewatcher.cc"],
+    deps = [
+        "//third_party/efsw",
+        "@googletest//:gtest_main",
     ],
 )
 

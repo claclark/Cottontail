@@ -1,0 +1,39 @@
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+exports_files(["LICENSE"])
+
+_INOTIFY = glob(["src/efsw/*Inotify.cpp"])
+_KQUEUE = glob(["src/efsw/*Kqueue.cpp"])
+_FSEVENTS = glob(["src/efsw/*FSEvents.cpp"])
+_WINDOWS = glob(["src/efsw/*Win32.cpp", "src/efsw/platform/win/*.cpp"])
+
+cc_library(
+    name = "efsw",
+    srcs = glob(
+        [
+            "src/efsw/*.cpp",
+            "src/efsw/platform/posix/*.cpp",
+            "src/efsw/**/*.h",
+            "src/efsw/**/*.hpp",
+            "src/efsw/**/*.inl",
+        ],
+        exclude = _INOTIFY + _KQUEUE + _FSEVENTS + _WINDOWS,
+    ) + select({
+        "@platforms//os:linux": _INOTIFY,
+        "@platforms//os:osx": _FSEVENTS + _KQUEUE,
+        "@platforms//os:windows": _WINDOWS,
+        "//conditions:default": _INOTIFY + _KQUEUE,
+    }),
+    hdrs = glob(["include/efsw/*"]),
+    includes = ["include", "src"],
+    linkopts = select({
+        "@platforms//os:osx": ["-framework CoreFoundation", "-framework CoreServices"],
+        "@platforms//os:windows": [],
+        "//conditions:default": ["-pthread"],
+    }),
+    linkstatic = True,
+    visibility = [
+        "//src:__pkg__",
+        "//test:__pkg__",
+    ],
+)
