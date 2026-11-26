@@ -171,13 +171,13 @@
   `ai/meadowlark.md`. The concise model bootstrap is
   `ai/exploring-meadowlark.md`. The implemented file-oriented foraging model is
   recorded in `ai/forager.md`.
-- File `@` metadata is outside `/.`. Canonical filenames receive `/` only;
-  every nonempty worker data chunk has a leading `//`, one encompassing `/.`,
-  and one normalized-filename feature interval over the chunk's data.
+- The normalized pathname marks the canonical `/` entry, each file-specific
+  `@` record, and each whole `/.` chunk with its leading `//`. File metadata
+  sits outside the chunks. Shared forager definitions carry no pathname.
 - New `/` and `//` filename text uses internal JSON string delimiters so display
   preserves leading punctuation. Tokenless files publish `/`, `@`, and `//`,
-  but no `/.`, `:`, or filename-feature interval. Restart accepts historical
-  raw filename text as well as framed text.
+  all marked with the pathname, without a `/.` chunk or `:` object. Restart
+  accepts historical raw filename text as well as framed text.
 - New source and file-specific metadata uses top-level `filename`; readers
   accept historical source metadata using `file`.
 - `json_translate(...)` is a lossy arbitrary-interval display operation;

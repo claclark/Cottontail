@@ -1,6 +1,6 @@
 # Meadowlark Database Conventions
 
-Status date: 2026-09-29.
+Status date: 2026-11-26.
 
 This is the durable reference for Meadowlark's machine-facing structure,
 metadata, source provenance, and append invariants. Completed implementation
@@ -34,6 +34,10 @@ for giving directly to a model connected to a database.
 
 ## Structural Feature Vocabulary
 
+Cottontail indexes application-defined features on intervals. Using `:` for
+a data object predates Meadowlark and is a common application convention.
+Cottontail itself requires neither files nor data objects.
+
 Meadowlark reserves short punctuation features for its machine-facing schema.
 Ordinary words and names remain available to source data and applications.
 
@@ -43,7 +47,7 @@ Ordinary words and names remain available to source data and applications.
 | `/` | The canonical source filename and committed-source marker, written once for a file. |
 | `//` | A segment-local copy of a source filename. |
 | `/.` | A nonempty file-data segment containing a `//` filename and local data. |
-| `:` | An ordinary input object or record. |
+| `:` | A data object in a file. |
 | `::` | A TSV header record, when a header is requested. |
 | `#` | A token-bearing physical code line; its value is the one-based line number. |
 
@@ -306,10 +310,14 @@ File ingestion connects metadata, data, and filenames in three ways:
    metadata object receives `@`; neither is inside `/.`.
 2. Every nonempty data segment begins with another filename copy receiving
    `//`. A `/.` annotation wraps that filename and the local data.
-3. The normalized filename is also featurized and annotates each nonempty
-   worker's data interval. It does not annotate metadata or filename copies.
-   A bare filename feature query therefore returns the file's addressable data
-   chunks, while `(<< : filename)` returns the ordinary objects inside them.
+3. The normalized pathname is the ownership feature. It marks the canonical
+   `/` interval, each file-specific `@` record (including forager completions),
+   and each whole `/.` segment. In a segment, one pathname posting covers both
+   the local `//` filename and the data. A standalone `//` gets its own posting.
+
+Erasing each interval returned by the bare pathname in one transaction removes
+the file and its associated annotations. A shared forager definition belongs
+to the meadow and carries no pathname feature.
 
 The text underlying new `/` and `//` intervals uses Cottontail's internal JSON
 string delimiters. `json_translate(...)` therefore displays a complete name as
@@ -319,15 +327,14 @@ unquoted normalized path used in queries such as `(<< : src/foo.cc)`.
 
 JSONL and TSV may have several data segments because workers append coordinated
 transactions. Each nonempty worker has one filename-feature interval spanning
-its data, while individual JSON records and ordinary TSV data rows continue to
-receive `:`; a requested TSV header receives `::`. Text and code have one data
-segment. These are physical details; the query conventions are the same.
+its local filename and data. Individual JSON records and TSV data rows receive
+`:`. A requested TSV header receives `::`. A token-bearing text or code file
+has one data segment.
 
-A zero-byte or otherwise tokenless source still publishes `/`, `@`, and one
-local `//`. It publishes no `/.`, `:`, or normalized-filename interval because
-there is no addressable data interval. Non-token text remains retrievable with
-the preceding filename token according to the normal text-store translation
-rules. The canonical `/` marker is still written so restart cannot repeatedly
+A zero-byte or otherwise tokenless source still publishes `/`, `@`, and a
+local `//`, each covered by the pathname feature. It has no `/.` or `:`
+interval. Non-token text remains retrievable with the preceding filename token
+under the normal text-store translation rules. The canonical `/` marker is still written so restart cannot repeatedly
 retry a successfully processed empty or dust-only source. Zero-record JSONL and
 TSV sources write one local `//`, not one copy per idle worker.
 
@@ -335,14 +342,16 @@ Useful provenance queries are:
 
 ```text
 /
-(>> @ (>> :filename: "src/foo.cc"))
+(<< @ src/foo.cc)
 (<< : src/foo.cc)
 (<< // (>> /. Q))
 ```
 
 These inventory canonical filenames, find current metadata for one file,
 select that file's ordinary objects, and recover the filename associated with
-`Q`, respectively. Use historical `:file:` when exploring an older meadow.
+`Q`, respectively. Earlier writers marked only the data portion of each chunk
+with the pathname. On those indices, find a file's metadata with
+`(>> @ (>> :filename: "src/foo.cc"))` or use the historical field `:file:`.
 
 The last query is the standard inverse lookup: given any interval query `Q`,
 find the `/.` segment containing it, then return that segment's leading `//`
@@ -391,11 +400,9 @@ of the Bigwig directory. The visibility window applies to views that share
 one open Bigwig. A publication gate for those views is recorded as a possible
 improvement in `ai/improvements.md`.
 
-Any future file adapter must preserve the same contract: an explicit typed
-metadata record, a canonical `/` identity, a local `//`, a filename feature on
-addressable data only, and coordinated publication. For nonempty data, `//`
-and the data are enclosed by `/.`; for an empty or tokenless source, `//`
-remains without `/.` or a filename-feature interval.
+Future file adapters must publish the canonical `/` identity, typed `@`
+metadata, and file segments together. Apply the pathname feature to each
+owned interval, including a standalone `//` when the input has no tokens.
 
 ## Large JSONL Inputs
 

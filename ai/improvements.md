@@ -142,8 +142,8 @@ follow-ups are:
 - Require each future file-source adapter to define its `type` record, emit a
   transaction-local `//`, and coordinate that metadata with its canonical `/`
   marker and data under the established commit/recovery protocol. Nonempty data
-  belongs with `//` inside `/.`; tokenless input deliberately has no `/.`, `:`,
-  or filename-feature interval.
+  belongs with `//` inside `/.`. Mark the inventory entry, file-specific metadata,
+  and whole chunks with the pathname, including standalone `//` for tokenless input.
 - Add a library-level discovery convenience only if repeated consumers need
   one. The `@` record and `:type:` field convention already permits unknown
   types to be inspected or ignored without global component registration.

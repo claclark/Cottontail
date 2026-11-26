@@ -303,8 +303,9 @@ Current implementation: [cgrep.md](cgrep.md).
 3. New `/` and `//` filename text is framed with the internal JSON string
    tokens. This preserves leading `./` and `/` in display without changing the
    normalized filename feature. Restart recognition tolerates historical raw
-   names. Tokenless files deliberately publish `/`, `@`, and `//`, but no
-   address-dependent `/.`, `:`, or filename feature.
+   names. Tokenless files publish `/`, `@`, and `//` without a data chunk or
+   data object. The later pathname ownership change also labels all three
+   intervals (see [Meadowlark conventions](meadowlark.md)).
 4. JSON handling now separates lossy arbitrary-interval display through
    `json_translate(...)` from validating full-value conversion through
    `json_convert(...)`; machine parsing uses the latter. The unused

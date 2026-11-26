@@ -86,9 +86,10 @@ share this convention. Historical source metadata uses the older field `file`;
 readers that need source type information accept both `filename` and `file`.
 Old records are not migrated.
 
-The `@` record remains separate from `/.` file data and is not annotated with
-the normalized-filename feature. Its indexed `:filename:` member provides the
-metadata-to-file association.
+Each file-specific `@` record carries the normalized pathname feature and sits
+outside the `/.` data segments. Both `(<< @ filename)` and the indexed
+`:filename:` member identify its file association. The field lookup also works
+on older records written before the pathname covered metadata.
 
 ### Primary Forager Definition
 
@@ -351,10 +352,10 @@ the coordinator evaluates the semantic equivalent of:
 (<< query normalized-filename)
 ```
 
-The normalized filename is the indexed feature that marks the file's data
-chunks. Only results wholly contained by one of those intervals are returned;
-queries do not forage across those boundaries. Examples of the unscoped query
-and ranking parameters are:
+The normalized filename marks each interval the file owns. The query must
+match wholly within one such interval. A query for `:` selects data objects
+in the file. A query for `@` can select file-specific metadata. Examples of
+the unscoped query and ranking parameters are:
 
 ```text
 TSV:   query=:1:          container=:   id=:0:
@@ -563,11 +564,10 @@ continued to complete normally.
 
 ## Deferred Follow-Ups
 
-Controlled publication failure after workers begin, a concurrent reader during
-`commit_all(...)`, and deletion of a file carrying worker aggregates are not
-directly exercised. The first two need controlled failure/concurrency support;
-deletion awaits the file-deletion surface. The short coordinated-commit read
-window is recorded separately in `ai/improvements.md`.
+Controlled publication failure after workers begin and a concurrent reader
+during `commit_all(...)` still need controlled failure/concurrency coverage.
+The pathname erasure regression covers file removal through the annotator.
+The short coordinated-commit read window is recorded in `ai/improvements.md`.
 
 File-size-aware scheduling and policies for future multi-object logical file
 types remain performance work, not format changes.

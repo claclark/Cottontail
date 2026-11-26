@@ -140,17 +140,18 @@ bool append_segment_name(std::shared_ptr<Appender> appender,
   return true;
 }
 
-bool append_path(std::shared_ptr<Appender> appender,
-                 std::shared_ptr<Annotator> annotator,
-                 std::shared_ptr<Featurizer> featurizer,
-                 const std::string &filename, addr *path_feature, addr *p,
-                 addr *q, std::string *error) {
-  assert(path_feature != nullptr);
-  if (!appender->append(framed_path(filename), p, q, error) ||
-      !annotator->annotate(featurizer->featurize("/"), *p, *q, error))
-    return false;
-  *path_feature = featurizer->featurize(normalized_path(filename));
-  return true;
+bool annotate_segment(std::shared_ptr<Warren> warren, addr path_feature, addr p,
+                      addr q, bool has_data, std::string *error) {
+  return warren->annotator()->annotate(path_feature, p, q, error) &&
+         (!has_data || warren->annotator()->annotate(
+                           warren->featurizer()->featurize("/."), p, q, error));
+}
+
+bool append_file_metadata(std::shared_ptr<Warren> warren, addr path_feature,
+                          const std::string &metadata, std::string *error) {
+  addr p, q;
+  return json_append(metadata, warren, &p, &q, "@", error) &&
+         warren->annotator()->annotate(path_feature, p, q, error);
 }
 
 bool append_source_metadata(std::shared_ptr<Warren> warren,
@@ -159,11 +160,13 @@ bool append_source_metadata(std::shared_ptr<Warren> warren,
                             std::string *error) {
   assert(warren != nullptr);
   assert(path_feature != nullptr);
-  addr source_p, source_q, metadata_p, metadata_q;
-  return append_path(warren->appender(), warren->annotator(),
-                     warren->featurizer(), filename, path_feature, &source_p,
-                     &source_q, error) &&
-         json_append(metadata, warren, &metadata_p, &metadata_q, "@", error);
+  *path_feature = warren->featurizer()->featurize(normalized_path(filename));
+  addr p, q;
+  return warren->appender()->append(framed_path(filename), &p, &q, error) &&
+         warren->annotator()->annotate(warren->featurizer()->featurize("/"), p,
+                                       q, error) &&
+         warren->annotator()->annotate(*path_feature, p, q, error) &&
+         append_file_metadata(warren, *path_feature, metadata, error);
 }
 
 bool append_source(std::shared_ptr<Warren> warren,
@@ -175,11 +178,14 @@ bool append_source(std::shared_ptr<Warren> warren,
   if (!warren->transaction(error))
     return false;
   addr segment_p, segment_q;
-  if (!append_source_metadata(warren, filename, metadata, path_feature, error) ||
+  if (!append_source_metadata(warren, filename, metadata, path_feature,
+                              error) ||
       (append_local_name &&
-       !append_segment_name(warren->appender(), warren->annotator(),
-                            warren->featurizer(), filename, &segment_p,
-                            &segment_q, error)) ||
+       (!append_segment_name(warren->appender(), warren->annotator(),
+                             warren->featurizer(), filename, &segment_p,
+                             &segment_q, error) ||
+        !annotate_segment(warren, *path_feature, segment_p, segment_q, false,
+                          error))) ||
       !warren->ready(error)) {
     warren->abort();
     return false;
@@ -234,19 +240,14 @@ bool append_text(std::shared_ptr<Warren> warren, const std::string &filename,
     warren->abort();
     return finish(false);
   }
-  if (contents_p <= contents_q) {
-    if (!warren->annotator()->annotate(warren->featurizer()->featurize(":"),
-                                       contents_p, contents_q, error) ||
-        !warren->annotator()->annotate(path_feature, contents_p, contents_q,
-                                       error)) {
-      warren->abort();
-      return finish(false);
-    }
-    segment_q = std::max(segment_q, contents_q);
-  }
-  if ((contents_p <= contents_q &&
-       !warren->annotator()->annotate(warren->featurizer()->featurize("/."),
-                                      segment_p, segment_q, error)) ||
+  bool has_data = contents_p <= contents_q;
+  if (has_data)
+    segment_q = contents_q;
+  if ((has_data &&
+       !warren->annotator()->annotate(warren->featurizer()->featurize(":"),
+                                      contents_p, contents_q, error)) ||
+      !annotate_segment(warren, path_feature, segment_p, segment_q, has_data,
+                        error) ||
       !warren->ready(error)) {
     warren->abort();
     return finish(false);
@@ -304,13 +305,10 @@ bool append_code(std::shared_ptr<Warren> warren, const std::string &filename,
     return finish(false);
   }
   if ((contents_p <= contents_q &&
-       (!warren->annotator()->annotate(warren->featurizer()->featurize(":"),
-                                       contents_p, contents_q, error) ||
-        !warren->annotator()->annotate(path_feature, contents_p, contents_q,
-                                       error) ||
-        !warren->annotator()->annotate(
-            warren->featurizer()->featurize("/."), segment_p, segment_q,
-            error))) ||
+       !warren->annotator()->annotate(warren->featurizer()->featurize(":"),
+                                      contents_p, contents_q, error)) ||
+      !annotate_segment(warren, path_feature, segment_p, segment_q,
+                        contents_p <= contents_q, error) ||
       !warren->ready(error)) {
     warren->abort();
     return finish(false);
@@ -378,7 +376,7 @@ bool append_jsonl(std::shared_ptr<Warren> warren, const std::string &filename,
   auto append_worker = [&](size_t n) {
     std::string terror;
     std::shared_ptr<Warren> twarren = clones[n];
-    addr data_p = maxfinity, data_q = minfinity;
+    bool has_data = false;
     addr segment_p = maxfinity, segment_q = minfinity;
     for (;;) {
       std::string line;
@@ -419,16 +417,14 @@ bool append_jsonl(std::shared_ptr<Warren> warren, const std::string &filename,
         }
         return;
       }
-      data_p = std::min(data_p, p);
-      data_q = std::max(data_q, q);
-      segment_q = std::max(segment_q, q);
+      if (p <= q) {
+        has_data = true;
+        segment_q = q;
+      }
     }
-    if ((data_p <= data_q &&
-         (!twarren->annotator()->annotate(path_feature, data_p, data_q,
-                                          &terror) ||
-          !twarren->annotator()->annotate(
-              twarren->featurizer()->featurize("/."), segment_p, segment_q,
-              &terror))) ||
+    if ((segment_p != maxfinity &&
+         !annotate_segment(twarren, path_feature, segment_p, segment_q,
+                           has_data, &terror)) ||
         !twarren->ready(&terror)) {
       std::lock_guard<std::mutex> _(sync);
       if (!failed) {
@@ -601,7 +597,7 @@ bool append_tsv(std::shared_ptr<Warren> warren, const std::string &filename,
     std::vector<addr> tags;
     for (const auto &feature : column_features)
       tags.push_back(twarren->featurizer()->featurize(feature));
-    addr p = maxfinity, q = minfinity;
+    bool has_data = false;
     addr segment_p = maxfinity, segment_q = minfinity;
     for (;;) {
       std::string line;
@@ -643,29 +639,31 @@ bool append_tsv(std::shared_ptr<Warren> warren, const std::string &filename,
         std::string field = fields[j];
         if (j + 1 < fields.size())
           field += wsep;
-        if (!twarren->appender()->append(field, &p1, &q1, &terror) ||
-            (p1 <= q1 &&
-             !twarren->annotator()->annotate(tags[j], p1, q1, &terror))) {
+        if (!twarren->appender()->append(field, &p1, &q1, &terror)) {
+          fail(terror);
+          return;
+        }
+        if (p1 > q1)
+          continue;
+        if (!twarren->annotator()->annotate(tags[j], p1, q1, &terror)) {
           fail(terror);
           return;
         }
         p0 = std::min(p0, p1);
-        q0 = std::max(q0, q1);
+        q0 = q1;
       }
-      if (p0 <= q0 &&
-          !twarren->annotator()->annotate(record_feature, p0, q0, &terror)) {
-        fail(terror);
-        return;
+      if (p0 <= q0) {
+        if (!twarren->annotator()->annotate(record_feature, p0, q0, &terror)) {
+          fail(terror);
+          return;
+        }
+        has_data = true;
+        segment_q = q0;
       }
-      p = std::min(p, p0);
-      q = std::max(q, q0);
-      segment_q = std::max(segment_q, q0);
     }
-    if ((p <= q &&
-         (!twarren->annotator()->annotate(path_feature, p, q, &terror) ||
-          !twarren->annotator()->annotate(
-              twarren->featurizer()->featurize("/."), segment_p, segment_q,
-              &terror))) ||
+    if ((segment_p != maxfinity &&
+         !annotate_segment(twarren, path_feature, segment_p, segment_q,
+                           has_data, &terror)) ||
         !twarren->ready(&terror)) {
       fail(terror);
     }
@@ -1194,9 +1192,9 @@ bool forage_file_started(
     return false;
   }
   transactions.push_back(marker);
-  addr marker_p, marker_q;
-  if (!json_append(forager_file2json(filename, name, tag), marker, &marker_p,
-                   &marker_q, "@", error)) {
+  addr path_feature = marker->featurizer()->featurize(filename);
+  if (!append_file_metadata(marker, path_feature,
+                            forager_file2json(filename, name, tag), error)) {
     abort_all();
     return false;
   }

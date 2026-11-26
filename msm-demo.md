@@ -67,8 +67,8 @@ The query `/` lists the files in the index:
 
 The numbers at the start are the addresses for the filename itself,
 which is itself stored in the annotative index as data.
-The filename can be used in structural queries to represent the contents
-of the file. The query:
+The pathname is also a feature marking the intervals the file owns, including
+its data chunks and metadata. The query:
 
 ```text
 >> (<< : ./collection.tsv)
@@ -159,6 +159,8 @@ At the inspector prompt, the query `@` shows the metadata records:
 
 The records describe the TSV structure, define the TF-IDF annotations, and
 record that those annotations have been added to `./collection.tsv`.
+Try `(<< @ ./collection.tsv)` to see just the two records about this file.
+The TF-IDF definition is shared across files.
 Exit the inspector with `Ctrl-D` before continuing.
 
 You can continue to add files and annotations,

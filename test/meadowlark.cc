@@ -1,3 +1,4 @@
+#include <fstream>
 #include <map>
 #include <memory>
 #include <string>
@@ -82,18 +83,21 @@ TEST(Meadowlark, JSONMetadata) {
                 .substr(0, path.size() + 2),
             "\"" + path + "\"");
   EXPECT_NE(canonical_p, data_name_p);
-  sources->tau(canonical_p + 1, &canonical_p, &canonical_q);
-  EXPECT_EQ(canonical_p, cottontail::maxfinity);
-
   std::shared_ptr<cottontail::Hopper> file =
       warren->idx()->hopper(warren->featurizer()->featurize(path));
   ASSERT_NE(file, nullptr);
   cottontail::addr file_p, file_q;
+  EXPECT_EQ(warren->idx()->count(warren->featurizer()->featurize(path)), 3);
+  file->tau(canonical_p, &file_p, &file_q);
+  EXPECT_EQ(file_p, canonical_p);
+  EXPECT_EQ(file_q, canonical_q);
+  sources->tau(canonical_p + 1, &canonical_p, &canonical_q);
+  EXPECT_EQ(canonical_p, cottontail::maxfinity);
   file->tau(p, &file_p, &file_q);
-  EXPECT_NE(file_p, p);
-  EXPECT_NE(file_p, cottontail::maxfinity);
-  file->tau(file_p + 1, &p, &q);
-  EXPECT_EQ(p, cottontail::maxfinity);
+  EXPECT_EQ(file_p, p);
+  EXPECT_EQ(file_q, q);
+  file->tau(data_name_p, &file_p, &file_q);
+  EXPECT_EQ(file_p, data_name_p);
 
   std::shared_ptr<cottontail::Hopper> objects =
       warren->idx()->hopper(warren->featurizer()->featurize(":"));
@@ -174,8 +178,10 @@ TEST(Meadowlark, TSV) {
   ASSERT_NE(file, nullptr);
   cottontail::addr file_p, file_q;
   file->tau(metadata_p, &file_p, &file_q);
-  EXPECT_NE(file_p, metadata_p);
-  EXPECT_NE(file_p, cottontail::maxfinity);
+  EXPECT_EQ(file_p, metadata_p);
+  EXPECT_EQ(file_q, metadata_q);
+  file->tau(source_p, &file_p, &file_q);
+  EXPECT_EQ(file_p, source_p);
 
   std::shared_ptr<cottontail::Hopper> hopper =
       warren->hopper_from_gcl(
@@ -345,7 +351,16 @@ TEST(Meadowlark, TokenlessFileHasIdentityMetadataAndLocalNameOnly) {
   EXPECT_EQ(count("//"), size_t{1});
   EXPECT_EQ(count("/."), size_t{0});
   EXPECT_EQ(count(":"), size_t{0});
-  EXPECT_EQ(count(path), size_t{0});
+  EXPECT_EQ(count(path), size_t{3});
+  auto owned = warren->idx()->hopper(warren->featurizer()->featurize(path));
+  for (const std::string feature : {"/", "@", "//"}) {
+    auto part = warren->idx()->hopper(warren->featurizer()->featurize(feature));
+    cottontail::addr p, q, owned_p, owned_q;
+    part->tau(cottontail::minfinity + 1, &p, &q);
+    owned->tau(p, &owned_p, &owned_q);
+    EXPECT_EQ(owned_p, p);
+    EXPECT_EQ(owned_q, q);
+  }
 
   std::shared_ptr<cottontail::Hopper> names =
       warren->idx()->hopper(warren->featurizer()->featurize("/"));
@@ -361,6 +376,46 @@ TEST(Meadowlark, TokenlessFileHasIdentityMetadataAndLocalNameOnly) {
       warren, path, &appended, &error))
       << error;
   EXPECT_TRUE(appended);
+  warren->end();
+}
+
+TEST(Meadowlark, TsvPathEndsAtLastToken) {
+  const std::string path = "./trailing-dust.tsv";
+  {
+    std::ofstream input(path);
+    ASSERT_TRUE(input << "alpha\t   \n   \n");
+  }
+  std::string error;
+  auto warren =
+      cottontail::meadowlark::create_meadow("tsv-dust.meadow", &error);
+  ASSERT_NE(warren, nullptr) << error;
+  ASSERT_TRUE(
+      cottontail::meadowlark::append_tsv(warren, path, &error, false, "\t", 1))
+      << error;
+  const std::string dust = "test/tokenless.txt";
+  ASSERT_TRUE(
+      cottontail::meadowlark::append_tsv(warren, dust, &error, false, "\t", 2))
+      << error;
+  warren->start();
+  cottontail::addr p, q, word_p, word_q;
+  auto word = warren->hopper_from_gcl("alpha");
+  word->tau(cottontail::minfinity + 1, &word_p, &word_q);
+  ASSERT_NE(word_p, cottontail::maxfinity);
+  for (const std::string feature : {":", "/."}) {
+    auto part = warren->hopper_from_gcl("(<< " + feature + " " + path + ")");
+    ASSERT_NE(part, nullptr);
+    part->tau(cottontail::minfinity + 1, &p, &q);
+    EXPECT_EQ(q, word_q);
+  }
+  auto name = warren->hopper_from_gcl("(<< // " + dust + ")");
+  ASSERT_NE(name, nullptr);
+  name->tau(cottontail::minfinity + 1, &p, &q);
+  ASSERT_NE(p, cottontail::maxfinity);
+  auto owned = warren->idx()->hopper(warren->featurizer()->featurize(dust));
+  cottontail::addr owned_p, owned_q;
+  owned->tau(p, &owned_p, &owned_q);
+  EXPECT_EQ(owned_p, p);
+  EXPECT_EQ(owned_q, q);
   warren->end();
 }
 
@@ -482,6 +537,83 @@ TEST(Meadowlark, FileOrientedTfIdfForage) {
   EXPECT_TRUE(metadata.has_query);
   EXPECT_FALSE(metadata.has_filename);
   EXPECT_EQ(metadata.query, ":");
+  warren->end();
+}
+
+TEST(Meadowlark, EraseFileByPath) {
+  const std::string path = "test/code.txt";
+  const std::string other = "test/sonnet0.txt";
+  std::string error;
+  auto warren =
+      cottontail::meadowlark::create_meadow("erase-file.meadow", &error);
+  ASSERT_NE(warren, nullptr) << error;
+  ASSERT_TRUE(cottontail::meadowlark::append_code(warren, path, &error))
+      << error;
+  ASSERT_TRUE(cottontail::meadowlark::append_text(warren, other, &error))
+      << error;
+  std::map<std::string, std::string> parameters = {{"container", "/."},
+                                                   {"stemmer", "null"}};
+  ASSERT_TRUE(cottontail::meadowlark::forage_all(
+      warren, {path, other}, ":", "tf-idf", "both", parameters, &error, 2))
+      << error;
+
+  auto expect_hits = [&](const std::string &query, size_t expected) {
+    SCOPED_TRACE(query);
+    auto hopper = warren->hopper_from_gcl(query, &error);
+    ASSERT_NE(hopper, nullptr) << error;
+    cottontail::addr p, q;
+    size_t n = 0;
+    for (hopper->tau(cottontail::minfinity + 1, &p, &q);
+         p < cottontail::maxfinity; hopper->tau(p + 1, &p, &q))
+      n++;
+    EXPECT_EQ(n, expected);
+  };
+
+  warren->start();
+  expect_hits("(<< : " + path + ")", 1);
+  expect_hits("(<< @ " + path + ")", 2);
+  expect_hits("tf-idf:both:tf:alpha", 1);
+  expect_hits("tf-idf:both:total:items", 2);
+  auto owned = warren->idx()->hopper(warren->featurizer()->featurize(path));
+  ASSERT_TRUE(warren->transaction(&error)) << error;
+  cottontail::addr p, q;
+  for (owned->tau(cottontail::minfinity + 1, &p, &q); p < cottontail::maxfinity;
+       owned->tau(p + 1, &p, &q))
+    ASSERT_TRUE(warren->annotator()->erase(p, q, &error)) << error;
+  ASSERT_TRUE(warren->ready(&error)) << error;
+  warren->commit();
+  warren->end();
+
+  warren->start();
+  expect_hits(path, 0);
+  expect_hits("#", 0);
+  expect_hits("tf-idf:both:tf:alpha", 0);
+  expect_hits("tf-idf:both:total:items", 1);
+  for (const std::string feature : {"/", "//", "/.", ":"}) {
+    expect_hits(feature, 1);
+    expect_hits("(<< " + feature + " " + other + ")", 1);
+  }
+  expect_hits("@", 3);
+  expect_hits("(<< @ " + other + ")", 2);
+  expect_hits("(>> @ :query:)", 1);
+  bool found;
+  ASSERT_TRUE(
+      cottontail::meadowlark::already_appended(warren, path, &found, &error));
+  EXPECT_FALSE(found);
+  ASSERT_TRUE(cottontail::meadowlark::already_foraged(warren, path, "tf-idf",
+                                                      "both", &found, &error));
+  EXPECT_FALSE(found);
+  warren->end();
+
+  ASSERT_TRUE(cottontail::meadowlark::append_code(warren, path, &error))
+      << error;
+  ASSERT_TRUE(cottontail::meadowlark::forage(warren, path, ":", "tf-idf",
+                                             "both", &error, 1))
+      << error;
+  warren->start();
+  expect_hits("(<< : " + path + ")", 1);
+  expect_hits("(<< @ " + path + ")", 2);
+  expect_hits("tf-idf:both:tf:alpha", 1);
   warren->end();
 }
 

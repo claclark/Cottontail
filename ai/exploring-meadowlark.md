@@ -44,14 +44,14 @@ that identity in its `filename` field. To select metadata for a particular
 source:
 
 ```text
-(>> @ (>> :filename: "src/foo.cc"))
+(<< @ src/foo.cc)
 ```
 
 Do not infer the format from `.cc`, `.tsv`, or another suffix; use the metadata
 record's `type`.
 
-Older source metadata uses `file` instead of `filename`; query `:file:` when
-exploring such a meadow.
+In older meadows the pathname may label only data. Find metadata there with
+`(>> @ (>> :filename: "src/foo.cc"))`. Some older records use `:file:`.
 
 Current filename text is internally framed as a JSON string, so display tools
 show names with quotes and preserve leading `./` or `/`. The corresponding
@@ -60,7 +60,8 @@ may display their raw filename text without quotes.
 
 ## Learn The Data Shape
 
-Ordinary data objects use `:`. JSON member and TSV column annotations use
+In Meadowlark, `:` marks a data object in a file and `@` marks a JSON metadata
+record. JSON member and TSV column annotations use
 colon-path features. A TSV metadata record's `columns` array is the authoritative
 mapping from source columns to those features. If `header` is true, the header
 record itself uses `::`.
@@ -76,11 +77,11 @@ To restrict ordinary objects to a source, use its filename as a feature:
 (<< : src/foo.cc)
 ```
 
-A bare filename query returns the addressable data chunk or chunks for that
-source. JSONL and TSV may have more than one because ingestion workers publish
-separate chunks. The containment query above returns the individual `:` objects
-inside those chunks. A tokenless source has no filename-feature result even
-though it remains present in `/` and `@`.
+A bare filename query returns every interval owned by the file. These include
+its inventory entry, file-specific metadata, and whole chunks. Each chunk
+covers its local filename and data. For a tokenless file the pathname still
+finds the inventory entry, metadata, and standalone local filename. The
+containment query above returns only the individual data objects.
 
 ## Recover Provenance
 

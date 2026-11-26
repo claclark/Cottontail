@@ -1347,3 +1347,12 @@
 2026-11-24T18:06:37Z
 - Added `//test:filewatcher_test` to report recursive efsw callbacks during
   concurrent file creation and deletion. The target compiled.
+
+2026-11-26T16:01:30Z
+- Extended pathname ownership to the inventory entry, whole data chunks,
+  standalone local filenames, and file-specific metadata including forager
+  completions. TSV row and chunk bounds use token-bearing fields. Updated
+  the format guides and added coverage for tokenless input, file erasure,
+  and re-appending and foraging a deleted file. The Meadowlark and forage
+  applications and the regression test target compiled. Runtime tests remain
+  with the user.
