@@ -123,6 +123,12 @@ cc_binary(
 )
 
 cc_binary(
+    name = "monitor",
+    srcs = ["monitor.cc"],
+    deps = ["//src:cottontail"],
+)
+
+cc_binary(
     name = "parameters",
     srcs = [
       "parameters.cc",
