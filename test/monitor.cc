@@ -8,6 +8,7 @@
 #include <set>
 #include <string>
 #include <thread>
+#include <vector>
 
 #include "gtest/gtest.h"
 #include "src/monitor.h"
@@ -28,9 +29,9 @@ protected:
     fs::create_directory(root_);
   }
 
-  void start() {
+  void start(const std::vector<std::string> &ignore = {}) {
     std::string error;
-    monitor_ = cottontail::Monitor::make(root_.string(), &error);
+    monitor_ = cottontail::Monitor::make(root_.string(), ignore, &error);
     ASSERT_NE(monitor_, nullptr) << error;
     reader_ = std::thread([this] {
       for (auto path = monitor_->next(); !path.empty();
@@ -78,7 +79,7 @@ private:
 TEST_F(MonitorTest, InitialInventoryIsSilent) {
   fs::create_directories(root_ / "sub");
   std::ofstream(root_ / "sub/existing") << "old";
-  ASSERT_NO_FATAL_FAILURE(start());
+  ASSERT_NO_FATAL_FAILURE(start({"/.meadow"}));
   fs::create_directory(root_ / "empty");
   fs::create_directory(root_ / ".meadow");
   std::ofstream(root_ / ".meadow/private") << "hidden";
@@ -87,9 +88,9 @@ TEST_F(MonitorTest, InitialInventoryIsSilent) {
 
   std::ofstream(root_ / "sub/existing") << "edited";
   std::ofstream(root_ / "added") << "new";
-  expect_paths({"./added", "./sub/existing"});
+  expect_paths({"/added", "/sub/existing"});
   fs::remove(root_ / "sub/existing");
-  expect_paths({"./sub/existing"});
+  expect_paths({"/sub/existing"});
 }
 
 TEST_F(MonitorTest, RenamePopulatedDirectory) {
@@ -104,9 +105,10 @@ TEST_F(MonitorTest, RenamePopulatedDirectory) {
   ASSERT_NO_FATAL_FAILURE(start());
 
   fs::rename(root_ / "old", root_ / "new");
-  expect_paths({"./new/a", "./new/child/b", "./old/a", "./old/child/b"});
+  expect_paths({"/new/a", "/new/child/b", "/new/.hidden/c",
+                "/old/a", "/old/child/b", "/old/.hidden/c"});
   fs::rename(root_ / "new", temporary_ / "outside");
-  expect_paths({"./new/a", "./new/child/b"});
+  expect_paths({"/new/a", "/new/child/b", "/new/.hidden/c"});
 }
 
 TEST_F(MonitorTest, MoveInAndReplaceFileWithDirectory) {
@@ -116,12 +118,30 @@ TEST_F(MonitorTest, MoveInAndReplaceFileWithDirectory) {
   ASSERT_NO_FATAL_FAILURE(start());
 
   fs::rename(temporary_ / "incoming", root_ / "incoming");
-  expect_paths({"./incoming/sub/file"});
+  expect_paths({"/incoming/sub/file"});
 
   fs::remove(root_ / "item");
   fs::create_directory(root_ / "item");
   std::ofstream(root_ / "item/child") << "new";
-  expect_paths({"./item", "./item/child"});
+  expect_paths({"/item", "/item/child"});
+}
+
+TEST_F(MonitorTest, LiteralIgnoreOnBothSidesOfMove) {
+  fs::create_directories(root_ / ".meadow/sub");
+  std::ofstream(root_ / ".meadow/sub/file") << "existing";
+  ASSERT_NO_FATAL_FAILURE(start({"/.meadow", "/*.tmp"}));
+
+  fs::rename(root_ / ".meadow", root_ / ".meadow-old");
+  expect_paths({"/.meadow-old/sub/file"});
+  fs::rename(root_ / ".meadow-old", root_ / ".meadow");
+  expect_paths({"/.meadow-old/sub/file"});
+
+  fs::create_directories(root_ / "nested/.meadow");
+  std::ofstream(root_ / "nested/.meadow/file");
+  std::ofstream(root_ / "*.tmp");
+  std::ofstream(root_ / "other.tmp");
+  expect_paths({"/nested/.meadow/file", "/other.tmp"});
+  expect_quiet();
 }
 
 } // namespace

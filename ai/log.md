@@ -1363,3 +1363,14 @@
   reconcile subtrees through the existing debounce queue. Added tests for
   quiet startup, hidden paths, symlinks, edits, directory moves, and replacing
   a file with a directory. The monitor app and monitor test compiled.
+
+2026-11-27T18:38:35Z
+- Monitor accepts literal ignore paths relative to the watched root. It prunes
+  listed directories and reports other files, including dotfiles, as `/path`.
+  The monitor app accepts ignore paths after the directory. The app and test
+  target compiled, including coverage for moves across the ignore boundary.
+
+2026-11-27T19:06:21Z
+- Meadowlark configuration now records arguments following `--config` as
+  individual arguments following `--server` in the DNA launch command.
+  The Meadowlark app and remote Warren test target compiled.

@@ -2,6 +2,7 @@
 #define COTTONTAIL_MEADOWLARK_SERVER_H_
 
 #include <string>
+#include <vector>
 
 namespace cottontail {
 namespace meadowlark {
@@ -12,6 +13,9 @@ bool check_server_owner(const std::string &dna, std::string *error = nullptr);
 std::string server_path(const std::string &executable,
                          std::string *error = nullptr);
 bool config(const std::string &meadow, const std::string &executable,
+            std::string *error = nullptr);
+bool config(const std::string &meadow, const std::string &executable,
+            const std::vector<std::string> &arguments,
             std::string *error = nullptr);
 bool server(const std::string &burrow, std::string *error = nullptr);
 

@@ -14,8 +14,10 @@ used to start the server. A configuration change takes the burrow lock
 before updating `dna`. With server activation disabled, `Warren::make`
 opens the local Warren in the usual way.
 
-`meadowlark --meadow BURROW --config` replaces the entire `server` block
+`meadowlark --meadow BURROW --config [ARG ...]` replaces the entire `server` block
 with an enabled command for the invoking executable and selected meadow.
+The stored invocation substitutes `--server` for `--config`. Each trailing
+argument is shell-quoted individually and kept in its original position.
 Both paths are absolute and retain their symlinks. A bare invocation
 name is resolved through `PATH`. The library `config` function uses
 `DEFAULT_MEADOW` for an empty meadow and searches `PATH` for `meadowlark`

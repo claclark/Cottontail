@@ -34,7 +34,8 @@ constexpr milliseconds history_window(300000);
 
 class Monitor::Impl final : public efsw::FileWatchListener {
 public:
-  explicit Impl(const std::string &directory) : directory_(directory) {}
+  Impl(const std::string &directory, const std::vector<std::string> &ignore)
+      : directory_(directory), ignore_(ignore.begin(), ignore.end()) {}
   ~Impl() override { stop(); }
 
   bool start(std::string *error) {
@@ -54,7 +55,8 @@ public:
       // Callbacks received during the walk still go through normal delivery.
       std::lock_guard<std::mutex> lock(mutex_);
       std::error_code failure;
-      scan(directory_, &files_, &failure);
+      if (!ignore_.contains("/"))
+        scan(directory_, &files_, &failure);
       if (failure) {
         safe_error(error) =
             "Cannot scan " + directory_.string() + ": " + failure.message();
@@ -128,7 +130,8 @@ private:
     fs::directory_iterator it(directory, *error), end;
     for (; !*error && it != end; it.increment(*error)) {
       const fs::path &path = it->path();
-      if (path.filename().native().starts_with('.'))
+      const auto name = "/" + path.lexically_relative(directory_).generic_string();
+      if (ignore_.contains(name))
         continue;
       const auto status = it->symlink_status(*error);
       if (status.type() == fs::file_type::not_found) {
@@ -138,8 +141,7 @@ private:
       if (*error)
         break;
       if (fs::is_regular_file(status))
-        files->insert("./" +
-                      path.lexically_relative(directory_).generic_string());
+        files->insert(name);
       else if (fs::is_directory(status)) {
         scan(path, files, error);
         if (*error)
@@ -160,11 +162,21 @@ private:
     if (path.has_relative_path() && !path.has_filename())
       path = path.parent_path();
     const auto relative = path.lexically_relative(directory_);
-    if (stopped_ || relative.empty() ||
-        std::any_of(relative.begin(), relative.end(), [](const fs::path &part) {
-          return part != "." && part.native().starts_with('.');
-        }))
+    if (stopped_ || relative.empty() || *relative.begin() == ".." ||
+        ignore_.contains("/"))
       return now;
+
+    const bool root = relative == ".";
+    std::string name;
+    if (root) {
+      name = "/";
+    } else {
+      for (const auto &part : relative) {
+        name += "/" + part.generic_string();
+        if (ignore_.contains(name))
+          return now;
+      }
+    }
 
     // Check ancestors before looking at the event path. A directory may have
     // been replaced with a symlink since the event was generated.
@@ -180,8 +192,6 @@ private:
     if (error && status.type() != fs::file_type::not_found)
       return now;
 
-    const bool root = relative == ".";
-    const std::string name = root ? "." : "./" + relative.generic_string();
     auto latest = now;
     auto report = [&](const std::string &file) {
       latest = std::max(latest, schedule(file, now, earliest));
@@ -196,7 +206,7 @@ private:
 
     // Only a directory event needs a walk. A missing path may still have
     // remembered descendants, as when a populated directory is moved away.
-    const std::string prefix = name + "/";
+    const std::string prefix = root ? "/" : name + "/";
     std::set<std::string> present;
     if (fs::is_directory(status)) {
       scan(path, &present, &error);
@@ -279,6 +289,7 @@ private:
   }
 
   const fs::path directory_;
+  const std::unordered_set<std::string> ignore_;
   std::mutex mutex_;
   std::condition_variable changed_, ready_;
   std::set<std::string> files_;
@@ -296,6 +307,7 @@ private:
 };
 
 std::shared_ptr<Monitor> Monitor::make(const std::string &path,
+                                       const std::vector<std::string> &ignore,
                                        std::string *error) {
   if (path.empty()) {
     safe_error(error) = "Missing directory to monitor";
@@ -324,7 +336,7 @@ std::shared_ptr<Monitor> Monitor::make(const std::string &path,
   }
 
   try {
-    auto monitor = std::shared_ptr<Monitor>(new Monitor(directory.string()));
+    auto monitor = std::shared_ptr<Monitor>(new Monitor(directory.string(), ignore));
     if (!monitor->impl_->start(error))
       return nullptr;
     return monitor;
@@ -335,8 +347,8 @@ std::shared_ptr<Monitor> Monitor::make(const std::string &path,
   }
 }
 
-Monitor::Monitor(const std::string &directory)
-    : impl_(std::make_unique<Impl>(directory)) {}
+Monitor::Monitor(const std::string &directory, const std::vector<std::string> &ignore)
+    : impl_(std::make_unique<Impl>(directory, ignore)) {}
 
 Monitor::~Monitor() = default;
 

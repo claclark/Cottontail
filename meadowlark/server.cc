@@ -523,9 +523,9 @@ bool executable_file(const std::filesystem::path &path) {
          access(path.c_str(), X_OK) == 0;
 }
 
-std::string shell_quote(const std::string &path) {
+std::string shell_quote(const std::string &argument) {
   std::string quoted = "'";
-  for (char ch : path) {
+  for (char ch : argument) {
     if (ch == '\'')
       quoted += "'\\''";
     else
@@ -561,6 +561,11 @@ std::string server_path(const std::string &executable, std::string *error) {
 
 bool config(const std::string &meadow, const std::string &executable,
             std::string *error) {
+  return config(meadow, executable, {}, error);
+}
+
+bool config(const std::string &meadow, const std::string &executable,
+            const std::vector<std::string> &arguments, std::string *error) {
   std::string directory = absolute_path(meadow.empty() ? DEFAULT_MEADOW : meadow,
                                         error);
   if (directory.empty())
@@ -585,10 +590,12 @@ bool config(const std::string &meadow, const std::string &executable,
   if (!read_dna(wlock->working(), &dna, error) ||
       !cook(dna, &parameters, error))
     return false;
+  std::string command =
+      shell_quote(path) + " --meadow " + shell_quote(directory) + " --server";
+  for (const auto &argument : arguments)
+    command += " " + shell_quote(argument);
   const std::map<std::string, std::string> settings = {
-      {"active", "yes"},
-      {"command", shell_quote(path) + " --meadow " + shell_quote(directory) +
-                      " --server"}};
+      {"active", "yes"}, {"command", command}};
   parameters["server"] = freeze(settings);
   std::string updated = freeze(parameters);
   // read_dna joins lines with spaces. Validate the same representation here.
