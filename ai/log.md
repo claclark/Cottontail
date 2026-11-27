@@ -1356,3 +1356,10 @@
   and re-appending and foraging a deleted file. The Meadowlark and forage
   applications and the regression test target compiled. Runtime tests remain
   with the user.
+
+2026-11-27T12:40:36Z
+- Monitor watches before silently inventorying regular files and reports paths
+  relative to the watched root. Directory moves and missed-event callbacks
+  reconcile subtrees through the existing debounce queue. Added tests for
+  quiet startup, hidden paths, symlinks, edits, directory moves, and replacing
+  a file with a directory. The monitor app and monitor test compiled.

@@ -8,6 +8,7 @@ cc_test(
         "erasures.cc",
         "filewatcher.cc",
         "hazel.cc",
+        "monitor.cc",
         "nfa.cc",
         "optimizer.cc",
         "remote_warren.cc",
@@ -32,6 +33,16 @@ cc_test(
         "test0.txt",
         "tokenless.txt",
         "test.qrels",
+    ],
+)
+
+cc_test(
+    name = "monitor_test",
+    size = "small",
+    srcs = ["monitor.cc"],
+    deps = [
+        "//src:cottontail",
+        "@googletest//:gtest_main",
     ],
 )
 

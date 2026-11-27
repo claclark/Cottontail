@@ -8,12 +8,14 @@ namespace cottontail {
 
 class Monitor final {
 public:
-  // Report paths in a directory tree, skipping dot-prefixed components below
-  // the watched root.
+  // Start watching before inventorying existing files. The inventory itself
+  // is silent. Skip symlinks and dot-prefixed components below the root.
   static std::shared_ptr<Monitor> make(const std::string &path,
                                        std::string *error = nullptr);
 
-  // Wait for and pop a path. An empty string means the monitor has stopped.
+  // Wait for and pop a current or former regular file, spelled ./path relative
+  // to the watched root. Directory changes report the affected file paths.
+  // An empty string means the monitor has stopped.
   std::string next();
 
   // Stop watching and wake a waiting consumer.
