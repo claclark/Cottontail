@@ -1,6 +1,6 @@
 # Meadowlark Database Conventions
 
-Status date: 2026-11-26.
+Status date: 2026-11-27.
 
 This is the durable reference for Meadowlark's machine-facing structure,
 metadata, source provenance, and append invariants. Completed implementation
@@ -315,9 +315,10 @@ File ingestion connects metadata, data, and filenames in three ways:
    and each whole `/.` segment. In a segment, one pathname posting covers both
    the local `//` filename and the data. A standalone `//` gets its own posting.
 
-Erasing each interval returned by the bare pathname in one transaction removes
-the file and its associated annotations. A shared forager definition belongs
-to the meadow and carries no pathname feature.
+`meadowlark::erase(warren, filename, error)` erases each interval returned by
+the pathname feature in one transaction. An absent file is a successful no-op.
+A shared forager definition belongs to the meadow and carries no pathname
+feature.
 
 The text underlying new `/` and `//` intervals uses Cottontail's internal JSON
 string delimiters. `json_translate(...)` therefore displays a complete name as
@@ -385,7 +386,10 @@ thin command-line caller of this library operation. The durable invariant is:
 > and safely retries missing or interrupted sources.
 
 JSONL and TSV coordinate their source transaction and worker transactions.
-Text and code use one transaction per complete file. A failure before
+Text and code use one transaction per complete file. Direct calls to the four
+`append_*` adapters replace an existing file by erasing its owned intervals in
+the source transaction. File-specific forager completions are erased with the
+old data. A failure before
 publication aborts the affected coordinated append rather than publishing its
 canonical marker alone; interrupted publication is handled by the Bigwig/Fiver
 recovery path. Committed data is visible to a newly started read epoch; an

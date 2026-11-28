@@ -71,21 +71,26 @@ protected:
     if (file_ == nullptr)
       return traits_type::eof();
     size_t count = fread(buffer_.data(), 1, buffer_.size(), file_);
-    if (count == 0)
+    // istream translates an exception from underflow into badbit.
+    if (ferror(file_))
+      throw std::ios_base::failure("Input read failed");
+    if (count == 0) {
+      // A pipe can reach EOF even though zcat failed after producing output.
+      if (close() != 0)
+        throw std::ios_base::failure("Input did not finish successfully");
       return traits_type::eof();
+    }
     setg(buffer_.data(), buffer_.data(), buffer_.data() + count);
     return traits_type::to_int_type(*gptr());
   }
 
 private:
-  void close() {
+  int close() {
     if (file_ == nullptr)
-      return;
-    if (pipe_)
-      pclose(file_);
-    else
-      fclose(file_);
+      return 0;
+    int status = pipe_ ? pclose(file_) : fclose(file_);
     file_ = nullptr;
+    return status;
   }
 
   FILE *file_;
@@ -158,6 +163,8 @@ bool build_trec(const std::vector<std::string> &text,
     if (builder->verbose())
       std::cout << "Builder inhaling: " << filename << "\n";
     std::shared_ptr<std::string> contents = inhale(filename, error);
+    if (contents == nullptr)
+      return false;
     addr p, q;
     if (!builder->add_text(*contents, &p, &q, error))
       return false;

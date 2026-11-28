@@ -154,6 +154,16 @@ bool append_file_metadata(std::shared_ptr<Warren> warren, addr path_feature,
          warren->annotator()->annotate(path_feature, p, q, error);
 }
 
+bool erase_intervals(std::shared_ptr<Warren> warren, Hopper &owned,
+                     std::string *error) {
+  addr p, q;
+  for (owned.tau(minfinity + 1, &p, &q); p < maxfinity;
+       owned.tau(p + 1, &p, &q))
+    if (!warren->annotator()->erase(p, q, error))
+      return false;
+  return true;
+}
+
 bool append_source_metadata(std::shared_ptr<Warren> warren,
                             const std::string &filename,
                             const std::string &metadata, addr *path_feature,
@@ -161,6 +171,9 @@ bool append_source_metadata(std::shared_ptr<Warren> warren,
   assert(warren != nullptr);
   assert(path_feature != nullptr);
   *path_feature = warren->featurizer()->featurize(normalized_path(filename));
+  auto owned = warren->idx()->hopper(*path_feature);
+  if (!erase_intervals(warren, *owned, error))
+    return false;
   addr p, q;
   return warren->appender()->append(framed_path(filename), &p, &q, error) &&
          warren->annotator()->annotate(warren->featurizer()->featurize("/"), p,
@@ -194,6 +207,30 @@ bool append_source(std::shared_ptr<Warren> warren,
 }
 } // namespace
 
+bool erase(std::shared_ptr<Warren> warren, const std::string &filename,
+           std::string *error) {
+  warren->start();
+  addr feature = warren->featurizer()->featurize(normalized_path(filename));
+  auto owned = warren->idx()->hopper(feature);
+  addr p, q;
+  owned->tau(minfinity + 1, &p, &q);
+  if (p == maxfinity) {
+    warren->end();
+    return true;
+  }
+  if (!warren->transaction(error)) {
+    warren->end();
+    return false;
+  }
+  bool success = erase_intervals(warren, *owned, error) && warren->ready(error);
+  if (success)
+    warren->commit();
+  else
+    warren->abort();
+  warren->end();
+  return success;
+}
+
 bool already_appended(std::shared_ptr<Warren> warren,
                       const std::string &filename, bool *appended,
                       std::string *error) {
@@ -218,14 +255,19 @@ bool already_appended(std::shared_ptr<Warren> warren,
 
 bool append_text(std::shared_ptr<Warren> warren, const std::string &filename,
                  std::string *error) {
+  auto contents = inhale(filename, error);
+  return contents != nullptr && append_text(warren, filename, *contents, error);
+}
+
+bool append_text(std::shared_ptr<Warren> warren, const std::string &filename,
+                 const std::string &contents, std::string *error) {
   assert(warren != nullptr);
   warren->start();
   auto finish = [&](bool result) {
     warren->end();
     return result;
   };
-  std::shared_ptr<std::string> contents = inhale(filename, error);
-  if (contents == nullptr || !warren->transaction(error))
+  if (!warren->transaction(error))
     return finish(false);
   addr path_feature;
   addr segment_p, segment_q;
@@ -236,7 +278,7 @@ bool append_text(std::shared_ptr<Warren> warren, const std::string &filename,
       !append_segment_name(warren->appender(), warren->annotator(),
                            warren->featurizer(), filename, &segment_p,
                            &segment_q, error) ||
-      !warren->appender()->append(*contents, &contents_p, &contents_q, error)) {
+      !warren->appender()->append(contents, &contents_p, &contents_q, error)) {
     warren->abort();
     return finish(false);
   }
@@ -729,7 +771,12 @@ bool append_all(std::shared_ptr<Warren> warren,
     }
 
   warren->start();
+  std::set<std::string> seen;
   for (size_t i = 0; i < files.size(); i++) {
+    if (!seen.insert(normalized_path(files[i].filename)).second) {
+      done[i] = true;
+      continue;
+    }
     bool appended;
     if (!already_appended(warren, files[i].filename, &appended, error)) {
       warren->end();

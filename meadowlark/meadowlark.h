@@ -35,6 +35,8 @@ std::shared_ptr<Warren> open_meadow(std::string *error = nullptr);
 bool already_appended(std::shared_ptr<Warren> warren,
                       const std::string &filename, bool *appended,
                       std::string *error = nullptr);
+bool erase(std::shared_ptr<Warren> warren, const std::string &filename,
+           std::string *error = nullptr);
 bool append_tsv(std::shared_ptr<Warren> warren, const std::string &filename,
                 std::string *error = nullptr, bool header = false,
                 std::string separator = "\t", size_t threads = 0);
@@ -43,6 +45,9 @@ bool append_jsonl(std::shared_ptr<Warren> warren, const std::string &filename,
                   bool verbose = true);
 bool append_text(std::shared_ptr<Warren> warren, const std::string &filename,
                  std::string *error = nullptr);
+// Store supplied text under the given Meadowlark filename.
+bool append_text(std::shared_ptr<Warren> warren, const std::string &filename,
+                 const std::string &contents, std::string *error = nullptr);
 bool append_code(std::shared_ptr<Warren> warren, const std::string &filename,
                  std::string *error = nullptr);
 bool append_all(std::shared_ptr<Warren> warren,

@@ -17,7 +17,8 @@ bool config(const std::string &meadow, const std::string &executable,
 bool config(const std::string &meadow, const std::string &executable,
             const std::vector<std::string> &arguments,
             std::string *error = nullptr);
-bool server(const std::string &burrow, std::string *error = nullptr);
+bool server(const std::string &burrow, std::string *error = nullptr,
+            bool monitor = false);
 
 // True when the burrow lock can be acquired and released.
 bool shutdown(const std::string &burrow, std::string *error = nullptr);

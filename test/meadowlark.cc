@@ -1,3 +1,4 @@
+#include <filesystem>
 #include <fstream>
 #include <map>
 #include <memory>
@@ -5,6 +6,7 @@
 #include <vector>
 
 #include "gtest/gtest.h"
+#include <zlib.h>
 
 #include "meadowlark/meadowlark.h"
 #include "meadowlark/metadata.h"
@@ -457,6 +459,8 @@ TEST(Meadowlark, AppendPlanMixesTextAndCode) {
       {cottontail::meadowlark::InputType::TSV, "test/test.tsv"},
       {cottontail::meadowlark::InputType::TEXT, "test/sonnet1.txt"},
   };
+  size_t unique_files = files.size();
+  files.push_back(files.front());
   ASSERT_TRUE(
       cottontail::meadowlark::append_all(warren, files, &error, 2, false))
       << error;
@@ -473,7 +477,7 @@ TEST(Meadowlark, AppendPlanMixesTextAndCode) {
   for (sources->tau(cottontail::minfinity + 1, &p, &q);
        p < cottontail::maxfinity; sources->tau(p + 1, &p, &q))
     count++;
-  EXPECT_EQ(count, files.size());
+  EXPECT_EQ(count, unique_files);
   for (const std::string &type :
        std::vector<std::string>{"text", "json", "code", "tsv"}) {
     std::unique_ptr<cottontail::Hopper> metadata = warren->hopper_from_gcl(
@@ -574,15 +578,9 @@ TEST(Meadowlark, EraseFileByPath) {
   expect_hits("(<< @ " + path + ")", 2);
   expect_hits("tf-idf:both:tf:alpha", 1);
   expect_hits("tf-idf:both:total:items", 2);
-  auto owned = warren->idx()->hopper(warren->featurizer()->featurize(path));
-  ASSERT_TRUE(warren->transaction(&error)) << error;
-  cottontail::addr p, q;
-  for (owned->tau(cottontail::minfinity + 1, &p, &q); p < cottontail::maxfinity;
-       owned->tau(p + 1, &p, &q))
-    ASSERT_TRUE(warren->annotator()->erase(p, q, &error)) << error;
-  ASSERT_TRUE(warren->ready(&error)) << error;
-  warren->commit();
   warren->end();
+  ASSERT_TRUE(cottontail::meadowlark::erase(warren, path, &error)) << error;
+  ASSERT_TRUE(cottontail::meadowlark::erase(warren, path, &error)) << error;
 
   warren->start();
   expect_hits(path, 0);
@@ -614,6 +612,68 @@ TEST(Meadowlark, EraseFileByPath) {
   expect_hits("(<< : " + path + ")", 1);
   expect_hits("(<< @ " + path + ")", 2);
   expect_hits("tf-idf:both:tf:alpha", 1);
+  warren->end();
+}
+
+TEST(Meadowlark, FailedReplacementPreservesFile) {
+  using namespace cottontail;
+  const std::string filename = "replacement.jsonl";
+  std::string error;
+  auto warren = meadowlark::create_meadow("replacement.meadow", &error);
+  ASSERT_NE(warren, nullptr) << error;
+  ASSERT_TRUE(meadowlark::append_text(warren, filename, "original", &error))
+      << error;
+  std::ofstream(filename) << "{\"a\":1}\n{\n";
+  EXPECT_FALSE(meadowlark::append_jsonl(warren, filename, &error, 1, false));
+
+  auto expect_file = [&](const std::string &text) {
+    warren->start();
+    auto objects = warren->hopper_from_gcl("(<< : ./replacement.jsonl)", &error);
+    ASSERT_NE(objects, nullptr) << error;
+    addr p, q;
+    objects->tau(minfinity + 1, &p, &q);
+    ASSERT_NE(p, maxfinity);
+    EXPECT_TRUE(warren->txt()->translate(p, q).starts_with(text));
+    objects->tau(p + 1, &p, &q);
+    EXPECT_EQ(p, maxfinity);
+    warren->end();
+  };
+  ASSERT_NO_FATAL_FAILURE(expect_file("original"));
+  std::ofstream(filename) << "changed\n";
+  ASSERT_TRUE(meadowlark::append_text(warren, filename, &error)) << error;
+  ASSERT_NO_FATAL_FAILURE(expect_file("changed"));
+}
+
+TEST(Meadowlark, DamagedGzipPreservesFile) {
+  using namespace cottontail;
+  const std::string filename = "replacement.txt.gz";
+  auto write_gzip = [&](const char *text) {
+    gzFile output = gzopen(filename.c_str(), "wb");
+    ASSERT_NE(output, nullptr);
+    EXPECT_GT(gzputs(output, text), 0);
+    ASSERT_EQ(gzclose(output), Z_OK);
+  };
+  std::string error;
+  auto warren = meadowlark::create_meadow("gzip-replacement.meadow", &error);
+  ASSERT_NE(warren, nullptr) << error;
+  ASSERT_NO_FATAL_FAILURE(write_gzip("original\n"));
+  ASSERT_TRUE(meadowlark::append_text(warren, filename, &error)) << error;
+
+  // Keep the compressed payload but remove its trailer. zcat can return the
+  // replacement line before reporting that the member is incomplete.
+  ASSERT_NO_FATAL_FAILURE(write_gzip("replacement\n"));
+  std::filesystem::resize_file(filename, std::filesystem::file_size(filename) - 8);
+  EXPECT_FALSE(meadowlark::append_text(warren, filename, &error));
+  EXPECT_FALSE(meadowlark::append_code(warren, filename, &error));
+  warren->start();
+  auto objects = warren->hopper_from_gcl("(<< : ./replacement.txt.gz)", &error);
+  ASSERT_NE(objects, nullptr) << error;
+  addr p, q;
+  objects->tau(minfinity + 1, &p, &q);
+  ASSERT_NE(p, maxfinity);
+  EXPECT_TRUE(warren->txt()->translate(p, q).starts_with("original"));
+  objects->tau(p + 1, &p, &q);
+  EXPECT_EQ(p, maxfinity);
   warren->end();
 }
 

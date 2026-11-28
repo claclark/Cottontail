@@ -1374,3 +1374,26 @@
 - Meadowlark configuration now records arguments following `--config` as
   individual arguments following `--server` in the DNA launch command.
   The Meadowlark app and remote Warren test target compiled.
+
+2026-11-27T19:53:00Z
+- Added file erasure and replacement through the Meadowlark pathname feature.
+  The append planner skips duplicate input names. A server started with
+  `--monitor` syncs changes in its parent directory as text and excludes the
+  meadow from the watch results. Added replacement rollback, erasure, and
+  remote monitor coverage. The app and both affected test targets compiled.
+
+2026-11-28T16:36:06Z
+- The shared input stream propagates read errors and checks the exit status
+  of zcat at EOF. TREC building returns the reader's error, and file scribing
+  reads each file before opening its transaction. Added regression cases for
+  unreadable input and a truncated gzip replacement. The Meadowlark app,
+  Simple app, and aggregate test target compiled.
+
+2026-11-28T16:43:04Z
+- Extended the remote monitor test to rename an indexed temporary file over
+  an existing file and check both pathnames after the save. The target compiled.
+
+2026-11-28T17:30:56Z
+- Recorded the managed-workspace and Python release plan, including Git
+  updates, tag discovery, and open questions about startup sync and idle
+  server lifetime.

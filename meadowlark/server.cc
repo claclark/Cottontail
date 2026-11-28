@@ -13,6 +13,7 @@
 #include <future>
 #include <iomanip>
 #include <iostream>
+#include <iterator>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -36,6 +37,7 @@
 #include "meadowlark/remote_protocol.h"
 #include "src/core.h"
 #include "src/dna.h"
+#include "src/monitor.h"
 #include "src/recipe.h"
 #include "src/warren.h"
 #include "src/wlock.h"
@@ -54,6 +56,11 @@ public:
       close(fd_);
   }
   int get() const { return fd_; }
+  void reset(int fd) {
+    if (fd_ >= 0)
+      close(fd_);
+    fd_ = fd;
+  }
   Descriptor(const Descriptor &) = delete;
   Descriptor &operator=(const Descriptor &) = delete;
 
@@ -459,7 +466,70 @@ void serve_rpc(std::unique_ptr<Socket> client,
     session->close();
 }
 
-bool serve(int listener, std::shared_ptr<WLock> wlock, std::string *error) {
+// Monitor reports names relative to root. Open each component without
+// following symlinks, since the path may have changed while it was queued.
+bool sync_file(std::shared_ptr<Warren> warren, int root, const std::string &path,
+               std::string *error) {
+  const std::string filename = "." + path;
+  const auto relative = std::filesystem::path(path).relative_path();
+  Descriptor input(-1);
+  int parent = root;
+  for (auto part = relative.begin(); part != relative.end(); ++part) {
+    int flags = O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK | O_NOCTTY;
+    if (std::next(part) != relative.end())
+      flags |= O_DIRECTORY;
+    int fd = openat(parent, part->c_str(), flags);
+    if (fd < 0) {
+      if (errno == ENOENT || errno == ENOTDIR)
+        return erase(warren, filename, error);
+      if (errno == ELOOP)
+        return true;
+      safe_error(error) = std::strerror(errno);
+      return false;
+    }
+    input.reset(fd);
+    parent = fd;
+  }
+  struct stat status;
+  if (fstat(input.get(), &status) < 0) {
+    safe_error(error) = std::strerror(errno);
+    return false;
+  }
+  if (!S_ISREG(status.st_mode))
+    return true;
+
+  std::string contents;
+  char buffer[64 * 1024];
+  for (;;) {
+    ssize_t n = read(input.get(), buffer, sizeof(buffer));
+    if (n == 0)
+      break;
+    if (n < 0) {
+      if (errno == EINTR)
+        continue;
+      safe_error(error) = std::strerror(errno);
+      return false;
+    }
+    contents.append(buffer, n);
+  }
+  return append_text(warren, filename, contents, error);
+}
+
+void monitor_files(std::stop_token stop, std::shared_ptr<Monitor> monitor,
+                   std::shared_ptr<Warren> warren, int root) {
+  std::stop_callback wake(stop, [&] { monitor->stop(); });
+  while (!stop.stop_requested()) {
+    std::string path = monitor->next();
+    if (path.empty())
+      break;
+    std::string error;
+    if (!sync_file(warren, root, path, &error))
+      std::cerr << "Meadowlark monitor: ." << path << ": " << error << '\n';
+  }
+}
+
+bool serve(int listener, std::shared_ptr<WLock> wlock, bool monitor_filesystem,
+           std::string *error) {
   using namespace std::chrono_literals;
   std::string dna;
   if (!read_dna(wlock->working(), &dna, error))
@@ -472,6 +542,22 @@ bool serve(int listener, std::shared_ptr<WLock> wlock, std::string *error) {
     result.warren = Warren::local(wlock, &result.error);
     return result;
   }).share();
+  Descriptor root(-1);
+  std::shared_ptr<Monitor> monitor;
+  std::jthread worker;
+  if (monitor_filesystem) {
+    auto burrow = std::filesystem::canonical(wlock->working()->make_name("."));
+    auto directory = burrow.parent_path();
+    root.reset(open(directory.c_str(), O_RDONLY | O_CLOEXEC | O_DIRECTORY));
+    if (root.get() < 0) {
+      safe_error(error) = "Cannot open monitor root: " + directory.string();
+      return false;
+    }
+    monitor = Monitor::make(directory.string(), {"/" + burrow.filename().string()},
+                            error);
+    if (monitor == nullptr)
+      return false;
+  }
   std::shared_ptr<Warren> warren;
   for (;;) {
     if (warren == nullptr &&
@@ -482,6 +568,17 @@ bool serve(int listener, std::shared_ptr<WLock> wlock, std::string *error) {
         return false;
       }
       warren = result.warren;
+      if (monitor != nullptr) {
+        auto writer = warren->clone(error);
+        if (writer == nullptr)
+          return false;
+        writer->start();
+        bool meadow = is_meadow(writer, error);
+        writer->end();
+        if (!meadow)
+          return false;
+        worker = std::jthread(monitor_files, monitor, writer, root.get());
+      }
       std::cerr << "Meadowlark Warren ready\n";
     }
     pollfd event{listener, POLLIN, 0};
@@ -631,7 +728,7 @@ bool check_server_owner(const std::string &dna, std::string *error) {
   return true;
 }
 
-bool server(const std::string &burrow, std::string *error) {
+bool server(const std::string &burrow, std::string *error, bool monitor) {
   // Keep the lock from taking a descriptor that log redirection replaces.
   if (!ensure_output_stream(STDOUT_FILENO, error) ||
       !ensure_output_stream(STDERR_FILENO, error))
@@ -687,7 +784,7 @@ bool server(const std::string &burrow, std::string *error) {
   std::cerr << "Meadowlark server listening at " << path << "\n";
   bool success = false;
   try {
-    success = serve(listener.get(), wlock, error);
+    success = serve(listener.get(), wlock, monitor, error);
   } catch (const std::exception &exception) {
     safe_error(error) =
         "Meadowlark server failed: " + std::string(exception.what());

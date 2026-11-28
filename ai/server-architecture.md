@@ -47,6 +47,13 @@ for activation to finish before replying to the greeting. The server
 appends stdout and stderr to `meadowlark.log`, beginning each run with a
 startup timestamp.
 
+With `--server --monitor`, a worker uses its own Warren clone to sync changes
+in the meadow's parent directory. The initial walk is silent and skips the
+meadow itself. A changed regular file is stored as text under its root-relative
+Meadowlark name, such as `./sub/notes.tsv`. A missing file is erased. The
+worker logs per-file errors to `meadowlark.log` and continues. Use
+`--config --monitor` to enable this mode on subsequent server launches.
+
 ## Sessions and concurrency
 
 The server hands each connection to a session thread. The thread requires

@@ -103,3 +103,24 @@ TEST(Scribe, Dynamic) {
   dynamic_warren(&warren);
   check_warren(warren);
 }
+
+TEST(Scribe, UnreadableInput) {
+  // On Linux a directory opens for reading, then fread fails with EISDIR.
+  std::string error;
+  auto working = cottontail::Working::mkdir("read-error.burrow", &error);
+  ASSERT_NE(working, nullptr) << error;
+  auto builder = cottontail::SimpleBuilder::make(working, "", &error);
+  ASSERT_NE(builder, nullptr) << error;
+  EXPECT_FALSE(cottontail::build_trec({"."}, builder, &error));
+  EXPECT_FALSE(error.empty());
+  EXPECT_FALSE(builder->finalized());
+
+  auto scribe = cottontail::Scribe::make(builder, &error);
+  ASSERT_NE(scribe, nullptr) << error;
+  error.clear();
+  EXPECT_FALSE(cottontail::scribe_files({"."}, scribe, &error));
+  EXPECT_FALSE(error.empty());
+  EXPECT_FALSE(scribe->transacting());
+  EXPECT_TRUE(cottontail::scribe_files({"test/sonnet0.txt"}, scribe, &error))
+      << error;
+}

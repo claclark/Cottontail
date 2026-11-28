@@ -19,7 +19,7 @@ void usage(std::string program_name) {
             << "       " << program_name
             << " [--meadow meadow] --config [server-argument ...]\n"
             << "       " << program_name
-            << " [--meadow meadow] (--server|--shutdown)\n"
+            << " [--meadow meadow] (--server [--monitor]|--shutdown)\n"
             << "  --recreate clears an existing burrow before creating the "
                "meadow.\n";
 }
@@ -61,7 +61,9 @@ int main(int argc, char **argv) {
     return 0;
   std::string action = argv[1];
   if (action == "--config" || action == "--server" || action == "--shutdown") {
-    if (action != "--config" && argc != 2) {
+    bool monitor = action == "--server" && argc == 3 &&
+                   std::string(argv[2]) == "--monitor";
+    if (action != "--config" && argc != 2 && !monitor) {
       usage(program_name);
       return 1;
     }
@@ -76,7 +78,7 @@ int main(int argc, char **argv) {
                 cottontail::meadowlark::config(meadow, executable, arguments,
                                                &error);
     } else if (action == "--server") {
-      success = cottontail::meadowlark::server(meadow, &error);
+      success = cottontail::meadowlark::server(meadow, &error, monitor);
     } else {
       success = cottontail::meadowlark::shutdown(meadow, &error);
     }

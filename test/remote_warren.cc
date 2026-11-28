@@ -45,7 +45,7 @@ bool create_server_meadow(const std::string &meadow, std::string *error) {
 
 class TestServer {
 public:
-  bool start() {
+  bool start(bool monitor = false) {
     // Bazel's TEST_TMPDIR can be longer than a Unix socket address.
     std::string directory = "/tmp/remote-warren-XXXXXX";
     if (mkdtemp(directory.data()) == nullptr)
@@ -61,7 +61,7 @@ public:
         legacy.close();
         if (!legacy)
           error = "Cannot write legacy Meadowlark URL";
-        else if (cottontail::meadowlark::server(meadow_, &error))
+        else if (cottontail::meadowlark::server(meadow_, &error, monitor))
           _exit(0);
       }
       std::fprintf(stderr, "%s\n", error.c_str());
@@ -182,6 +182,63 @@ void check_wire_lifecycle(const std::string &path) {
 }
 
 } // namespace
+
+TEST(RemoteWarren, MonitorSyncsText) {
+  using namespace std::chrono_literals;
+  TestServer server;
+  ASSERT_TRUE(server.start(true));
+  std::string error;
+  auto reader = server.connect(&error);
+  ASSERT_NE(reader, nullptr) << error;
+  auto directory = std::filesystem::path(server.meadow()).parent_path() / "sub";
+  std::filesystem::create_directory(directory);
+  auto source = directory / "message.json";
+  const std::string name = "./sub/message.json";
+
+  auto wait_for = [&](const std::string &path, const std::string &expected) {
+    auto deadline = std::chrono::steady_clock::now() + 12s;
+    do {
+      reader->start();
+      auto hopper = reader->hopper_from_gcl(
+          expected.empty() ? path : "(<< : " + path + ")",
+          &error);
+      addr p, q;
+      bool found = false;
+      if (hopper != nullptr) {
+        hopper->tau(cottontail::minfinity + 1, &p, &q);
+        if (expected.empty()) {
+          found = p == maxfinity;
+        } else if (p != maxfinity &&
+                   reader->txt()->translate(p, q).starts_with(expected)) {
+          hopper->tau(p + 1, &p, &q);
+          found = p == maxfinity;
+        }
+      }
+      reader->end();
+      if (found)
+        return true;
+      std::this_thread::sleep_for(100ms);
+    } while (std::chrono::steady_clock::now() < deadline);
+    return false;
+  };
+
+  std::ofstream(source) << "first version";
+  ASSERT_TRUE(wait_for(name, "first version")) << error;
+  std::ofstream(source) << "second version";
+  ASSERT_TRUE(wait_for(name, "second version")) << error;
+
+  auto temporary = directory / "message.tmp";
+  const std::string temp_name = "./sub/message.tmp";
+  std::ofstream(temporary) << "editor save";
+  // Let the temporary file reach the index so its removal is observable.
+  ASSERT_TRUE(wait_for(temp_name, "editor save")) << error;
+  std::filesystem::rename(temporary, source);
+  ASSERT_TRUE(wait_for(name, "editor save")) << error;
+  ASSERT_TRUE(wait_for(temp_name, "")) << error;
+
+  ASSERT_TRUE(std::filesystem::remove(source));
+  ASSERT_TRUE(wait_for(name, "")) << error;
+}
 
 TEST(RemoteWarren, SessionsAndDisconnect) {
   TestServer server;

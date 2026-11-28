@@ -264,35 +264,28 @@ bool scribe_files(const std::vector<std::string> &filenames,
   addr filename_feature = scribe->featurizer()->featurize("filename:");
   addr content_feature = scribe->featurizer()->featurize("content:");
   for (auto &filename : filenames) {
-    if (!scribe->transaction(error))
-      return false;
     if (verbose)
       std::cerr << "scribing: " << filename << "\n";
     std::shared_ptr<std::string> content = inhale(filename, error);
-    if (content) {
-      addr name_p, name_q, content_p, content_q;
-      if (!scribe->appender()->append(filename, &name_p, &name_q, error))
-        return false;
-      if (!scribe->appender()->append(*content, &content_p, &content_q, error))
-        return false;
-      if (!scribe->annotator()->annotate(file_feature, name_p, content_q,
-                                         error))
-        return false;
-      if (!scribe->annotator()->annotate(filename_feature, name_p, name_q,
-                                         error))
-        return false;
-      if (!scribe->annotator()->annotate(content_feature, content_p, content_q,
-                                         error))
-        return false;
-      if (verbose)
-        std::cerr << "scribe_files commiting: " << filename << "\n";
-      if (!scribe->ready()) {
-        safe_error(error) =
-            "Function scribe_files unable to commit transaction";
-        return false;
-      }
-      scribe->commit();
+    if (content == nullptr || !scribe->transaction(error))
+      return false;
+    addr name_p, name_q, content_p, content_q;
+    if (!scribe->appender()->append(filename, &name_p, &name_q, error) ||
+        !scribe->appender()->append(*content, &content_p, &content_q, error) ||
+        !scribe->annotator()->annotate(file_feature, name_p, content_q, error) ||
+        !scribe->annotator()->annotate(filename_feature, name_p, name_q, error) ||
+        !scribe->annotator()->annotate(content_feature, content_p, content_q,
+                                      error)) {
+      scribe->abort();
+      return false;
     }
+    if (verbose)
+      std::cerr << "scribe_files committing: " << filename << "\n";
+    if (!scribe->ready(error)) {
+      scribe->abort();
+      return false;
+    }
+    scribe->commit();
   }
   if (verbose)
     std::cerr << "scribe done\n";
